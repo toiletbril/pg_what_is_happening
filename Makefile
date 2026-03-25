@@ -1,0 +1,48 @@
+MODE ?= dbg
+WITH_BGWORKER ?= yes
+
+ifndef VERBOSE
+MAKEFLAGS += -s
+endif
+
+ifneq ($(filter fmt tidy reset manual-install,$(MAKECMDGOALS)),)
+# Utility targets don't need PGXS.
+PG_CONFIG ?= true
+PGXS := /dev/null
+else
+PG_CONFIG ?= pg_config
+PGXS := $(shell $(PG_CONFIG) --pgxs)
+endif
+
+MODULE_big = pg_what_is_happening
+EXTENSION = pg_what_is_happening
+DATA = pg_what_is_happening--1.0.sql
+REGRESS = basic
+REGRESS_OPTS = --inputdir=test --outputdir=test --load-extension=pg_what_is_happening
+EXTRA_CLEAN = src/o/
+
+include src/Makefile
+
+ifeq ($(filter fmt tidy reset manual-install,$(MAKECMDGOALS)),)
+include $(PGXS)
+endif
+
+CLANG_FORMAT ?= clang-format
+
+fmt:
+	echo "    CLANG_FORMAT -i src/**/*.c src/**/*.h src/*.c src/*.h"
+	$(CLANG_FORMAT) -i src/*.c src/*.h src/*/*.c src/*/*.h
+
+CLANG_TIDY ?= clang-tidy
+
+tidy:
+	echo "    CLANG_TIDY src/**/*.c src/**/*.h src/*.c src/*.h"
+	$(CLANG_TIDY) src/*.c src/*.h src/*/*.c src/*/*.h --extra-arg=-std=c17
+
+reset:
+	@echo "Cleaning build artifacts..."
+	@rm -rf src/o
+	@rm -rf pg_what_is_happening.so
+	@echo "Build artifacts cleaned successfully"
+
+.PHONY: fmt tidy reset dirs

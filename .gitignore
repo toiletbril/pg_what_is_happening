@@ -1,0 +1,16 @@
+*.o
+*.so
+*.bc
+*.sql.in
+
+.claude/
+.clangd
+
+results/
+tmp_check/
+log/
+garbage/
+
+test/results/
+test/regression.diffs
+test/regression.out

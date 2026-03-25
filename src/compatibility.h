@@ -1,0 +1,71 @@
+/*
+ * This file is part of pg_what_is_happening.
+ * Copyright (C) 2025 toilebril
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ * See top-level LICENSE file.
+ */
+
+#ifndef PWH_COMPATIBILITY_H
+#define PWH_COMPATIBILITY_H
+
+#include "postgres.h"
+
+#include "common.h"
+#include "nodes/nodes.h"
+#include "storage/lwlock.h"
+
+/* Greenplum detection. */
+#ifdef GP_VERSION_NUM
+#define PWH_IS_GREENPLUM 1
+#else
+#define PWH_IS_GREENPLUM 0
+#endif
+
+/* Forward declarations for compatibility headers. */
+typedef struct PlanState PlanState;
+typedef bool (*PwhNodeVisitorFn)(PlanState *planstate, void *context);
+
+/* Include version-specific compatibility definitions. */
+#if PG_VERSION_NUM >= 150000
+#include "compatibility/15-18.h"
+#elif PG_VERSION_NUM >= 140000
+#include "compatibility/14.h"
+#elif PG_VERSION_NUM >= 130000
+#include "compatibility/13.h"
+#elif PG_VERSION_NUM >= 120000
+#include "compatibility/12.h"
+#elif PG_VERSION_NUM >= 110000
+#include "compatibility/11.h"
+#elif PG_VERSION_NUM >= 100000
+#include "compatibility/10.h"
+#elif PG_VERSION_NUM >= 90600
+#include "compatibility/96.h"
+#elif PG_VERSION_NUM >= 90500
+#include "compatibility/95.h"
+#else
+#include "compatibility/94.h"
+#endif
+
+/* Query ID computation fallback (used when queryId is 0). */
+extern u64 pwh_compute_query_id(const char *query_text);
+
+/* Node type to string conversion. */
+extern const char *pwh_node_type_to_string(NodeTag tag);
+
+/* Version-specific planstate walker for non-standard children. */
+extern bool pwh_walk_planstate_children(PlanState		*planstate,
+										PwhNodeVisitorFn visitor,
+										void			*context);
+
+#endif /* PWH_COMPATIBILITY_H. */
