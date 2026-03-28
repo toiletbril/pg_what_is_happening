@@ -85,9 +85,9 @@ pwh_sigusr2_handler(SIGNAL_ARGS)
 	}
 
 	PwhSharedMemoryBackendEntry *shmem_be_entry = NULL;
-	for (usize i = 0; i < (usize) MaxBackends; i++)
+	for (u64 i = 0; i < (u64) MaxBackends; i++)
 	{
-		PwhSharedMemoryBackendEntry *be = PWH_GET_BACKEND_ENTRY(i);
+		PwhSharedMemoryBackendEntry *be = PWH_GET_BACKEND_ENTRY_UNSAFE(i);
 		if (be->backend_pid == MyProcPid)
 		{
 			shmem_be_entry = be;
@@ -125,44 +125,41 @@ pwh_install_signal_handler(void)
 	PREV_SIGUSR2_HANDLER = pwh_install_pqsignal(SIGUSR2, pwh_sigusr2_handler);
 	if (PREV_SIGUSR2_HANDLER != NULL)
 	{
-		elog(
-			LOG,
-			"pg_what_is_happening: SIGUSR2 handler installed (previous handler: "
-			"%p)",
-			PREV_SIGUSR2_HANDLER);
+		elog(LOG, "PWH: SIGUSR2 handler installed (previous handler: %p)",
+			 PREV_SIGUSR2_HANDLER);
 	}
 	else
 	{
-		elog(LOG, "pg_what_is_happening: SIGUSR2 handler installed");
+		elog(LOG, "PWH: SIGUSR2 handler installed");
 	}
 }
 
-i64
+u64
 pwh_get_signal_handler_call_count(void)
 {
-	return (i64) SIGNAL_HANDLER_CALL_COUNT;
+	return (u64) SIGNAL_HANDLER_CALL_COUNT;
 }
 
-i64
+u64
 pwh_get_signal_handler_success_count(void)
 {
-	return (i64) SIGNAL_HANDLER_SUCCESS_COUNT;
+	return (u64) SIGNAL_HANDLER_SUCCESS_COUNT;
 }
 
-i64
+u64
 pwh_get_signal_handler_no_querydesc(void)
 {
-	return (i64) SIGNAL_HANDLER_NO_QUERYDESC;
+	return (u64) SIGNAL_HANDLER_NO_QUERYDESC;
 }
 
-i64
+u64
 pwh_get_signal_handler_shmem_null(void)
 {
-	return (i64) SIGNAL_HANDLER_SHMEM_NULL;
+	return (u64) SIGNAL_HANDLER_SHMEM_NULL;
 }
 
-i64
+u64
 pwh_get_signal_handler_no_slot(void)
 {
-	return (i64) SIGNAL_HANDLER_NO_SLOT;
+	return (u64) SIGNAL_HANDLER_NO_SLOT;
 }

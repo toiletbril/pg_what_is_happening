@@ -48,12 +48,12 @@ typedef struct
 
 	struct
 	{
-		i64 shared_hit;
-		i64 shared_read;
-		i64 local_hit;
-		i64 local_read;
-		i64 temp_read;
-		i64 temp_written;
+		u64 shared_hit;
+		u64 shared_read;
+		u64 local_hit;
+		u64 local_read;
+		u64 temp_read;
+		u64 temp_written;
 	} buffer_usage;
 
 	u64 magic;
@@ -61,7 +61,7 @@ typedef struct
 
 typedef struct
 {
-	u32			backend_pid;
+	i32			backend_pid;
 	u64			query_id;
 	u64			poll_generation;
 	char		query_text[PWH_QUERY_TEXT_LEN];
@@ -75,7 +75,7 @@ typedef struct
 
 extern PwhSharedMemoryHeader *PWH_SHMEM;
 
-#define PWH_GET_BACKEND_ENTRY(idx)                                       \
+#define PWH_GET_BACKEND_ENTRY_UNSAFE(idx)                                \
 	(((PwhSharedMemoryBackendEntry *) ((char *) (PWH_SHMEM) +            \
 									   sizeof(PwhSharedMemoryHeader))) + \
 	 (idx))
@@ -83,7 +83,7 @@ extern PwhSharedMemoryHeader *PWH_SHMEM;
 extern Size							pwh_shared_memory_size(void);
 extern void							pwh_shared_memory_startup(void);
 extern PwhSharedMemoryBackendEntry *pwh_get_my_backend_entry(void);
-extern usize						pwh_get_backend_entry_count(void);
-extern PwhSharedMemoryBackendEntry *pwh_get_backend_entry(usize index);
+extern u64							pwh_get_backend_entry_count(void);
+extern PwhSharedMemoryBackendEntry *pwh_get_backend_entry(u64 index);
 
 #endif /* PWH_SHARED_MEMORY_H. */

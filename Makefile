@@ -32,19 +32,17 @@ endif
 CLANG_FORMAT ?= clang-format
 
 fmt:
-	echo "    CLANG_FORMAT -i src/**/*.c src/**/*.h src/*.c src/*.h"
+	echo "    " CLANG_FORMAT -i src/**/*.c src/**/*.h src/*.c src/*.h
 	$(CLANG_FORMAT) -i src/*.c src/*.h src/*/*.c src/*/*.h
 
 CLANG_TIDY ?= clang-tidy
 
 tidy:
-	echo "    CLANG_TIDY src/**/*.c src/**/*.h src/*.c src/*.h"
+	echo "    " CLANG_TIDY src/*/*.c src/*/*.h src/*.c src/*.h)
 	$(CLANG_TIDY) src/*.c src/*.h src/*/*.c src/*/*.h --extra-arg=-std=c17
 
 reset:
-	@echo "Cleaning build artifacts..."
-	@rm -rf src/o
-	@rm -rf pg_what_is_happening.so
-	@echo "Build artifacts cleaned successfully"
+	echo "    " RM src/o/$(MODE) pg_what_is_happening.so
+	rm -rf src/o/$(MODE) pg_what_is_happening.so
 
 .PHONY: fmt tidy reset dirs

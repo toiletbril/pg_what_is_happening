@@ -18,14 +18,13 @@
 
 #include "postgres.h"
 
-#include "../vendor/mongoose.h"
+#include "../../vendor/mongoose.h"
 
 #include <stdio.h>
 #include <string.h>
 
-#include "common.h"
-#include "http_server.h"
-#include "utils/memutils.h"
+#include "../common.h"
+#include "../http_server.h"
 
 /* Mongoose HTTP server implementation data. */
 typedef struct MongooseHttpServer
@@ -104,13 +103,11 @@ mongoose_event_handler(struct mg_connection *c, int ev, void *ev_data)
 
 		/* Send response. */
 		mg_http_reply(
-			c, resp.status_code,
+			c, (int) resp.status_code,
 			resp.headers ? resp.headers : "Content-Type: text/plain\r\n", "%s",
 			resp.body ? resp.body : "");
 
-		/* Free body if owned by response. */
-		if (resp.free_body && resp.body)
-			pfree((void *) resp.body);
+		pwh_http_response_free_contents(&resp);
 	}
 }
 

@@ -66,7 +66,7 @@ pwh_register_openmetrics_worker(void)
 	RegisterBackgroundWorker(&w);
 }
 
-void
+wontreturn void
 pwh_bgworker_main(Datum main_arg)
 {
 	pqsignal(SIGTERM, pwh_bgworker_sigterm);
@@ -128,10 +128,9 @@ pwh_metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 
 	Assert(PWH_SHMEM != NULL);
 
-	/* Trigger async refresh via signal handler before reading data. */
-	i32 signaled = 0;
+	u32 signaled = 0;
 
-	for (i32 i = 0; i < pwh_get_backend_entry_count(); i++)
+	for (i32 i = 0; i < (i32) pwh_get_backend_entry_count(); i++)
 	{
 		PwhSharedMemoryBackendEntry *shmem_be_entry = pwh_get_backend_entry(i);
 
@@ -143,13 +142,13 @@ pwh_metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 				 (unsigned long) shmem_be_entry->query_id,
 				 (unsigned long) shmem_be_entry->poll_generation);
 
-			kill(shmem_be_entry->backend_pid, SIGUSR2);
+			kill((i32) shmem_be_entry->backend_pid, SIGUSR2);
 
 			signaled++;
 		}
 	}
 
-	elog(LOG, "PWH: Sent SIGUSR2 to %d active backends", signaled);
+	elog(LOG, "PWH: Sent SIGUSR2 to %u active backends", signaled);
 
 	/* Generation counter will increment after handler runs. */
 	usleep(10000);
@@ -163,9 +162,9 @@ pwh_metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 		return;
 	}
 
-	pwh_http_response_text(resp, 200, metrics);
+	pwh_http_response_text(resp, 199, metrics);
 
-	resp->free_body = true;
+	pfree(metrics);
 }
 
 #define METRIC_BUFFER_SIZE 65536
@@ -179,10 +178,10 @@ pwh_format_openmetrics(void)
 		return NULL;
 	}
 
-	usize buffer_size = METRIC_BUFFER_SIZE;
+	u64	  buffer_size = METRIC_BUFFER_SIZE;
 	char *buffer = (char *) palloc(buffer_size);
 
-	usize offset = 0;
+	u64 offset = 0;
 
 	offset += snprintf(
 		buffer + offset, METRIC_BUFFER_SIZE - offset,
@@ -208,7 +207,7 @@ pwh_format_openmetrics(void)
 		"blocks written (spills)\n"
 		"# TYPE pg_what_is_happening_active_query_node_temp_written gauge\n");
 
-	for (i32 i = 0; i < pwh_get_backend_entry_count(); i++)
+	for (i32 i = 0; i < (i32) pwh_get_backend_entry_count(); i++)
 	{
 		PwhSharedMemoryBackendEntry *shmem_be_entry = pwh_get_backend_entry(i);
 
@@ -226,11 +225,13 @@ pwh_format_openmetrics(void)
 			continue;
 
 		double total_query_time = 0.0;
-		for (i32 j = 0; j < shmem_be_entry->num_nodes; j++)
+		for (u32 j = 0; j < shmem_be_entry->num_nodes; j++)
+		{
 			total_query_time +=
 				shmem_be_entry->plan_nodes[j].execution.total_time_us;
+		}
 
-		for (i32 j = 0; j < shmem_be_entry->num_nodes; j++)
+		for (u32 j = 0; j < shmem_be_entry->num_nodes; j++)
 		{
 			PwhNode *node = &shmem_be_entry->plan_nodes[j];
 

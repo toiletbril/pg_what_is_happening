@@ -25,8 +25,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include "common.h"
-#include "http_server.h"
+#include "../common.h"
+#include "../http_server.h"
 
 #define DUMB_HTTP_BUFFER_SIZE 8192
 
@@ -149,7 +149,7 @@ parse_request(const char *buffer, HttpRequest *req)
 {
 	char *line_end;
 	char *space1, *space2;
-	usize line_len;
+	u64	  line_len;
 
 	/* Parse request line: "GET /path HTTP/1.1". */
 	line_end = strstr(buffer, "\r\n");

@@ -16,14 +16,14 @@
  * See top-level LICENSE file.
  */
 
-#ifndef PWH_OPENMETRICS_H
-#define PWH_OPENMETRICS_H
+#ifndef PWH_BGWORKER_H
+#define PWH_BGWORKER_H
 
 #include "postgres.h"
 
 #include "common.h"
 
-extern void pwh_register_openmetrics_worker(void);
-extern void pwh_bgworker_main(Datum main_arg);
+extern void			   pwh_register_openmetrics_worker(void);
+extern wontreturn void pwh_bgworker_main(Datum main_arg);
 
-#endif /* PWH_OPENMETRICS_H. */
+#endif /* PWH_BGWORKER_H. */
