@@ -50,18 +50,17 @@ typedef bool (*PwhNodeVisitorFn)(PlanState *planstate, void *context);
 #elif PG_VERSION_NUM >= 100000
 #include "compatibility/10.h"
 #elif PG_VERSION_NUM >= 90600
-#include "compatibility/96.h"
+#include "compatibility/9_6.h"
 #elif PG_VERSION_NUM >= 90500
-#include "compatibility/95.h"
+#include "compatibility/9_5.h"
 #else
-#include "compatibility/94.h"
+#include "compatibility/9_4.h"
 #endif
 
-/* Query ID computation fallback (used when queryId is 0). */
+/* Query ID computation fallback, used when queryId is 0. */
 extern u64 pwh_compute_query_id(const char *query_text);
 
-/* Node type to string conversion. */
-extern const char *pwh_node_type_to_string(NodeTag tag);
+extern const char *pwh_node_tag_to_string(NodeTag tag);
 
 /* Version-specific planstate walker for non-standard children. */
 extern bool pwh_walk_planstate_children(PlanState		*planstate,

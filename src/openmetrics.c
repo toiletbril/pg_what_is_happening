@@ -50,20 +50,20 @@ pwh_bgworker_sigterm(SIGNAL_ARGS)
 void
 pwh_register_openmetrics_worker(void)
 {
-	BackgroundWorker worker;
+	BackgroundWorker w;
 
-	memset(&worker, 0, sizeof(BackgroundWorker));
-	snprintf(worker.bgw_name, BGW_MAXLEN,
+	memset(&w, 0, sizeof(BackgroundWorker));
+	snprintf(w.bgw_name, BGW_MAXLEN,
 			 "pg_what_is_happening openmetrics exporter");
-	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | PWH_BGWORKER_BYPASS_ALLOWCONN;
-	worker.bgw_start_time = BgWorkerStart_PostmasterStart;
-	worker.bgw_restart_time = BGW_NEVER_RESTART;
-	snprintf(worker.bgw_library_name, BGW_MAXLEN, "pg_what_is_happening");
-	snprintf(worker.bgw_function_name, BGW_MAXLEN, "pwh_openmetrics_main");
-	worker.bgw_main_arg = (Datum) 0;
-	worker.bgw_notify_pid = 0;
+	w.bgw_flags = BGWORKER_SHMEM_ACCESS | PWH_BGWORKER_BYPASS_ALLOWCONN;
+	w.bgw_start_time = BgWorkerStart_PostmasterStart;
+	w.bgw_restart_time = BGW_NEVER_RESTART;
+	snprintf(w.bgw_library_name, BGW_MAXLEN, "pg_what_is_happening");
+	snprintf(w.bgw_function_name, BGW_MAXLEN, "pwh_openmetrics_main");
+	w.bgw_main_arg = (Datum) 0;
+	w.bgw_notify_pid = 0;
 
-	RegisterBackgroundWorker(&worker);
+	RegisterBackgroundWorker(&w);
 }
 
 void
@@ -75,22 +75,29 @@ pwh_openmetrics_main(Datum main_arg)
 	bool was_found;
 	PWH_SHMEM = ShmemInitStruct("pg_what_is_happening",
 								pwh_shared_memory_size(), &was_found);
-	if (!PWH_SHMEM || !was_found)
+	if (PWH_SHMEM == NULL)
 	{
 		elog(ERROR, "PWH: Background worker failed to attach to shared memory");
 		proc_exit(1);
 	}
+
+	Assert(was_found);
 	elog(LOG, "PWH: Background worker attached to shared memory");
 
 	const char *listen_addr =
 		PWH_GET_GUC("pg_what_is_happening.listen_address");
 
-	if (!listen_addr || listen_addr[0] == '\0')
+	Assert(listen_addr != NULL);
+
+	if (listen_addr[0] == '\0')
+	{
 		listen_addr = "127.0.0.1:9187";
+	}
 
 	elog(LOG, "PWH: Starting openmetrics exporter on %s", listen_addr);
 
 	HttpServer *server = pwh_http_server_create(listen_addr);
+
 	if (server == NULL)
 	{
 		elog(ERROR, "PWH: Failed to create HTTP server on %s", listen_addr);
@@ -100,18 +107,17 @@ pwh_openmetrics_main(Datum main_arg)
 	elog(LOG, "PWH: Metrics endpoint listening on %s", listen_addr);
 
 	pwh_http_server_set_handler(server, pwh_metrics_handler, NULL);
-	pwh_http_server_run(server);
+	pwh_http_server_run(server); /* Blocking. */
 	pwh_http_server_destroy(server);
 
 	elog(LOG, "PWH: Metrics endpoint shutting down");
+
 	proc_exit(0);
 }
 
 static void
 pwh_metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 {
-	char *metrics;
-
 	unused(user_data);
 
 	if (strcmp(req->method, "GET") != 0 || strcmp(req->path, "/metrics") != 0)
@@ -120,16 +126,11 @@ pwh_metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 		return;
 	}
 
-	/* Check shared memory is available. */
-	if (PWH_SHMEM == NULL)
-	{
-		elog(WARNING, "PWH: Shared memory not initialized in metrics handler");
-		pwh_http_response_text(resp, 503, "Service Unavailable");
-		return;
-	}
+	Assert(PWH_SHMEM != NULL);
 
 	/* Trigger async refresh via signal handler before reading data. */
 	i32 signaled = 0;
+
 	for (i32 i = 0; i < pwh_get_backend_entry_count(); i++)
 	{
 		PwhSharedMemoryBackendEntry *shmem_be_entry = pwh_get_backend_entry(i);
@@ -137,21 +138,24 @@ pwh_metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 		if (shmem_be_entry && shmem_be_entry->is_query_active &&
 			shmem_be_entry->backend_pid != 0)
 		{
-			elog(LOG, "PWH: Sending SIGUSR2 to PID=%d query_id=%lu gen=%lu",
+			elog(DEBUG1, "PWH: Sending SIGUSR2 to PID=%d query_id=%lu gen=%lu",
 				 shmem_be_entry->backend_pid,
 				 (unsigned long) shmem_be_entry->query_id,
 				 (unsigned long) shmem_be_entry->poll_generation);
+
 			kill(shmem_be_entry->backend_pid, SIGUSR2);
+
 			signaled++;
 		}
 	}
 
 	elog(LOG, "PWH: Sent SIGUSR2 to %d active backends", signaled);
 
-	/* Generation counter will increment after handler runs.. */
+	/* Generation counter will increment after handler runs. */
 	usleep(10000);
 
-	metrics = pwh_format_openmetrics();
+	char *metrics = pwh_format_openmetrics();
+
 	if (metrics == NULL)
 	{
 		elog(WARNING, "PWH: Failed to format metrics");
@@ -160,8 +164,11 @@ pwh_metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 	}
 
 	pwh_http_response_text(resp, 200, metrics);
+
 	resp->free_body = true;
 }
+
+#define METRIC_BUFFER_SIZE 65536
 
 static char *
 pwh_format_openmetrics(void)
@@ -172,13 +179,12 @@ pwh_format_openmetrics(void)
 		return NULL;
 	}
 
-	usize buffer_size = 65536;
-	char *buffer = (char *) palloc(buffer_size);
+	char *buffer = (char *) palloc(METRIC_BUFFER_SIZE);	 // XXX
 
 	usize offset = 0;
 
 	offset += snprintf(
-		buffer + offset, buffer_size - offset,
+		buffer + offset, METRIC_BUFFER_SIZE - offset,
 		"# HELP pg_what_is_happening_active_query_node_rows Rows produced "
 		"by active query plan node\n"
 		"# TYPE pg_what_is_happening_active_query_node_rows gauge\n"
@@ -246,7 +252,8 @@ pwh_format_openmetrics(void)
 				"query_id=\"%lu\",node_id=\"%d\",node_tag=\"%s\"} %.0f\n",
 				shmem_be_entry->backend_pid,
 				(unsigned long) shmem_be_entry->query_id, node->node_id,
-				node->node_type_name, node->execution.tuples_returned);
+				pwh_node_tag_to_string(node->tag),
+				node->execution.tuples_returned);
 
 			offset += snprintf(
 				buffer + offset, buffer_size - offset,
@@ -254,7 +261,7 @@ pwh_format_openmetrics(void)
 				"query_id=\"%lu\",node_id=\"%d\",node_tag=\"%s\"} %.6f\n",
 				shmem_be_entry->backend_pid,
 				(unsigned long) shmem_be_entry->query_id, node->node_id,
-				node->node_type_name, node_time_seconds);
+				pwh_node_tag_to_string(node->tag), node_time_seconds);
 
 			offset += snprintf(
 				buffer + offset, buffer_size - offset,
@@ -262,7 +269,7 @@ pwh_format_openmetrics(void)
 				"query_id=\"%lu\",node_id=\"%d\",node_tag=\"%s\"} %.2f\n",
 				shmem_be_entry->backend_pid,
 				(unsigned long) shmem_be_entry->query_id, node->node_id,
-				node->node_type_name, node_percent);
+				pwh_node_tag_to_string(node->tag), node_percent);
 
 			offset += snprintf(
 				buffer + offset, buffer_size - offset,
@@ -270,7 +277,8 @@ pwh_format_openmetrics(void)
 				"query_id=\"%lu\",node_id=\"%d\",node_tag=\"%s\"} %ld\n",
 				shmem_be_entry->backend_pid,
 				(unsigned long) shmem_be_entry->query_id, node->node_id,
-				node->node_type_name, (long) node->buffer_usage.shared_hit);
+				pwh_node_tag_to_string(node->tag),
+				(long) node->buffer_usage.shared_hit);
 
 			offset += snprintf(
 				buffer + offset, buffer_size - offset,
@@ -278,7 +286,8 @@ pwh_format_openmetrics(void)
 				"query_id=\"%lu\",node_id=\"%d\",node_tag=\"%s\"} %ld\n",
 				shmem_be_entry->backend_pid,
 				(unsigned long) shmem_be_entry->query_id, node->node_id,
-				node->node_type_name, (long) node->buffer_usage.shared_read);
+				pwh_node_tag_to_string(node->tag),
+				(long) node->buffer_usage.shared_read);
 
 			offset += snprintf(
 				buffer + offset, buffer_size - offset,
@@ -286,7 +295,8 @@ pwh_format_openmetrics(void)
 				"query_id=\"%lu\",node_id=\"%d\",node_tag=\"%s\"} %ld\n",
 				shmem_be_entry->backend_pid,
 				(unsigned long) shmem_be_entry->query_id, node->node_id,
-				node->node_type_name, (long) node->buffer_usage.temp_read);
+				pwh_node_tag_to_string(node->tag),
+				(long) node->buffer_usage.temp_read);
 
 			offset += snprintf(
 				buffer + offset, buffer_size - offset,
@@ -294,7 +304,8 @@ pwh_format_openmetrics(void)
 				"query_id=\"%lu\",node_id=\"%d\",node_tag=\"%s\"} %ld\n",
 				shmem_be_entry->backend_pid,
 				(unsigned long) shmem_be_entry->query_id, node->node_id,
-				node->node_type_name, (long) node->buffer_usage.temp_written);
+				pwh_node_tag_to_string(node->tag),
+				(long) node->buffer_usage.temp_written);
 		}
 	}
 

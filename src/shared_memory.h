@@ -29,14 +29,14 @@
 
 #define PWH_MAX_NODES_DEFAULT 128
 #define PWH_QUERY_TEXT_LEN 256
-#define PWH_NODE_TYPE_NAME_LEN 32
+
+#define PWH_NODE_MAGIC 0xDEADBEEF
 
 typedef struct
 {
 	NodeTag tag;
 	i32		node_id;
 	i32		parent_node_id;
-	char	node_type_name[PWH_NODE_TYPE_NAME_LEN];
 
 	struct
 	{
@@ -55,6 +55,8 @@ typedef struct
 		i64 temp_read;
 		i64 temp_written;
 	} buffer_usage;
+
+	u64 magic;
 } PwhNode;
 
 typedef struct
@@ -81,7 +83,7 @@ extern PwhSharedMemoryHeader *PWH_SHMEM;
 extern Size							pwh_shared_memory_size(void);
 extern void							pwh_shared_memory_startup(void);
 extern PwhSharedMemoryBackendEntry *pwh_get_my_backend_entry(void);
-extern i32							pwh_get_backend_entry_count(void);
-extern PwhSharedMemoryBackendEntry *pwh_get_backend_entry(i32 index);
+extern usize						pwh_get_backend_entry_count(void);
+extern PwhSharedMemoryBackendEntry *pwh_get_backend_entry(usize index);
 
 #endif /* PWH_SHARED_MEMORY_H. */

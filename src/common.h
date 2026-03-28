@@ -64,8 +64,6 @@ typedef Size usize;
 #define pwh__typeof(t) unsigned long
 #endif
 
-/* Convenience macros. */
-
 #define donteliminate pwh__used
 #define mustuse pwh__mustuse
 #define threadlocal pwh__threadlocal

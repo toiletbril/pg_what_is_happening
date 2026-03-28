@@ -80,7 +80,7 @@ _PG_init(void)
 	DefineCustomStringVariable(
 		"pg_what_is_happening.listen_address",
 		"Listen address for metrics endpoint (host:port)", NULL,
-		&PWH_LISTEN_ADDRESS, "localhost:9187", PGC_POSTMASTER, 0, NULL, NULL,
+		&PWH_LISTEN_ADDRESS, "127.0.0.1:9187", PGC_POSTMASTER, 0, NULL, NULL,
 		NULL);
 #endif
 
@@ -116,9 +116,6 @@ _PG_init(void)
 	elog(LOG, "pg_what_is_happening initialized");
 }
 
-/*
- * Module unload callback
- */
 void
 _PG_fini(void)
 {
@@ -130,10 +127,6 @@ _PG_fini(void)
 	elog(LOG, "pg_what_is_happening unloaded");
 }
 
-/*
- * ExecutorStart hook
- * Force instrumentation and record plan topology
- */
 static void
 pwh_executor_start_hook(QueryDesc *queryDesc, i32 eflags)
 {
@@ -217,10 +210,6 @@ pwh_executor_start_hook(QueryDesc *queryDesc, i32 eflags)
 	pwh_set_current_query_desc(queryDesc);
 }
 
-/*
- * ExecutorEnd hook
- * Capture final metrics and mark slot inactive
- */
 static void
 pwh_executor_end_hook(QueryDesc *queryDesc)
 {
@@ -273,6 +262,38 @@ pwh_executor_end_hook(QueryDesc *queryDesc)
  */
 PG_FUNCTION_INFO_V1(what_is_happening);
 
+TupDesc
+pwh_create_whats_happening_tupdesc(void)
+{
+	TupleDesc tupdesc = PWH_CREATE_TUPLE_DESC(17);
+
+	TupleDescInitEntry(tupdesc, (AttrNumber) 1, "pid", INT4OID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 2, "query_id", INT8OID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 3, "query_text", TEXTOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 4, "active", BOOLOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 5, "node_id", INT4OID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 6, "parent_id", INT4OID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 7, "node_type", TEXTOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 8, "ntuples", FLOAT8OID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 9, "startup_us", FLOAT8OID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 10, "total_us", FLOAT8OID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 11, "nloops", FLOAT8OID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 12, "shared_blks_hit", INT8OID, -1,
+					   0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 13, "shared_blks_read", INT8OID,
+					   -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 14, "local_blks_hit", INT8OID, -1,
+					   0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 15, "local_blks_read", INT8OID, -1,
+					   0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 16, "temp_blks_read", INT8OID, -1,
+					   0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 17, "temp_blks_written", INT8OID,
+					   -1, 0);
+
+	return tupdesc;
+}
+
 Datum
 what_is_happening(PG_FUNCTION_ARGS)
 {
@@ -282,45 +303,12 @@ what_is_happening(PG_FUNCTION_ARGS)
 		MemoryContext	 oldcontext =
 			MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
-		/* Build tuple descriptor. */
-		TupleDesc tupdesc = PWH_CREATE_TUPLE_DESC(17);
-
-		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "pid", INT4OID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "query_id", INT8OID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 3, "query_text", TEXTOID, -1,
-						   0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 4, "active", BOOLOID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 5, "node_id", INT4OID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 6, "parent_id", INT4OID, -1,
-						   0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 7, "node_type", TEXTOID, -1,
-						   0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 8, "ntuples", FLOAT8OID, -1,
-						   0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 9, "startup_us", FLOAT8OID, -1,
-						   0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 10, "total_us", FLOAT8OID, -1,
-						   0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 11, "nloops", FLOAT8OID, -1,
-						   0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 12, "shared_blks_hit", INT8OID,
-						   -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 13, "shared_blks_read",
-						   INT8OID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 14, "local_blks_hit", INT8OID,
-						   -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 15, "local_blks_read", INT8OID,
-						   -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 16, "temp_blks_read", INT8OID,
-						   -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 17, "temp_blks_written",
-						   INT8OID, -1, 0);
-
-		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
+		funcctx->tuple_desc =
+			BlessTupleDesc(pwh_create_whats_happening_tupdesc());
 
 		/* Send SIGUSR2 to all active backends to refresh metrics. */
-		i32	 slot_count = pwh_get_backend_entry_count();
-		u64 *generations = (u64 *) palloc(sizeof(u64) * slot_count);
+		usize slot_count = pwh_get_backend_entry_count();
+		u64	 *generations = (u64 *) palloc(sizeof(u64) * slot_count);
 
 		i32 signaled = 0;
 		for (i32 i = 0; i < slot_count; i++)
@@ -335,7 +323,9 @@ what_is_happening(PG_FUNCTION_ARGS)
 				signaled++;
 			}
 			else
+			{
 				generations[i] = 0;
+			}
 		}
 
 		elog(DEBUG1, "PWH: What_is_happening() called, signaled %d backends",
@@ -381,7 +371,7 @@ what_is_happening(PG_FUNCTION_ARGS)
 			values[3] = BoolGetDatum(shmem_be_entry->is_query_active);
 			values[4] = Int32GetDatum(node->node_id);
 			values[5] = Int32GetDatum(node->parent_node_id);
-			values[6] = CStringGetTextDatum(node->node_type_name);
+			values[6] = CStringGetTextDatum(pwh_node_tag_to_string(node->tag));
 			values[7] = Float8GetDatum(node->execution.tuples_returned);
 			values[8] = Float8GetDatum(node->execution.startup_time_us);
 			values[9] = Float8GetDatum(node->execution.total_time_us);

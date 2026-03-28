@@ -53,7 +53,7 @@ ORDER BY ordinal_position;
  active            | boolean
  node_id           | integer
  parent_id         | integer
- node_type         | text
+ node_tag          | text
  ntuples           | double precision
  startup_us        | double precision
  total_us          | double precision

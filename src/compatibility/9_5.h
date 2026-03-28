@@ -1,6 +1,5 @@
-
-#ifndef PWH_COMPAT_96_H
-#define PWH_COMPAT_96_H
+#ifndef PWH_COMPAT_95_H
+#define PWH_COMPAT_95_H
 
 #include "nodes/execnodes.h"
 
@@ -8,27 +7,22 @@
 
 typedef struct
 {
-	LWLock lock;
+	LWLock *lock;
+	u8		__pad[8];
 } PwhSharedMemoryHeader;
 
-#define PWH_LWLOCK_ACQUIRE(lock, mode) LWLockAcquire(&(lock), mode)
-#define PWH_LWLOCK_RELEASE(lock) LWLockRelease(&(lock))
-#define PWH_LWLOCK_INITIALIZE(lock, tranche_id) \
-	LWLockInitialize(&(lock), tranche_id)
-#define PWH_REQUEST_LWLOCKS(name, count) RequestNamedLWLockTranche(name, count)
-#define PWH_LWLOCK_TRANCHE_ID_DECL static i32 pwh_lwlock_tranche_id = 0
-#define PWH_LWLOCK_SETUP_TRANCHE(var, name)   \
-	do                                        \
-	{                                         \
-		(var) = LWLockNewTrancheId();         \
-		LWLockRegisterTranche((var), (name)); \
-	} while (0)
+#define PWH_LWLOCK_ACQUIRE(lock, mode) LWLockAcquire(lock, mode)
+#define PWH_LWLOCK_RELEASE(lock) LWLockRelease(lock)
+#define PWH_LWLOCK_INITIALIZE(lock, tranche_id) ((lock) = LWLockAssign())
+#define PWH_REQUEST_LWLOCKS(name, count) RequestAddinLWLocks(count)
+#define PWH_LWLOCK_TRANCHE_ID_DECL
+#define PWH_LWLOCK_SETUP_TRANCHE(var, name) ((void) 0)
 
-#define PWH_GET_GUC(name) GetConfigOptionByName(name, NULL, false)
+#define PWH_GET_GUC(name) GetConfigOptionByName(name, NULL)
 
 #define PWH_CREATE_TUPLE_DESC(natts) CreateTemplateTupleDesc(natts, false)
 
-#define PWH_BGWORKER_BYPASS_ALLOWCONN 0
+#define PWH_BGWORKER_BYPASS_ALLOWCONN BGWORKER_BYPASS_ALLOWCONN
 
 #define PWH_COPY_BUFUSAGE(metrics, instr, idx)     \
 	do                                             \
@@ -46,8 +40,6 @@ typedef struct
 		(metrics)[idx].buffer_usage.temp_written = \
 			(instr)->bufusage.temp_blks_written;   \
 	} while (0)
-
-#define T_GatherMerge (-1) /* Not available until PG 10. */
 
 static forceinline bool
 pwh_walk_planstate_children_inline(PlanState	   *planstate,
@@ -122,10 +114,24 @@ pwh_walk_planstate_children_inline(PlanState	   *planstate,
 
 
 static forceinline const char *
-pwh_node_type_to_string_inline(NodeTag tag)
+pwh_node_tag_to_string_inline(NodeTag tag)
 {
 	switch (tag)
 	{
+		case T_Result:
+			return "Result";
+		case T_ModifyTable:
+			return "ModifyTable";
+		case T_Append:
+			return "Append";
+		case T_MergeAppend:
+			return "MergeAppend";
+		case T_RecursiveUnion:
+			return "RecursiveUnion";
+		case T_BitmapAnd:
+			return "BitmapAnd";
+		case T_BitmapOr:
+			return "BitmapOr";
 		case T_SeqScan:
 			return "SeqScan";
 		case T_IndexScan:
@@ -162,14 +168,14 @@ pwh_node_type_to_string_inline(NodeTag tag)
 			return "Material";
 		case T_Sort:
 			return "Sort";
+		case T_Group:
+			return "Group";
 		case T_Agg:
 			return "Agg";
 		case T_WindowAgg:
 			return "WindowAgg";
 		case T_Unique:
 			return "Unique";
-		case T_Gather:
-			return "Gather";
 		case T_Hash:
 			return "Hash";
 		case T_SetOp:
@@ -178,25 +184,9 @@ pwh_node_type_to_string_inline(NodeTag tag)
 			return "LockRows";
 		case T_Limit:
 			return "Limit";
-		case T_Result:
-			return "Result";
-		case T_ModifyTable:
-			return "ModifyTable";
-		case T_Append:
-			return "Append";
-		case T_MergeAppend:
-			return "MergeAppend";
-		case T_RecursiveUnion:
-			return "RecursiveUnion";
-		case T_BitmapAnd:
-			return "BitmapAnd";
-		case T_BitmapOr:
-			return "BitmapOr";
-		case T_Group:
-			return "Group";
-		case T_Gather:
-			return "Gather";
 		default:
 			return "Unknown";
 	}
 }
+
+#endif /* PWH_COMPAT_95_H. */
