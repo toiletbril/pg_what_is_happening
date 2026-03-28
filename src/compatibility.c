@@ -24,9 +24,9 @@
 #include "nodes/nodes.h"
 
 const char *
-pwh_node_type_to_string(NodeTag tag)
+pwh_node_tag_to_string(NodeTag tag)
 {
-	return pwh_node_type_to_string_inline(tag);
+	return pwh_node_tag_to_string_inline(tag);
 }
 
 bool

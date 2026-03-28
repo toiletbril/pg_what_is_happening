@@ -72,7 +72,7 @@ pwh_shared_memory_startup(void)
 			 "PWH: Initializing %zu bytes shared memory for %d backend entries",
 			 pwh_shared_memory_size(), MaxBackends);
 
-		for (i32 i = 0; i < MaxBackends; i++)
+		for (usize i = 0; i < (usize) MaxBackends; i++)
 		{
 			PwhSharedMemoryBackendEntry *shmem_be_entry =
 				PWH_GET_BACKEND_ENTRY(i);
@@ -81,62 +81,67 @@ pwh_shared_memory_startup(void)
 			shmem_be_entry->lock_offset = i;
 		}
 
-		PWH_LWLOCK_SETUP_TRANCHE(pwh_lwlock_tranche_id, "pg_what_is_happening");
-		PWH_LWLOCK_INITIALIZE(PWH_SHMEM->lock, pwh_lwlock_tranche_id);
+		PWH_LWLOCK_SETUP_TRANCHE(PWH_LWLOCK_TRANCHE_ID, "pg_what_is_happening");
+		PWH_LWLOCK_INITIALIZE(PWH_SHMEM->lock, PWH_LWLOCK_TRANCHE_ID);
 	}
 }
 
-/*
- * Get backend entry for current backend
- * Returns NULL if no entry found or available
- */
 PwhSharedMemoryBackendEntry *
 pwh_get_my_backend_entry(void)
 {
 	if (unlikely(PWH_SHMEM == NULL))
 		return NULL;
 
-	for (i32 i = 0; i < MaxBackends; i++)
+	for (usize i = 0; i < (usize) MaxBackends; i++)
 	{
-		if (PWH_GET_BACKEND_ENTRY(i)->backend_pid == MyProcPid)
-			return PWH_GET_BACKEND_ENTRY(i);
+		PwhSharedMemoryBackendEntry *be = pwh_get_backend_entry(i);
+
+		if (be->backend_pid == MyProcPid)
+		{
+			return be;
+		}
 	}
 
 	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->lock, LW_EXCLUSIVE);
-	for (i32 i = 0; i < MaxBackends; i++)
+	for (usize i = 0; i < (usize) MaxBackends; i++)
 	{
-		if (PWH_GET_BACKEND_ENTRY(i)->backend_pid == 0)
+		PwhSharedMemoryBackendEntry *be = pwh_get_backend_entry(i);
+
+		if (be->backend_pid == 0)
 		{
-			PWH_GET_BACKEND_ENTRY(i)->backend_pid = MyProcPid;
+			be->backend_pid = MyProcPid;
 			PWH_LWLOCK_RELEASE(PWH_SHMEM->lock);
 			elog(DEBUG2, "PWH: Allocated backend entry %d for PID %d", i,
 				 MyProcPid);
-			return PWH_GET_BACKEND_ENTRY(i);
+
+			return be;
 		}
 	}
 	PWH_LWLOCK_RELEASE(PWH_SHMEM->lock);
 
 	elog(WARNING, "PWH: All %d backend entries exhausted for PID %d",
 		 MaxBackends, MyProcPid);
+
 	return NULL;
 }
 
 /*
- * Get total number of backend entries
+ * Get total number of backend entries.
  */
-i32
+usize
 pwh_get_backend_entry_count(void)
 {
-	return MaxBackends;
+	return (usize) MaxBackends;
 }
 
 /*
- * Get backend entry by index
+ * Get backend entry by index.
  */
 PwhSharedMemoryBackendEntry *
-pwh_get_backend_entry(i32 index)
+pwh_get_backend_entry(usize index)
 {
-	if (unlikely(!PWH_SHMEM || index < 0 || index >= MaxBackends))
+	if (unlikely(PWH_SHMEM == NULL || index < 0 ||
+				 index >= (usize) MaxBackends))
 		return NULL;
 	return PWH_GET_BACKEND_ENTRY(index);
 }

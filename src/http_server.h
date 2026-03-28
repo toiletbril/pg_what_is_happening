@@ -21,26 +21,25 @@
 
 #include "common.h"
 
-/* HTTP request structure. */
 typedef struct
 {
-	char *method;	/* GET, POST, etc. */
-	char *path;		/* /metrics, etc. */
-	char *version;	/* HTTP/1.1. */
-	char *headers;	/* Raw headers. */
-	char *body;		/* Request body. */
-	usize body_len; /* Body length. */
+	char *method;
+	char *path;
+	char *version;
+	char *headers;
+	char *body;
+	usize body_len;
 } HttpRequest;
 
 /* HTTP response structure. */
 typedef struct
 {
-	i32			status_code; /* 200, 404, etc. */
-	const char *status_text; /* OK, Not Found, etc. */
-	char	   *headers;	 /* Response headers. */
-	const char *body;		 /* Response body. */
-	usize		body_len;	 /* Body length. */
-	bool		free_body;	 /* Whether to free body after sending. */
+	i32			status_code;
+	const char *status_text;
+	char	   *headers;
+	const char *body;
+	usize		body_len;
+	bool		free_body;
 } HttpResponse;
 
 typedef struct HttpServer HttpServer;

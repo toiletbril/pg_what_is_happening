@@ -30,7 +30,7 @@
 typedef bool (*PwhNodeVisitorFn)(PlanState *planstate, void *context);
 
 /* Convert NodeTag to human-readable string. */
-extern const char *pwh_node_type_to_string(NodeTag tag);
+extern const char *pwh_node_tag_to_string(NodeTag tag);
 
 /* Generic walker: visits each node calling visitor, handles standard children. */
 extern void pwh_walk_planstate_tree(PlanState		*planstate,
@@ -38,10 +38,10 @@ extern void pwh_walk_planstate_tree(PlanState		*planstate,
 
 /* Walk plan tree and populate topology (node_id, parent_id, node_type). */
 extern i32 pwh_walk_plan_topology(PlanState *planstate, PwhNode *metrics,
-								  i32 max_nodes, i32 parent_id);
+								  usize max_nodes, i32 parent_id);
 
 /* Walk plan tree and read Instrumentation data. */
 extern void pwh_walk_plan_instrumentation(PlanState *planstate,
-										  PwhNode *metrics, i32 max_nodes);
+										  PwhNode *metrics, usize max_nodes);
 
 #endif /* PWH_PLAN_TREE_WALKER_H. */

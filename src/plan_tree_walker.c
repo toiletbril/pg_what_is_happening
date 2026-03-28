@@ -34,25 +34,19 @@ static bool pwh_walk_planstate_recursive(PlanState		 *planstate,
 										 PwhNodeVisitorFn visitor,
 										 void			 *context);
 static i32	walk_topology_recursive(PlanState *planstate, PwhNode *metrics,
-									i32 max_nodes, i32 parent_id,
-									i32 *node_counter);
+									usize max_nodes, i32 parent_id,
+									usize *node_counter);
 static void walk_instrumentation_recursive(PlanState *planstate,
-										   PwhNode *metrics, i32 max_nodes,
-										   i32 *node_counter);
+										   PwhNode *metrics, usize max_nodes,
+										   usize *node_counter);
 
-/*
- * Generic planstate tree walker
- * Calls visitor on each node, then recursively walks standard and
- * version-specific children
- */
 void
 pwh_walk_planstate_tree(PlanState *planstate, PwhNodeVisitorFn visitor,
 						void *context)
 {
 	if (planstate == NULL)
-	{
 		return;
-	}
+
 	pwh_walk_planstate_recursive(planstate, visitor, context);
 }
 
@@ -100,73 +94,65 @@ pwh_walk_planstate_recursive(PlanState *planstate, PwhNodeVisitorFn visitor,
 		}
 	}
 
-	/* Version-specific non-standard children. */
+	/* Version-specific or non-standard children. */
 	return pwh_walk_planstate_children(planstate, visitor, context);
 }
 
 /*
- * Walk plan tree and populate topology information
- * Returns total number of nodes found
+ * Returns total number of nodes found.
  */
-i32
-pwh_walk_plan_topology(PlanState *planstate, PwhNode *metrics, i32 max_nodes,
+usize
+pwh_walk_plan_topology(PlanState *planstate, PwhNode *metrics, usize max_nodes,
 					   i32 parent_id)
 {
-	i32 node_counter = 0;
+	usize node_counter = 0;
 
-	if (unlikely(!planstate || !metrics))
-	{
+	if (unlikely(planstate == NULL || metrics == NULL))
 		return 0;
-	}
 
 	walk_topology_recursive(planstate, metrics, max_nodes, parent_id,
 							&node_counter);
+
 	return node_counter;
 }
 
-/*
- * Recursive helper for topology walking
- */
-static i32
-walk_topology_recursive(PlanState *planstate, PwhNode *metrics, i32 max_nodes,
-						i32 parent_id, i32 *node_counter)
+static void
+walk_topology_recursive(PlanState *planstate, PwhNode *metrics, usize max_nodes,
+						usize parent_id, usize *node_counter)
 {
-	if (!planstate || *node_counter >= max_nodes)
-	{
-		return -1;
-	}
+	if (planstate == NULL || *node_counter >= max_nodes)
+		return;
 
-	i32 current_id = *node_counter;
+	i32 id = *node_counter;
 	(*node_counter)++;
 
-	NodeTag plan_tag = nodeTag(planstate->plan);
-	metrics[current_id].node_id = current_id;
-	metrics[current_id].parent_node_id = parent_id;
-	metrics[current_id].tag = plan_tag;
-	snprintf(metrics[current_id].node_type_name, PWH_NODE_TYPE_NAME_LEN, "%s",
-			 pwh_node_type_to_string(plan_tag));
+	metrics[id].node_id = id;
+	metrics[id].parent_node_id = parent_id;
+	metrics[id].tag = nodeTag(planstate->plan);
 
-	metrics[current_id].execution.tuples_returned = 0;
-	metrics[current_id].execution.startup_time_us = 0;
-	metrics[current_id].execution.total_time_us = 0;
-	metrics[current_id].execution.loops_executed = 0;
-	metrics[current_id].buffer_usage.shared_hit = 0;
-	metrics[current_id].buffer_usage.shared_read = 0;
-	metrics[current_id].buffer_usage.local_hit = 0;
-	metrics[current_id].buffer_usage.local_read = 0;
-	metrics[current_id].buffer_usage.temp_read = 0;
-	metrics[current_id].buffer_usage.temp_written = 0;
+	metrics[id].execution.tuples_returned = 0;
+	metrics[id].execution.startup_time_us = 0;
+	metrics[id].execution.total_time_us = 0;
+	metrics[id].execution.loops_executed = 0;
+	metrics[id].buffer_usage.shared_hit = 0;
+	metrics[id].buffer_usage.shared_read = 0;
+	metrics[id].buffer_usage.local_hit = 0;
+	metrics[id].buffer_usage.local_read = 0;
+	metrics[id].buffer_usage.temp_read = 0;
+	metrics[id].buffer_usage.temp_written = 0;
+
+	metrics[id].magic = PWH_NODE_MAGIC;
 
 	/* Recurse to child nodes. */
 	if (planstate->lefttree)
 	{
-		walk_topology_recursive(planstate->lefttree, metrics, max_nodes,
-								current_id, node_counter);
+		walk_topology_recursive(planstate->lefttree, metrics, max_nodes, id,
+								node_counter);
 	}
 	if (planstate->righttree)
 	{
-		walk_topology_recursive(planstate->righttree, metrics, max_nodes,
-								current_id, node_counter);
+		walk_topology_recursive(planstate->righttree, metrics, max_nodes, id,
+								node_counter);
 	}
 
 	if (planstate->subPlan)
@@ -175,7 +161,7 @@ walk_topology_recursive(PlanState *planstate, PwhNode *metrics, i32 max_nodes,
 		foreach (lc, planstate->subPlan)
 		{
 			PlanState *subplan = (PlanState *) lfirst(lc);
-			walk_topology_recursive(subplan, metrics, max_nodes, current_id,
+			walk_topology_recursive(subplan, metrics, max_nodes, id,
 									node_counter);
 		}
 	}
@@ -188,7 +174,7 @@ walk_topology_recursive(PlanState *planstate, PwhNode *metrics, i32 max_nodes,
 			for (i32 i = 0; i < appendstate->as_nplans; i++)
 			{
 				walk_topology_recursive(appendstate->appendplans[i], metrics,
-										max_nodes, current_id, node_counter);
+										max_nodes, i, node_counter);
 			}
 			break;
 		}
@@ -198,8 +184,7 @@ walk_topology_recursive(PlanState *planstate, PwhNode *metrics, i32 max_nodes,
 			for (i32 i = 0; i < mergeappendstate->ms_nplans; i++)
 			{
 				walk_topology_recursive(mergeappendstate->mergeplans[i],
-										metrics, max_nodes, current_id,
-										node_counter);
+										metrics, max_nodes, i, node_counter);
 			}
 			break;
 		}
@@ -209,7 +194,7 @@ walk_topology_recursive(PlanState *planstate, PwhNode *metrics, i32 max_nodes,
 			for (i32 i = 0; i < bitmapandstate->nplans; i++)
 			{
 				walk_topology_recursive(bitmapandstate->bitmapplans[i], metrics,
-										max_nodes, current_id, node_counter);
+										max_nodes, i, node_counter);
 			}
 			break;
 		}
@@ -219,7 +204,7 @@ walk_topology_recursive(PlanState *planstate, PwhNode *metrics, i32 max_nodes,
 			for (i32 i = 0; i < bitmaporstate->nplans; i++)
 			{
 				walk_topology_recursive(bitmaporstate->bitmapplans[i], metrics,
-										max_nodes, current_id, node_counter);
+										max_nodes, i, node_counter);
 			}
 			break;
 		}
@@ -229,15 +214,13 @@ walk_topology_recursive(PlanState *planstate, PwhNode *metrics, i32 max_nodes,
 			if (subqueryscan->subplan)
 			{
 				walk_topology_recursive(subqueryscan->subplan, metrics,
-										max_nodes, current_id, node_counter);
+										max_nodes, id, node_counter);
 			}
 			break;
 		}
 		default:
 			break;
 	}
-
-	return current_id;
 }
 
 /*
@@ -246,9 +229,9 @@ walk_topology_recursive(PlanState *planstate, PwhNode *metrics, i32 max_nodes,
  */
 void
 pwh_walk_plan_instrumentation(PlanState *planstate, PwhNode *metrics,
-							  i32 max_nodes)
+							  usize max_nodes)
 {
-	i32 node_counter = 0;
+	usize node_counter = 0;
 
 	if (unlikely(!planstate || !metrics))
 	{
@@ -264,14 +247,12 @@ pwh_walk_plan_instrumentation(PlanState *planstate, PwhNode *metrics,
  */
 static void
 walk_instrumentation_recursive(PlanState *planstate, PwhNode *metrics,
-							   i32 max_nodes, i32 *node_counter)
+							   usize max_nodes, usize *node_counter)
 {
-	if (!planstate || *node_counter >= max_nodes)
-	{
+	if (planstate == NULL || *node_counter >= max_nodes)
 		return;
-	}
 
-	i32 current_id = *node_counter;
+	usize current_id = *node_counter;
 	(*node_counter)++;
 
 	Instrumentation *instr = planstate->instrument;
@@ -289,7 +270,6 @@ walk_instrumentation_recursive(PlanState *planstate, PwhNode *metrics,
 		PWH_COPY_BUFUSAGE(metrics, instr, current_id);
 	}
 
-	/* Recurse to child nodes (same order as topology walk). */
 	if (planstate->lefttree)
 	{
 		walk_instrumentation_recursive(planstate->lefttree, metrics, max_nodes,

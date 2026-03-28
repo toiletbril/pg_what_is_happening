@@ -1,3 +1,5 @@
+# Docker image for pg_what_is_happening tests.
+
 FROM docker.io/library/alpine:latest
 
 SHELL ["sh", "-eu", "-c"]
@@ -26,12 +28,10 @@ RUN apk add \
     sudo \
     tmux
 
-RUN adduser -D -u 1000 "postgres"
-RUN echo "postgres ALL=(ALL) NOPASSWD: ALL" >> "/etc/sudoers"
+RUN adduser -D -u 1000 "postgres" && \
+    echo "postgres ALL=(ALL) NOPASSWD: ALL" >> "/etc/sudoers"
 
-RUN mkdir -p "/postgres-bin" && \
-    chmod 777 "/postgres-bin" && \
-    mkdir -p "/data" && \
-    chown postgres:postgres "/data"
+RUN mkdir -p "/postgres-bin" "/data" && \
+    chown postgres:postgres "/data" "/postgres-bin"
 
 WORKDIR "/pg_what_is_happening"

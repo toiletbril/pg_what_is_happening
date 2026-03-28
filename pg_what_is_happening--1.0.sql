@@ -14,7 +14,7 @@ CREATE FUNCTION what_is_happening.v1_status_f(
 	OUT active boolean,
 	OUT node_id int4,
 	OUT parent_id int4,
-	OUT node_type text,
+	OUT node_tag text,
 	OUT ntuples float8,
 	OUT startup_us float8,
 	OUT total_us float8,

@@ -25,10 +25,6 @@
 
 #include "common.h"
 
-/*
- * Convenience functions using default implementation
- */
-
 HttpServer *
 pwh_http_server_create(const char *listen_addr)
 {
@@ -39,8 +35,8 @@ pwh_http_server_create(const char *listen_addr)
 void
 pwh_http_server_destroy(HttpServer *server)
 {
-	if (unlikely(!server || !server->vtable))
-		return;
+	Assert(server != NULL);
+	Assert(server->vtable != NULL);
 	server->vtable->destroyFn(server);
 }
 
@@ -48,53 +44,48 @@ void
 pwh_http_server_set_handler(HttpServer *server, HttpRequestHandler handler,
 							void *user_data)
 {
-	if (unlikely(!server || !server->vtable))
-		return;
+	Assert(server != NULL);
+	Assert(server->vtable != NULL);
 	server->vtable->setHandlerFn(server, handler, user_data);
 }
 
 i32
 pwh_http_server_run(HttpServer *server)
 {
-	if (unlikely(!server || !server->vtable))
-		return -1;
+	Assert(server != NULL);
+	Assert(server->vtable != NULL);
 	return server->vtable->runFn(server);
 }
 
 void
 pwh_http_server_stop(HttpServer *server)
 {
-	if (unlikely(!server || !server->vtable))
-		return;
+	Assert(server != NULL);
+	Assert(server->vtable != NULL);
 	server->vtable->stopFn(server);
 }
 
-/*
- * Helper to send simple text response
- */
 void
 pwh_http_response_text(HttpResponse *resp, i32 status_code, const char *body)
 {
-	const char *status_text;
+	resp->status_code = status_code;
 
 	switch (status_code)
 	{
 		case 200:
-			status_text = "OK";
+			resp->status_text = "OK";
 			break;
 		case 404:
-			status_text = "Not Found";
+			resp->status_text = "Not Found";
 			break;
 		case 500:
-			status_text = "Internal Server Error";
+			resp->status_text = "Internal Server Error";
 			break;
 		default:
-			status_text = "Unknown";
+			resp->status_text = "Unknown";
 			break;
 	}
 
-	resp->status_code = status_code;
-	resp->status_text = status_text;
 	resp->body = body;
 	resp->body_len = body ? strlen(body) : 0;
 	resp->headers = NULL;

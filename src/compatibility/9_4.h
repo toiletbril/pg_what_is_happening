@@ -1,6 +1,6 @@
 
-#ifndef PWH_COMPAT_95_H
-#define PWH_COMPAT_95_H
+#ifndef PWH_COMPAT_94_H
+#define PWH_COMPAT_94_H
 
 #include "nodes/execnodes.h"
 
@@ -115,7 +115,7 @@ pwh_walk_planstate_children_inline(PlanState	   *planstate,
 
 
 static forceinline const char *
-pwh_node_type_to_string_inline(NodeTag tag)
+pwh_node_tag_to_string_inline(NodeTag tag)
 {
 	switch (tag)
 	{
@@ -157,8 +157,6 @@ pwh_node_type_to_string_inline(NodeTag tag)
 			return "WorkTableScan";
 		case T_ForeignScan:
 			return "ForeignScan";
-		case T_CustomScan:
-			return "CustomScan";
 		case T_NestLoop:
 			return "NestLoop";
 		case T_MergeJoin:
@@ -190,4 +188,4 @@ pwh_node_type_to_string_inline(NodeTag tag)
 	}
 }
 
-#endif /* PWH_COMPAT_95_H. */
+#endif /* PWH_COMPAT_94_H. */

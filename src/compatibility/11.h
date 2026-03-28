@@ -16,7 +16,7 @@ typedef struct
 #define PWH_LWLOCK_INITIALIZE(lock, tranche_id) \
 	LWLockInitialize(&(lock), tranche_id)
 #define PWH_REQUEST_LWLOCKS(name, count) RequestNamedLWLockTranche(name, count)
-#define PWH_LWLOCK_TRANCHE_ID_DECL static i32 pwh_lwlock_tranche_id = 0
+#define PWH_LWLOCK_TRANCHE_ID_DECL static i32 PWH_LWLOCK_TRANCHE_ID = 0
 #define PWH_LWLOCK_SETUP_TRANCHE(var, name)   \
 	do                                        \
 	{                                         \
@@ -120,7 +120,7 @@ pwh_walk_planstate_children_inline(PlanState	   *planstate,
 
 
 static forceinline const char *
-pwh_node_type_to_string_inline(NodeTag tag)
+pwh_node_tag_to_string_inline(NodeTag tag)
 {
 	switch (tag)
 	{
