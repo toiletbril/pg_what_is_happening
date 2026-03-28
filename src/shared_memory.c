@@ -72,10 +72,10 @@ pwh_shared_memory_startup(void)
 			 "PWH: Initializing %zu bytes shared memory for %d backend entries",
 			 pwh_shared_memory_size(), MaxBackends);
 
-		for (usize i = 0; i < (usize) MaxBackends; i++)
+		for (u64 i = 0; i < (u64) MaxBackends; i++)
 		{
 			PwhSharedMemoryBackendEntry *shmem_be_entry =
-				PWH_GET_BACKEND_ENTRY(i);
+				PWH_GET_BACKEND_ENTRY_UNSAFE(i);
 			MemSet(shmem_be_entry, 0, sizeof(PwhSharedMemoryBackendEntry));
 			shmem_be_entry->backend_pid = 0;
 			shmem_be_entry->lock_offset = i;
@@ -92,7 +92,7 @@ pwh_get_my_backend_entry(void)
 	if (unlikely(PWH_SHMEM == NULL))
 		return NULL;
 
-	for (usize i = 0; i < (usize) MaxBackends; i++)
+	for (u64 i = 0; i < (u64) MaxBackends; i++)
 	{
 		PwhSharedMemoryBackendEntry *be = pwh_get_backend_entry(i);
 
@@ -103,7 +103,7 @@ pwh_get_my_backend_entry(void)
 	}
 
 	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->lock, LW_EXCLUSIVE);
-	for (usize i = 0; i < (usize) MaxBackends; i++)
+	for (u64 i = 0; i < (u64) MaxBackends; i++)
 	{
 		PwhSharedMemoryBackendEntry *be = pwh_get_backend_entry(i);
 
@@ -128,20 +128,28 @@ pwh_get_my_backend_entry(void)
 /*
  * Get total number of backend entries.
  */
-usize
+u64
 pwh_get_backend_entry_count(void)
 {
-	return (usize) MaxBackends;
+	return (u64) MaxBackends;
 }
 
 /*
  * Get backend entry by index.
  */
 PwhSharedMemoryBackendEntry *
-pwh_get_backend_entry(usize index)
+pwh_get_backend_entry(u64 index)
 {
-	if (unlikely(PWH_SHMEM == NULL || index < 0 ||
-				 index >= (usize) MaxBackends))
+	if (unlikely(PWH_SHMEM == NULL))
+	{
+		elog(
+			LOG,
+			"Shared memory wasn't initialized when searching for backend entry");
 		return NULL;
-	return PWH_GET_BACKEND_ENTRY(index);
+	}
+
+	if (index >= (u64) MaxBackends)
+		return NULL;
+
+	return PWH_GET_BACKEND_ENTRY_UNSAFE(index);
 }

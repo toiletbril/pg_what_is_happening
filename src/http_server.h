@@ -28,18 +28,17 @@ typedef struct
 	char *version;
 	char *headers;
 	char *body;
-	usize body_len;
+	u64	  body_len;
 } HttpRequest;
 
 /* HTTP response structure. */
 typedef struct
 {
-	i32			status_code;
+	u32			status_code;
 	const char *status_text;
 	char	   *headers;
-	const char *body;
-	usize		body_len;
-	bool		free_body;
+	char	   *body;
+	u64			body_len;
 } HttpResponse;
 
 typedef struct HttpServer HttpServer;
@@ -76,7 +75,9 @@ extern void		   pwh_http_server_set_handler(HttpServer		 *server,
 extern i32		   pwh_http_server_run(HttpServer *server);
 extern void		   pwh_http_server_stop(HttpServer *server);
 
-extern void pwh_http_response_text(HttpResponse *resp, i32 status_code,
-								   const char *body);
+extern void pwh_http_response_text(HttpResponse *resp, u32 status_code,
+								   char *body);
+
+extern void pwh_http_response_free_contents(HttpResponse *resp);
 
 #endif /* PWH_HTTP_SERVER_H. */

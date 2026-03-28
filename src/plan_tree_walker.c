@@ -33,16 +33,16 @@
 typedef struct
 {
 	PwhNode *metrics;
-	usize	 max_nodes;
-	usize	*node_counter;
+	u64		 max_nodes;
+	u64		*node_counter;
 	i32		 parent_id;
 } TopologyContext;
 
 typedef struct
 {
 	PwhNode *metrics;
-	usize	 max_nodes;
-	usize	*node_counter;
+	u64		 max_nodes;
+	u64		*node_counter;
 } InstrumentationContext;
 
 bool pwh_walk_planstate_recursive(PlanState		  *planstate,
@@ -115,11 +115,11 @@ pwh_walk_planstate_recursive(PlanState *planstate, PwhNodeVisitorFn visitor,
 /*
  * Returns total number of nodes found.
  */
-usize
-pwh_walk_plan_topology(PlanState *planstate, PwhNode *metrics, usize max_nodes,
+u64
+pwh_walk_plan_topology(PlanState *planstate, PwhNode *metrics, u64 max_nodes,
 					   i32 parent_id)
 {
-	usize node_counter = 0;
+	u64 node_counter = 0;
 
 	if (unlikely(planstate == NULL || metrics == NULL))
 		return 0;
@@ -211,9 +211,9 @@ walk_topology_with_parent(PlanState *planstate, i32 parent_id,
  */
 void
 pwh_walk_plan_instrumentation(PlanState *planstate, PwhNode *metrics,
-							  usize max_nodes)
+							  u64 max_nodes)
 {
-	usize node_counter = 0;
+	u64 node_counter = 0;
 
 	if (unlikely(!planstate || !metrics))
 	{
@@ -237,7 +237,7 @@ instrumentation_visitor(PlanState *planstate, void *context)
 	if (*ctx->node_counter >= ctx->max_nodes)
 		return false;
 
-	usize			 current_id = (*ctx->node_counter)++;
+	u64				 current_id = (*ctx->node_counter)++;
 	Instrumentation *instr = planstate->instrument;
 
 	if (likely(instr))

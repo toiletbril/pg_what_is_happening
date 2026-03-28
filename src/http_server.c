@@ -66,7 +66,7 @@ pwh_http_server_stop(HttpServer *server)
 }
 
 void
-pwh_http_response_text(HttpResponse *resp, i32 status_code, const char *body)
+pwh_http_response_text(HttpResponse *resp, u32 status_code, char *body)
 {
 	resp->status_code = status_code;
 
@@ -86,7 +86,13 @@ pwh_http_response_text(HttpResponse *resp, i32 status_code, const char *body)
 			break;
 	}
 
-	resp->body = body;
+	resp->body = pstrdup(body);
 	resp->body_len = body ? strlen(body) : 0;
 	resp->headers = NULL;
+}
+
+void
+pwh_http_response_free_contents(HttpResponse *resp)
+{
+	pfree(resp->body);
 }

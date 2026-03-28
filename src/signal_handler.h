@@ -36,11 +36,10 @@ extern void pwh_sigusr2_handler(SIGNAL_ARGS);
 /* Install signal handler. */
 extern void pwh_install_signal_handler(void);
 
-/* Get debug counters. */
-extern i64 pwh_get_signal_handler_call_count(void);
-extern i64 pwh_get_signal_handler_success_count(void);
-extern i64 pwh_get_signal_handler_no_querydesc(void);
-extern i64 pwh_get_signal_handler_shmem_null(void);
-extern i64 pwh_get_signal_handler_no_slot(void);
+extern u64 pwh_get_signal_handler_call_count(void);
+extern u64 pwh_get_signal_handler_success_count(void);
+extern u64 pwh_get_signal_handler_no_querydesc(void);
+extern u64 pwh_get_signal_handler_shmem_null(void);
+extern u64 pwh_get_signal_handler_no_slot(void);
 
 #endif /* PWH_SIGNAL_HANDLER_H. */

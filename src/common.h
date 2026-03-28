@@ -32,8 +32,6 @@ typedef int64 i64;
 typedef u8 uchar;
 typedef i8 ichar;
 
-typedef Size usize;
-
 #if defined __GNUC__ || defined __clang__ || defined __COSMOCC__
 #define PWH__HAS_GCC_EXTENSIONS 1
 #define pwh__used __attribute__((used))
@@ -91,10 +89,10 @@ typedef Size usize;
 /* Helper functions. */
 
 forceinline u64
-pwh_hash_djb2(u64 seed, const u8 *data, usize data_size)
+pwh_hash_djb2(u64 seed, const u8 *data, u64 data_size)
 {
 	u64 hash = seed;
-	for (usize i = 0; i < data_size; i++)
+	for (u64 i = 0; i < data_size; i++)
 	{
 		hash = ((hash << 5) + hash) + data[i];
 	}

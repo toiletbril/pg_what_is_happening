@@ -60,9 +60,60 @@ void _PG_fini(void);
 static void pwh_executor_start_hook(QueryDesc *queryDesc, i32 eflags);
 static void pwh_executor_end_hook(QueryDesc *queryDesc);
 
-/*
- * Module load callback
- */
+#ifdef PWH_WITH_BGWORKER
+static bool pwh_check_listen_address(char **newval, void **extra,
+									 GucSource source);
+
+static bool
+pwh_check_listen_address(char **newval, void **extra, GucSource source)
+{
+	char *value = *newval;
+
+	if (value == NULL || *value == '\0')
+	{
+		GUC_check_errdetail("Listen address cannot be empty");
+		return false;
+	}
+
+	char *colon = strchr(value, ':');
+	if (colon == NULL)
+	{
+		GUC_check_errdetail("Listen address must be in format host:port");
+		return false;
+	}
+
+	u64 host_len = colon - value;
+	if (host_len == 0)
+	{
+		GUC_check_errdetail("Host part cannot be empty");
+		return false;
+	}
+
+	if (host_len > 255)
+	{
+		GUC_check_errdetail("Host part too long (max 255 characters)");
+		return false;
+	}
+
+	char *endptr;
+	long  port = strtol(colon + 1, &endptr, 10);
+
+	if (*endptr != '\0' || endptr == colon + 1)
+	{
+		GUC_check_errdetail("Port must be a numeric value");
+		return false;
+	}
+
+	if (port < 1 || port > 65535)
+	{
+		GUC_check_errdetail("Port must be between 1 and 65535");
+		return false;
+	}
+
+	return true;
+}
+#endif
+
 void
 _PG_init(void)
 {
@@ -80,8 +131,8 @@ _PG_init(void)
 	DefineCustomStringVariable(
 		"pg_what_is_happening.listen_address",
 		"Listen address for metrics endpoint (host:port)", NULL,
-		&PWH_LISTEN_ADDRESS, "127.0.0.1:9187", PGC_POSTMASTER, 0, NULL, NULL,
-		NULL);
+		&PWH_LISTEN_ADDRESS, "127.0.0.1:9187", PGC_POSTMASTER, 0,
+		pwh_check_listen_address, NULL, NULL);
 #endif
 
 	DefineCustomIntVariable("pg_what_is_happening.max_nodes_per_query",
@@ -89,10 +140,10 @@ _PG_init(void)
 							&PWH_MAX_NODES_PER_QUERY, PWH_MAX_NODES_DEFAULT, 16,
 							1024, PGC_POSTMASTER, 0, NULL, NULL, NULL);
 
-	DefineCustomIntVariable(
-		"pg_what_is_happening.signal_timeout_ms",
-		"Timeout waiting for signal handler response (milliseconds)", NULL,
-		&PWH_SIGNAL_TIMEOUT_MS, 10, 1, 1000, PGC_SIGHUP, 0, NULL, NULL, NULL);
+	DefineCustomIntVariable("pg_what_is_happening.signal_timeout_ms",
+							"Timeout waiting for signal handler response", NULL,
+							&PWH_SIGNAL_TIMEOUT_MS, 10, 1, 1000, PGC_SIGHUP, 0,
+							NULL, NULL, NULL);
 
 	/* Request shared memory. */
 	RequestAddinShmemSpace(pwh_shared_memory_size());
@@ -175,17 +226,15 @@ pwh_executor_start_hook(QueryDesc *queryDesc, i32 eflags)
 		return;
 	}
 
-	/* Record plan topology. */
-	i32 num_nodes =
+	u64 num_nodes =
 		pwh_walk_plan_topology(queryDesc->planstate, shmem_be_entry->plan_nodes,
-							   PWH_MAX_NODES_PER_QUERY, -1);
+							   (u64) PWH_MAX_NODES_PER_QUERY, -1);
 
-	elog(DEBUG1, "PWH: Tracking query with %d nodes for PID %d", num_nodes,
+	elog(DEBUG1, "PWH: Tracking query with %zu nodes for PID %d", num_nodes,
 		 MyProcPid);
 
-	/* Populate slot metadata. */
 	shmem_be_entry->is_query_active = true;
-	shmem_be_entry->num_nodes = num_nodes;
+	shmem_be_entry->num_nodes = (u32) num_nodes;
 	shmem_be_entry->query_start_time = GetCurrentTimestamp();
 
 	shmem_be_entry->query_id = PWH_GET_QUERY_ID(queryDesc->plannedstmt);
@@ -307,11 +356,11 @@ what_is_happening(PG_FUNCTION_ARGS)
 			BlessTupleDesc(pwh_create_whats_happening_tupdesc());
 
 		/* Send SIGUSR2 to all active backends to refresh metrics. */
-		usize slot_count = pwh_get_backend_entry_count();
-		u64	 *generations = (u64 *) palloc(sizeof(u64) * slot_count);
+		u64	 slot_count = pwh_get_backend_entry_count();
+		u64 *generations = (u64 *) palloc(sizeof(u64) * slot_count);
 
 		u32 signaled = 0;
-		for (usize i = 0; i < slot_count; i++)
+		for (u64 i = 0; i < slot_count; i++)
 		{
 			PwhSharedMemoryBackendEntry *shmem_be_entry =
 				pwh_get_backend_entry(i);
