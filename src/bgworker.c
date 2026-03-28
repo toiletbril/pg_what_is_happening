@@ -18,7 +18,7 @@
 
 #include "postgres.h"
 
-#include "openmetrics.h"
+#include "bgworker.h"
 
 #include <signal.h>
 #include <stdio.h>
@@ -59,7 +59,7 @@ pwh_register_openmetrics_worker(void)
 	w.bgw_start_time = BgWorkerStart_PostmasterStart;
 	w.bgw_restart_time = BGW_NEVER_RESTART;
 	snprintf(w.bgw_library_name, BGW_MAXLEN, "pg_what_is_happening");
-	snprintf(w.bgw_function_name, BGW_MAXLEN, "pwh_openmetrics_main");
+	snprintf(w.bgw_function_name, BGW_MAXLEN, "pwh_bgworker_main");
 	w.bgw_main_arg = (Datum) 0;
 	w.bgw_notify_pid = 0;
 
@@ -67,7 +67,7 @@ pwh_register_openmetrics_worker(void)
 }
 
 void
-pwh_openmetrics_main(Datum main_arg)
+pwh_bgworker_main(Datum main_arg)
 {
 	pqsignal(SIGTERM, pwh_bgworker_sigterm);
 	BackgroundWorkerUnblockSignals();
@@ -179,7 +179,8 @@ pwh_format_openmetrics(void)
 		return NULL;
 	}
 
-	char *buffer = (char *) palloc(METRIC_BUFFER_SIZE);	 // XXX
+	usize buffer_size = METRIC_BUFFER_SIZE;
+	char *buffer = (char *) palloc(buffer_size);
 
 	usize offset = 0;
 

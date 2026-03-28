@@ -24,6 +24,6 @@
 #include "common.h"
 
 extern void pwh_register_openmetrics_worker(void);
-extern void pwh_openmetrics_main(Datum main_arg) pg_attribute_noreturn();
+extern void pwh_bgworker_main(Datum main_arg);
 
 #endif /* PWH_OPENMETRICS_H. */

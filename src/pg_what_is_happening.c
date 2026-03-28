@@ -35,7 +35,7 @@
 #include "utils/guc.h"
 #include "utils/timestamp.h"
 #ifdef PWH_WITH_BGWORKER
-#include "openmetrics.h"
+#include "bgworker.h"
 #endif
 
 PG_MODULE_MAGIC;
@@ -45,6 +45,7 @@ static bool PWH_ENABLED = true;
 #ifdef PWH_WITH_BGWORKER
 static char *PWH_LISTEN_ADDRESS = NULL;
 #endif
+
 static i32 PWH_MAX_NODES_PER_QUERY = PWH_MAX_NODES_DEFAULT;
 static i32 PWH_SIGNAL_TIMEOUT_MS = 10;
 
@@ -53,7 +54,6 @@ static ExecutorStart_hook_type PREV_EXECUTOR_START_HOOK = NULL;
 static ExecutorEnd_hook_type   PREV_EXECUTOR_END_HOOK = NULL;
 extern shmem_startup_hook_type PREV_SHMEM_STARTUP_HOOK;
 
-/* Function prototypes. */
 void _PG_init(void);
 void _PG_fini(void);
 
@@ -310,8 +310,8 @@ what_is_happening(PG_FUNCTION_ARGS)
 		usize slot_count = pwh_get_backend_entry_count();
 		u64	 *generations = (u64 *) palloc(sizeof(u64) * slot_count);
 
-		i32 signaled = 0;
-		for (i32 i = 0; i < slot_count; i++)
+		u32 signaled = 0;
+		for (usize i = 0; i < slot_count; i++)
 		{
 			PwhSharedMemoryBackendEntry *shmem_be_entry =
 				pwh_get_backend_entry(i);
@@ -337,7 +337,7 @@ what_is_happening(PG_FUNCTION_ARGS)
 		pfree(generations);
 
 		/* Initialize state: we iterate through all slots and nodes. */
-		i32 *state = (i32 *) palloc(2 * sizeof(i32));
+		u32 *state = (u32 *) palloc(2 * sizeof(i32));
 		state[0] = 0; /* slot index. */
 		state[1] = 0; /* node index. */
 		funcctx->user_fctx = state;
@@ -346,12 +346,13 @@ what_is_happening(PG_FUNCTION_ARGS)
 	}
 
 	FuncCallContext *funcctx = SRF_PERCALL_SETUP();
-	i32				*state = (i32 *) funcctx->user_fctx;
-	i32				 slot_idx = state[0];
-	i32				 node_idx = state[1];
+
+	u32 *state = (u32 *) funcctx->user_fctx;
+	u32	 slot_idx = state[0];
+	u32	 node_idx = state[1];
 
 	/* Find next valid backend entry+node combination. */
-	while (slot_idx < pwh_get_backend_entry_count())
+	while (slot_idx < (u32) pwh_get_backend_entry_count())
 	{
 		PwhSharedMemoryBackendEntry *shmem_be_entry =
 			pwh_get_backend_entry(slot_idx);

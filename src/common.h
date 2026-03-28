@@ -34,8 +34,6 @@ typedef i8 ichar;
 
 typedef Size usize;
 
-/* Compiler attributes. */
-
 #if defined __GNUC__ || defined __clang__ || defined __COSMOCC__
 #define PWH__HAS_GCC_EXTENSIONS 1
 #define pwh__used __attribute__((used))

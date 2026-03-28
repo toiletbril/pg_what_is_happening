@@ -36,8 +36,14 @@
 typedef struct PlanState PlanState;
 typedef bool (*PwhNodeVisitorFn)(PlanState *planstate, void *context);
 
+extern bool pwh_walk_planstate_recursive(PlanState		 *planstate,
+										 PwhNodeVisitorFn visitor,
+										 void			 *context);
+
 /* Include version-specific compatibility definitions. */
-#if PG_VERSION_NUM >= 150000
+#if PG_VERSION_NUM >= 190000
+#include "compatibility/19.h"
+#elif PG_VERSION_NUM >= 150000
 #include "compatibility/15-18.h"
 #elif PG_VERSION_NUM >= 140000
 #include "compatibility/14.h"
@@ -62,9 +68,10 @@ extern u64 pwh_compute_query_id(const char *query_text);
 
 extern const char *pwh_node_tag_to_string(NodeTag tag);
 
-/* Version-specific planstate walker for non-standard children. */
 extern bool pwh_walk_planstate_children(PlanState		*planstate,
 										PwhNodeVisitorFn visitor,
 										void			*context);
+
+extern pqsigfunc pwh_install_pqsignal(int signo, pqsigfunc func);
 
 #endif /* PWH_COMPATIBILITY_H. */
