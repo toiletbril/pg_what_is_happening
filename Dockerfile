@@ -26,6 +26,7 @@ RUN apk add \
     gdb \
     curl \
     sudo \
+    icu-dev \
     tmux
 
 RUN adduser -D -u 1000 "postgres" && \

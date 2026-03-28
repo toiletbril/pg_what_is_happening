@@ -1,4 +1,6 @@
 MODE ?= dbg
+
+HTTP_BACKEND ?= mongoose
 WITH_BGWORKER ?= yes
 
 ifndef VERBOSE

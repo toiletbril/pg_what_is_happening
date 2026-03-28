@@ -7,13 +7,11 @@ SOURCES = \
 
 ifeq ($(WITH_BGWORKER), yes)
 SOURCES += \
-	src/openmetrics.c \
+	src/bgworker.c \
 	src/http_server.c \
-	src/http_server_backend/mongoose.c \
 	vendor/mongoose.c
 endif
 
-# Translate sources to src/o/$MODE/<...>.o
 OBJS := $(SOURCES:%.c=src/o/$(MODE)/%.o)
 
 ENVCFLAGS := $(CFLAGS)
@@ -48,13 +46,20 @@ override CFLAGS := \
 	$(ENVCFLAGS)
 
 ifeq ($(WITH_BGWORKER), yes)
-override CFLAGS += -DPWH_WITH_BGWORKER -DMG_ENABLE_LOG=0 -DMG_ENABLE_PACKED_FS=0 -DMG_ENABLE_LINES=0
+CFLAGS += -DPWH_WITH_BGWORKER
+endif
+
+ifeq ($(HTTP_BACKEND), mongoose)
+CFLAGS += DMG_ENABLE_LOG=0 -DMG_ENABLE_PACKED_FS=0 -DMG_ENABLE_LINES=0
+SOURCES += src/http_server_backend/mongoose.c
+else ifeq ($(HTTP_BACKEND), dumb)
+SOURCES += src/http_server_backend/dumb.c
 endif
 
 ifeq ($(MODE), rel)
-override CFLAGS += -O2 -DNDEBUG
+CFLAGS += -O2 -DNDEBUG
 else ifeq ($(MODE), dbg)
-override CFLAGS += \
+CFLAGS += \
 	-fno-omit-frame-pointer \
 	-g3 \
 	-O0

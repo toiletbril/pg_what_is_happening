@@ -45,3 +45,14 @@ pwh_compute_query_id(const char *query_text)
 	}
 	return pwh_hash_djb2(5381, (const u8 *) query_text, strlen(query_text));
 }
+
+pqsigfunc
+pwh_install_pqsignal(int signo, pqsigfunc func)
+{
+#if PG_VERSION_NUM >= 190000
+	pqsignal(signo, func);
+	return NULL;
+#else
+	return pqsignal(signo, func);
+#endif
+}

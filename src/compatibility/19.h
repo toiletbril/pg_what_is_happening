@@ -1,10 +1,14 @@
 
-#ifndef PWH_COMPAT_15_18_H
-#define PWH_COMPAT_15_18_H
+#ifndef PWH_COMPAT_19_H
+#define PWH_COMPAT_19_H
 
+#include "access/htup_details.h"
+#include "executor/instrument.h"
 #include "nodes/execnodes.h"
 
 #define PWH_GET_QUERY_ID(plannedstmt) ((plannedstmt)->queryId)
+
+typedef TupleDesc TupDesc;
 
 typedef struct
 {
@@ -17,11 +21,10 @@ typedef struct
 	LWLockInitialize(&(lock), tranche_id)
 #define PWH_REQUEST_LWLOCKS(name, count) RequestNamedLWLockTranche(name, count)
 #define PWH_LWLOCK_TRANCHE_ID_DECL static i32 PWH_LWLOCK_TRANCHE_ID = 0
-#define PWH_LWLOCK_SETUP_TRANCHE(var, name)   \
-	do                                        \
-	{                                         \
-		(var) = LWLockNewTrancheId();         \
-		LWLockRegisterTranche((var), (name)); \
+#define PWH_LWLOCK_SETUP_TRANCHE(var, name) \
+	do                                      \
+	{                                       \
+		(var) = LWLockNewTrancheId(name);   \
 	} while (0)
 
 #define PWH_GET_GUC(name) GetConfigOptionByName(name, NULL, false)
@@ -213,4 +216,4 @@ pwh_node_tag_to_string_inline(NodeTag tag)
 	}
 }
 
-#endif /* PWH_COMPAT_15_18_H. */
+#endif /* PWH_COMPAT_19_H. */

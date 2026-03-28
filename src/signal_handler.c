@@ -122,11 +122,19 @@ chain:
 void
 pwh_install_signal_handler(void)
 {
-	PREV_SIGUSR2_HANDLER = pqsignal(SIGUSR2, pwh_sigusr2_handler);
-	elog(
-		LOG,
-		"pg_what_is_happening: SIGUSR2 handler installed (previous handler: %p)",
-		PREV_SIGUSR2_HANDLER);
+	PREV_SIGUSR2_HANDLER = pwh_install_pqsignal(SIGUSR2, pwh_sigusr2_handler);
+	if (PREV_SIGUSR2_HANDLER != NULL)
+	{
+		elog(
+			LOG,
+			"pg_what_is_happening: SIGUSR2 handler installed (previous handler: "
+			"%p)",
+			PREV_SIGUSR2_HANDLER);
+	}
+	else
+	{
+		elog(LOG, "pg_what_is_happening: SIGUSR2 handler installed");
+	}
 }
 
 i64

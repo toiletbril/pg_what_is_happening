@@ -30,15 +30,29 @@
 #include "portability/instr_time.h"
 #include "shared_memory.h"
 
-static bool pwh_walk_planstate_recursive(PlanState		 *planstate,
-										 PwhNodeVisitorFn visitor,
-										 void			 *context);
-static i32	walk_topology_recursive(PlanState *planstate, PwhNode *metrics,
-									usize max_nodes, i32 parent_id,
-									usize *node_counter);
-static void walk_instrumentation_recursive(PlanState *planstate,
-										   PwhNode *metrics, usize max_nodes,
-										   usize *node_counter);
+typedef struct
+{
+	PwhNode *metrics;
+	usize	 max_nodes;
+	usize	*node_counter;
+	i32		 parent_id;
+} TopologyContext;
+
+typedef struct
+{
+	PwhNode *metrics;
+	usize	 max_nodes;
+	usize	*node_counter;
+} InstrumentationContext;
+
+bool pwh_walk_planstate_recursive(PlanState		  *planstate,
+								  PwhNodeVisitorFn visitor, void *context);
+
+static bool topology_visitor(PlanState *planstate, void *context);
+static void walk_topology_with_parent(PlanState *planstate, i32 parent_id,
+									  TopologyContext *ctx);
+
+static bool instrumentation_visitor(PlanState *planstate, void *context);
 
 void
 pwh_walk_planstate_tree(PlanState *planstate, PwhNodeVisitorFn visitor,
@@ -50,7 +64,7 @@ pwh_walk_planstate_tree(PlanState *planstate, PwhNodeVisitorFn visitor,
 	pwh_walk_planstate_recursive(planstate, visitor, context);
 }
 
-static bool
+bool
 pwh_walk_planstate_recursive(PlanState *planstate, PwhNodeVisitorFn visitor,
 							 void *context)
 {
@@ -110,50 +124,73 @@ pwh_walk_plan_topology(PlanState *planstate, PwhNode *metrics, usize max_nodes,
 	if (unlikely(planstate == NULL || metrics == NULL))
 		return 0;
 
-	walk_topology_recursive(planstate, metrics, max_nodes, parent_id,
-							&node_counter);
+	TopologyContext ctx = {
+		.metrics = metrics,
+		.max_nodes = max_nodes,
+		.node_counter = &node_counter,
+	};
+
+	walk_topology_with_parent(planstate, parent_id, &ctx);
 
 	return node_counter;
 }
 
-static void
-walk_topology_recursive(PlanState *planstate, PwhNode *metrics, usize max_nodes,
-						usize parent_id, usize *node_counter)
+static bool
+topology_visitor(PlanState *planstate, void *context)
 {
-	if (planstate == NULL || *node_counter >= max_nodes)
+	TopologyContext *ctx = (TopologyContext *) context;
+
+	if (*ctx->node_counter >= ctx->max_nodes)
+		return false;
+
+	i32 id = (*ctx->node_counter)++;
+
+	ctx->metrics[id].node_id = id;
+	ctx->metrics[id].parent_node_id = ctx->parent_id;
+	ctx->metrics[id].tag = nodeTag(planstate->plan);
+
+	ctx->metrics[id].execution.tuples_returned = 0;
+	ctx->metrics[id].execution.startup_time_us = 0;
+	ctx->metrics[id].execution.total_time_us = 0;
+	ctx->metrics[id].execution.loops_executed = 0;
+	ctx->metrics[id].buffer_usage.shared_hit = 0;
+	ctx->metrics[id].buffer_usage.shared_read = 0;
+	ctx->metrics[id].buffer_usage.local_hit = 0;
+	ctx->metrics[id].buffer_usage.local_read = 0;
+	ctx->metrics[id].buffer_usage.temp_read = 0;
+	ctx->metrics[id].buffer_usage.temp_written = 0;
+
+	ctx->metrics[id].magic = PWH_NODE_MAGIC;
+
+	return true;
+}
+
+static bool
+topology_recurse_visitor(PlanState *planstate, void *context)
+{
+	TopologyContext *ctx = (TopologyContext *) context;
+	walk_topology_with_parent(planstate, ctx->parent_id, ctx);
+	return false;
+}
+
+static void
+walk_topology_with_parent(PlanState *planstate, i32 parent_id,
+						  TopologyContext *ctx)
+{
+	if (planstate == NULL || *ctx->node_counter >= ctx->max_nodes)
 		return;
 
-	i32 id = *node_counter;
-	(*node_counter)++;
+	ctx->parent_id = parent_id;
+	if (!topology_visitor(planstate, ctx))
+		return;
 
-	metrics[id].node_id = id;
-	metrics[id].parent_node_id = parent_id;
-	metrics[id].tag = nodeTag(planstate->plan);
+	i32 current_id = (*ctx->node_counter) - 1;
+	ctx->parent_id = current_id;
 
-	metrics[id].execution.tuples_returned = 0;
-	metrics[id].execution.startup_time_us = 0;
-	metrics[id].execution.total_time_us = 0;
-	metrics[id].execution.loops_executed = 0;
-	metrics[id].buffer_usage.shared_hit = 0;
-	metrics[id].buffer_usage.shared_read = 0;
-	metrics[id].buffer_usage.local_hit = 0;
-	metrics[id].buffer_usage.local_read = 0;
-	metrics[id].buffer_usage.temp_read = 0;
-	metrics[id].buffer_usage.temp_written = 0;
-
-	metrics[id].magic = PWH_NODE_MAGIC;
-
-	/* Recurse to child nodes. */
 	if (planstate->lefttree)
-	{
-		walk_topology_recursive(planstate->lefttree, metrics, max_nodes, id,
-								node_counter);
-	}
+		walk_topology_with_parent(planstate->lefttree, current_id, ctx);
 	if (planstate->righttree)
-	{
-		walk_topology_recursive(planstate->righttree, metrics, max_nodes, id,
-								node_counter);
-	}
+		walk_topology_with_parent(planstate->righttree, current_id, ctx);
 
 	if (planstate->subPlan)
 	{
@@ -161,66 +198,11 @@ walk_topology_recursive(PlanState *planstate, PwhNode *metrics, usize max_nodes,
 		foreach (lc, planstate->subPlan)
 		{
 			PlanState *subplan = (PlanState *) lfirst(lc);
-			walk_topology_recursive(subplan, metrics, max_nodes, id,
-									node_counter);
+			walk_topology_with_parent(subplan, current_id, ctx);
 		}
 	}
 
-	switch (nodeTag(planstate))
-	{
-		case T_AppendState:
-		{
-			AppendState *appendstate = (AppendState *) planstate;
-			for (i32 i = 0; i < appendstate->as_nplans; i++)
-			{
-				walk_topology_recursive(appendstate->appendplans[i], metrics,
-										max_nodes, i, node_counter);
-			}
-			break;
-		}
-		case T_MergeAppendState:
-		{
-			MergeAppendState *mergeappendstate = (MergeAppendState *) planstate;
-			for (i32 i = 0; i < mergeappendstate->ms_nplans; i++)
-			{
-				walk_topology_recursive(mergeappendstate->mergeplans[i],
-										metrics, max_nodes, i, node_counter);
-			}
-			break;
-		}
-		case T_BitmapAndState:
-		{
-			BitmapAndState *bitmapandstate = (BitmapAndState *) planstate;
-			for (i32 i = 0; i < bitmapandstate->nplans; i++)
-			{
-				walk_topology_recursive(bitmapandstate->bitmapplans[i], metrics,
-										max_nodes, i, node_counter);
-			}
-			break;
-		}
-		case T_BitmapOrState:
-		{
-			BitmapOrState *bitmaporstate = (BitmapOrState *) planstate;
-			for (i32 i = 0; i < bitmaporstate->nplans; i++)
-			{
-				walk_topology_recursive(bitmaporstate->bitmapplans[i], metrics,
-										max_nodes, i, node_counter);
-			}
-			break;
-		}
-		case T_SubqueryScanState:
-		{
-			SubqueryScanState *subqueryscan = (SubqueryScanState *) planstate;
-			if (subqueryscan->subplan)
-			{
-				walk_topology_recursive(subqueryscan->subplan, metrics,
-										max_nodes, id, node_counter);
-			}
-			break;
-		}
-		default:
-			break;
-	}
+	pwh_walk_planstate_children(planstate, topology_recurse_visitor, ctx);
 }
 
 /*
@@ -238,109 +220,43 @@ pwh_walk_plan_instrumentation(PlanState *planstate, PwhNode *metrics,
 		return;
 	}
 
-	walk_instrumentation_recursive(planstate, metrics, max_nodes,
-								   &node_counter);
+	InstrumentationContext ctx = {
+		.metrics = metrics,
+		.max_nodes = max_nodes,
+		.node_counter = &node_counter,
+	};
+
+	pwh_walk_planstate_recursive(planstate, instrumentation_visitor, &ctx);
 }
 
-/*
- * Recursive helper for instrumentation reading
- */
-static void
-walk_instrumentation_recursive(PlanState *planstate, PwhNode *metrics,
-							   usize max_nodes, usize *node_counter)
+static bool
+instrumentation_visitor(PlanState *planstate, void *context)
 {
-	if (planstate == NULL || *node_counter >= max_nodes)
-		return;
+	InstrumentationContext *ctx = (InstrumentationContext *) context;
 
-	usize current_id = *node_counter;
-	(*node_counter)++;
+	if (*ctx->node_counter >= ctx->max_nodes)
+		return false;
 
+	usize			 current_id = (*ctx->node_counter)++;
 	Instrumentation *instr = planstate->instrument;
+
 	if (likely(instr))
 	{
-		metrics[current_id].execution.tuples_returned =
+		ctx->metrics[current_id].execution.tuples_returned =
 			instr->ntuples + instr->tuplecount;
-		metrics[current_id].execution.loops_executed =
+		ctx->metrics[current_id].execution.loops_executed =
 			instr->nloops + (instr->running ? 1.0 : 0.0);
-		metrics[current_id].execution.startup_time_us =
-			(instr->startup + instr->firsttuple) * 1000000.0;
-		metrics[current_id].execution.total_time_us =
-			(instr->total + INSTR_TIME_GET_DOUBLE(instr->counter)) * 1000000.0;
+		ctx->metrics[current_id].execution.startup_time_us =
+			(INSTR_TIME_GET_DOUBLE(instr->startup) +
+			 INSTR_TIME_GET_DOUBLE(instr->firsttuple)) *
+			1000000.0;
+		ctx->metrics[current_id].execution.total_time_us =
+			(INSTR_TIME_GET_DOUBLE(instr->total) +
+			 INSTR_TIME_GET_DOUBLE(instr->counter)) *
+			1000000.0;
 
-		PWH_COPY_BUFUSAGE(metrics, instr, current_id);
-	}
-
-	if (planstate->lefttree)
-	{
-		walk_instrumentation_recursive(planstate->lefttree, metrics, max_nodes,
-									   node_counter);
-	}
-	if (planstate->righttree)
-	{
-		walk_instrumentation_recursive(planstate->righttree, metrics, max_nodes,
-									   node_counter);
+		PWH_COPY_BUFUSAGE(ctx->metrics, instr, current_id);
 	}
 
-	if (planstate->subPlan)
-	{
-		ListCell *lc;
-		foreach (lc, planstate->subPlan)
-		{
-			PlanState *subplan = (PlanState *) lfirst(lc);
-			walk_instrumentation_recursive(subplan, metrics, max_nodes,
-										   node_counter);
-		}
-	}
-
-	switch (nodeTag(planstate))
-	{
-		case T_AppendState:
-		{
-			AppendState *appendstate = (AppendState *) planstate;
-			for (i32 i = 0; i < appendstate->as_nplans; i++)
-				walk_instrumentation_recursive(appendstate->appendplans[i],
-											   metrics, max_nodes,
-											   node_counter);
-			break;
-		}
-		case T_MergeAppendState:
-		{
-			MergeAppendState *mergeappendstate = (MergeAppendState *) planstate;
-			for (i32 i = 0; i < mergeappendstate->ms_nplans; i++)
-				walk_instrumentation_recursive(mergeappendstate->mergeplans[i],
-											   metrics, max_nodes,
-											   node_counter);
-			break;
-		}
-		case T_BitmapAndState:
-		{
-			BitmapAndState *bitmapandstate = (BitmapAndState *) planstate;
-			for (i32 i = 0; i < bitmapandstate->nplans; i++)
-				walk_instrumentation_recursive(bitmapandstate->bitmapplans[i],
-											   metrics, max_nodes,
-											   node_counter);
-			break;
-		}
-		case T_BitmapOrState:
-		{
-			BitmapOrState *bitmaporstate = (BitmapOrState *) planstate;
-			for (i32 i = 0; i < bitmaporstate->nplans; i++)
-				walk_instrumentation_recursive(bitmaporstate->bitmapplans[i],
-											   metrics, max_nodes,
-											   node_counter);
-			break;
-		}
-		case T_SubqueryScanState:
-		{
-			SubqueryScanState *subqueryscan = (SubqueryScanState *) planstate;
-			if (subqueryscan->subplan)
-			{
-				walk_instrumentation_recursive(subqueryscan->subplan, metrics,
-											   max_nodes, node_counter);
-			}
-			break;
-		}
-		default:
-			break;
-	}
+	return true;
 }

@@ -37,8 +37,8 @@ extern void pwh_walk_planstate_tree(PlanState		*planstate,
 									PwhNodeVisitorFn visitor, void *context);
 
 /* Walk plan tree and populate topology (node_id, parent_id, node_type). */
-extern i32 pwh_walk_plan_topology(PlanState *planstate, PwhNode *metrics,
-								  usize max_nodes, i32 parent_id);
+extern usize pwh_walk_plan_topology(PlanState *planstate, PwhNode *metrics,
+									usize max_nodes, i32 parent_id);
 
 /* Walk plan tree and read Instrumentation data. */
 extern void pwh_walk_plan_instrumentation(PlanState *planstate,

@@ -35,8 +35,8 @@
 typedef struct
 {
 	NodeTag tag;
-	i32		node_id;
-	i32		parent_node_id;
+	u32		node_id;
+	u32		parent_node_id;
 
 	struct
 	{
@@ -61,14 +61,14 @@ typedef struct
 
 typedef struct
 {
-	i32			backend_pid;
+	u32			backend_pid;
 	u64			query_id;
 	u64			poll_generation;
 	char		query_text[PWH_QUERY_TEXT_LEN];
 	TimestampTz query_start_time;
 	bool		is_query_active;
-	i32			num_nodes;
-	i32			lock_offset;
+	u32			num_nodes;
+	u32			lock_offset;
 
 	PwhNode plan_nodes[PWH_MAX_NODES_DEFAULT];
 } PwhSharedMemoryBackendEntry;
