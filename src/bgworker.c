@@ -111,30 +111,11 @@ pwh_metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 		return;
 	}
 
-	u32 signaled = 0;
-
-	for (i32 i = 0; i < (i32) pwh_get_backend_entry_count(); i++)
-	{
-		PwhSharedMemoryBackendEntry *shmem_be_entry = pwh_get_backend_entry(i);
-
-		if (shmem_be_entry && shmem_be_entry->is_query_active &&
-			shmem_be_entry->backend_pid != 0)
-		{
-			elog(DEBUG1, "PWH: Sending SIGUSR2 to PID=%d query_id=%lu gen=%lu",
-				 shmem_be_entry->backend_pid,
-				 (unsigned long) shmem_be_entry->query_id,
-				 (unsigned long) shmem_be_entry->poll_generation);
-
-			kill((i32) shmem_be_entry->backend_pid, SIGUSR2);
-
-			signaled++;
-		}
-	}
+	u32 signaled = pwh_signal_active_backends();
 
 	elog(LOG, "PWH: Sent SIGUSR2 to %u active backends", signaled);
 
-	/* Generation counter will increment after handler runs. */
-	usleep(10000);
+	usleep((useconds_t) (PWH_SIGNAL_TIMEOUT_MS_GUC * 1000));
 
 	char *metrics = pwh_format_openmetrics();
 

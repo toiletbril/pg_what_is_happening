@@ -37,6 +37,7 @@ typedef struct
 	} while (0)
 
 #define PWH_CREATE_TUPLE_DESC(natts) CreateTemplateTupleDesc(natts)
+#define PWH_TUPLE_DESC_FINALIZE(tupdesc) TupleDescFinalize(tupdesc)
 
 #define PWH_BGWORKER_BYPASS_ALLOWCONN 0
 
