@@ -18,6 +18,7 @@ jobs:
       packages: write
 
   run-tests:
+    name: PostgreSQL ${{ env.POSTGRES_VERSION }}
     needs: build-image
     runs-on: ubuntu-latest
     environment:

@@ -200,7 +200,7 @@ product_profitability AS (
     AND o.order_date BETWEEN pr.start_date AND pr.end_date
   GROUP BY p.product_id, p.product_name, p.category
 )
-SELECT COUNT(*)
+SELECT COUNT(*) > 900000 AS has_many_rows
 FROM regional_sales rs
 JOIN warehouse_performance wp ON rs.region = wp.warehouse_region
 JOIN product_profitability pp ON rs.category = pp.category
