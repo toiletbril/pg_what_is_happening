@@ -1,6 +1,6 @@
 # pg_what_is_happening
 
-[![Regression Test Suite](https://github.com/toiletbril/pg_what_is_happening/actions/workflows/pg_regress.yml/badge.svg?branch=master)](https://github.com/toiletbril/pg_what_is_happening/actions/workflows/pg_regress.yml)
+[![Regression Test Suite](https://github.com/toiletbril/pg_what_is_happening/actions/workflows/pg_regress.yml/badge.svg?branch=master)](https://github.com/toiletbril/pg_what_is_happening/actions/workflows/pg-regress.yml)
 
 Live per-plan-node execution OpenMetrics-compatible stats for PostgreSQL and
 friends.
