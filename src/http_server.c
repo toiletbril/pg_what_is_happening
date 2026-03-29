@@ -25,10 +25,24 @@
 
 #include "common.h"
 
+/* Shut up the compiler */
+#ifndef HTTP_BACKEND
+#define HTTP_BACKEND "\0"
+#endif
+
+static const HttpServerVtable *choose_backend(void);
+
 HttpServer *
 pwh_http_server_create(const char *listen_addr)
 {
-	const HttpServerVtable *vtable = pwh_http_server_get_mongoose_impl();
+	const HttpServerVtable *vtable = choose_backend();
+
+	if (vtable == NULL)
+	{
+		elog(WARNING, "No HTTP backend has been compiled in");
+		return NULL;
+	}
+
 	return vtable->createFn(listen_addr);
 }
 
@@ -95,4 +109,21 @@ void
 pwh_http_response_free_contents(HttpResponse *resp)
 {
 	pfree(resp->body);
+}
+
+static const HttpServerVtable *
+choose_backend(void)
+{
+	const char *b = HTTP_BACKEND;
+
+	if (streq(b, "mongoose"))
+	{
+		return pwh_http_server_get_mongoose_impl();
+	}
+	if (streq(b, "dumb"))
+	{
+		return pwh_http_server_get_dumb_impl();
+	}
+
+	return NULL;
 }

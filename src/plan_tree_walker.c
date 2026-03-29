@@ -45,6 +45,13 @@ typedef struct
 	u64		*node_counter;
 } InstrumentationContext;
 
+
+typedef bool (*PwhNodeVisitorFn)(PlanState *planstate, void *context);
+
+extern void pwh_walk_planstate_tree(PlanState		*planstate,
+									PwhNodeVisitorFn visitor, void *context);
+
+
 bool pwh_walk_planstate_recursive(PlanState		  *planstate,
 								  PwhNodeVisitorFn visitor, void *context);
 
@@ -247,11 +254,11 @@ instrumentation_visitor(PlanState *planstate, void *context)
 		ctx->metrics[current_id].execution.loops_executed =
 			instr->nloops + (instr->running ? 1.0 : 0.0);
 		ctx->metrics[current_id].execution.startup_time_us =
-			(INSTR_TIME_GET_DOUBLE(instr->startup) +
-			 INSTR_TIME_GET_DOUBLE(instr->firsttuple)) *
+			(PWH_INSTR_TIME_MAYBE_GET_DOUBLE(instr->startup) +
+			 PWH_INSTR_TIME_MAYBE_GET_DOUBLE(instr->firsttuple)) *
 			1000000.0;
 		ctx->metrics[current_id].execution.total_time_us =
-			(INSTR_TIME_GET_DOUBLE(instr->total) +
+			(PWH_INSTR_TIME_MAYBE_GET_DOUBLE(instr->total) +
 			 INSTR_TIME_GET_DOUBLE(instr->counter)) *
 			1000000.0;
 

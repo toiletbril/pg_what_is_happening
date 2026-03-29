@@ -8,8 +8,6 @@
 
 #define PWH_GET_QUERY_ID(plannedstmt) ((plannedstmt)->queryId)
 
-typedef TupleDesc TupDesc;
-
 typedef struct
 {
 	LWLock lock;

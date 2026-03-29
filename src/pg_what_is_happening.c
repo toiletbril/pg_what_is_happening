@@ -251,8 +251,8 @@ pwh_executor_start_hook(QueryDesc *queryDesc, i32 eflags)
 
 	elog(
 		LOG,
-		"PWH: ExecutorStart PID=%d query_id=%lu num_nodes=%d shmem=%p query='%s'",
-		MyProcPid, (unsigned long) shmem_be_entry->query_id, num_nodes,
+		"PWH: ExecutorStart PID=%lu query_id=%lu num_nodes=%d shmem=%p query='%s'",
+		MyProcPid, shmem_be_entry->query_id, num_nodes,
 		PWH_SHMEM, shmem_be_entry->query_text);
 
 	/* Store QueryDesc for signal handler. */
@@ -304,15 +304,8 @@ pwh_executor_end_hook(QueryDesc *queryDesc)
 		standard_ExecutorEnd(queryDesc);
 }
 
-/*
- * what_is_happening() - SRF function returning live metrics
- *
- * Returns one row per plan node per backend
- */
-PG_FUNCTION_INFO_V1(what_is_happening);
-
-TupDesc
-pwh_create_whats_happening_tupdesc(void)
+static TupleDesc
+make_v1_status_tupdesc(void)
 {
 	TupleDesc tupdesc = PWH_CREATE_TUPLE_DESC(17);
 
@@ -343,8 +336,10 @@ pwh_create_whats_happening_tupdesc(void)
 	return tupdesc;
 }
 
+PG_FUNCTION_INFO_V1(v1_status_f);
+
 Datum
-what_is_happening(PG_FUNCTION_ARGS)
+v1_status_f(PG_FUNCTION_ARGS)
 {
 	if (SRF_IS_FIRSTCALL())
 	{
@@ -353,7 +348,7 @@ what_is_happening(PG_FUNCTION_ARGS)
 			MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
 		funcctx->tuple_desc =
-			BlessTupleDesc(pwh_create_whats_happening_tupdesc());
+			BlessTupleDesc(make_v1_status_tupdesc());
 
 		/* Send SIGUSR2 to all active backends to refresh metrics. */
 		u64	 slot_count = pwh_get_backend_entry_count();

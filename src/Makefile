@@ -15,7 +15,6 @@ endif
 OBJS := $(SOURCES:%.c=src/o/$(MODE)/%.o)
 
 ENVCFLAGS := $(CFLAGS)
-override undefine CFLAGS
 
 OS_INFO := $(shell uname -rvom || echo "<no uname>")
 COMMIT_HASH := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -24,6 +23,7 @@ DEFINES := \
 	-DCOMMIT_HASH="\"$(COMMIT_HASH)\"" \
 	-DOS_INFO="\"$(OS_INFO)\"" \
 	-DBUILD_MODE="\"$(MODE)\"" \
+	-DHTTP_BACKEND="\"$(HTTP_BACKEND)\"" \
 	-DENVCFLAGS="\"$(ENVCFLAGS)\""
 
 WARNINGS := \
@@ -35,7 +35,7 @@ WARNINGS := \
 	-Wno-format \
 	-Wno-unknown-warning-option
 
-override CFLAGS := \
+CFLAGS2 := \
 	-std=c17 \
 	-fno-strict-aliasing \
 	-fwrapv \
@@ -46,20 +46,20 @@ override CFLAGS := \
 	$(ENVCFLAGS)
 
 ifeq ($(WITH_BGWORKER), yes)
-CFLAGS += -DPWH_WITH_BGWORKER
+CFLAGS2 += -DPWH_WITH_BGWORKER
 endif
 
 ifeq ($(HTTP_BACKEND), mongoose)
-CFLAGS += DMG_ENABLE_LOG=0 -DMG_ENABLE_PACKED_FS=0 -DMG_ENABLE_LINES=0
+CFLAGS2 += -DMG_ENABLE_LOG=0 -DMG_ENABLE_PACKED_FS=0 -DMG_ENABLE_LINES=0
 SOURCES += src/http_server_backend/mongoose.c
 else ifeq ($(HTTP_BACKEND), dumb)
 SOURCES += src/http_server_backend/dumb.c
 endif
 
 ifeq ($(MODE), rel)
-CFLAGS += -O2 -DNDEBUG
+CFLAGS2 += -O2 -DNDEBUG
 else ifeq ($(MODE), dbg)
-CFLAGS += \
+CFLAGS2 += \
 	-fno-omit-frame-pointer \
 	-g3 \
 	-O0
@@ -75,4 +75,4 @@ dirs:
 
 src/o/$(MODE)/%.o: %.c | dirs
 	printf "\t%-42s $@\n" $<
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS2) -c $< -o $@

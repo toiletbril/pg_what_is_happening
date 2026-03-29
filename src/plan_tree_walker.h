@@ -26,15 +26,8 @@
 #include "nodes/nodes.h"
 #include "shared_memory.h"
 
-/* Walker callback: processes a single node, returns true to continue descent. */
-typedef bool (*PwhNodeVisitorFn)(PlanState *planstate, void *context);
-
 /* Convert NodeTag to human-readable string. */
 extern const char *pwh_node_tag_to_string(NodeTag tag);
-
-/* Generic walker: visits each node calling visitor, handles standard children. */
-extern void pwh_walk_planstate_tree(PlanState		*planstate,
-									PwhNodeVisitorFn visitor, void *context);
 
 /* Walk plan tree and populate topology (node_id, parent_id, node_type). */
 extern u64 pwh_walk_plan_topology(PlanState *planstate, PwhNode *metrics,

@@ -39,13 +39,7 @@ static void	 pwh_metrics_handler(const HttpRequest *req, HttpResponse *resp,
 								 void *user_data);
 static char *pwh_format_openmetrics(void);
 
-static void
-pwh_bgworker_sigterm(SIGNAL_ARGS)
-{
-	int save_errno = errno;
-	proc_exit(0);
-	errno = save_errno;
-}
+static void handle_sigterm(SIGNAL_ARGS);
 
 void
 pwh_register_openmetrics_worker(void)
@@ -69,7 +63,7 @@ pwh_register_openmetrics_worker(void)
 wontreturn void
 pwh_bgworker_main(Datum main_arg)
 {
-	pqsignal(SIGTERM, pwh_bgworker_sigterm);
+	pqsignal(SIGTERM, handle_sigterm);
 	BackgroundWorkerUnblockSignals();
 
 	bool was_found;
@@ -312,4 +306,12 @@ pwh_format_openmetrics(void)
 	}
 
 	return buffer;
+}
+
+static void
+handle_sigterm(SIGNAL_ARGS)
+{
+	int save_errno = errno;
+	proc_exit(0);
+	errno = save_errno;
 }

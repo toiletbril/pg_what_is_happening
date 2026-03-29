@@ -34,9 +34,6 @@ shmem_startup_hook_type PREV_SHMEM_STARTUP_HOOK = NULL;
 
 PWH_LWLOCK_TRANCHE_ID_DECL;
 
-/*
- * Calculate required shared memory size
- */
 Size
 pwh_shared_memory_size(void)
 {
@@ -52,10 +49,6 @@ pwh_shared_memory_size(void)
 	return size;
 }
 
-/*
- * Initialize shared memory structures
- * Called from shmem_startup_hook
- */
 void
 pwh_shared_memory_startup(void)
 {
@@ -111,7 +104,7 @@ pwh_get_my_backend_entry(void)
 		{
 			be->backend_pid = MyProcPid;
 			PWH_LWLOCK_RELEASE(PWH_SHMEM->lock);
-			elog(DEBUG2, "PWH: Allocated backend entry %d for PID %d", i,
+			elog(DEBUG2, "PWH: Allocated backend entry %u for PID %u", i,
 				 MyProcPid);
 
 			return be;

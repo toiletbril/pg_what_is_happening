@@ -27,7 +27,7 @@ CREATE FUNCTION what_is_happening.v1_status_f(
 	OUT temp_blks_written int8
 )
 RETURNS SETOF record
-AS 'MODULE_PATHNAME', 'what_is_happening'
+AS 'MODULE_PATHNAME', 'v1_status_f'
 LANGUAGE C STRICT VOLATILE;
 
 GRANT EXECUTE ON FUNCTION what_is_happening.v1_status_f() TO PUBLIC;

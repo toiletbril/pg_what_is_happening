@@ -3,14 +3,13 @@
 Live per-plan-node execution OpenMetrics-compatible stats for PostgreSQL and
 friends.
 
-If you use this in production you're braver than I am.
-
-The rest of the description is work-in-progress.
+If you use this in production you're braver than I am. The rest of the
+description is work-in-progress.
 
 ## Development
 
 [`Dockerfile`](./Dockerfile) is used as a base image for integration tests.
-Take a look inside [`./Shfile.sh`](./Shfile.sh) for more context.
+Take a look inside [`./Shfile.sh`](Shfile.sh) for more context.
 
 ## Building
 
@@ -31,13 +30,13 @@ Direct query:
 SELECT * FROM what_is_happening.v1_status;
 ```
 
-Exposed `/metrics` via background worker:
+Exposed `/metrics` via background worker (`WITH_BGWORKER=yes`):
 ```bash
 $ curl localhost:9187/metrics
 ```
 
-Prometheus queries:
-```promql
+Example prometheus queries:
+```sql
 # Top 5 slowest nodes right now
 topk(5, pg_what_is_happening_active_query_node_time_seconds)
 

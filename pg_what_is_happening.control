@@ -1,5 +1,5 @@
 # pg_what_is_happening extension
-comment = 'Real-time per-plan-node execution metrics for PostgreSQL'
+comment = 'Real-time per-node execution metrics'
 default_version = '1.0'
 module_pathname = '$libdir/pg_what_is_happening'
 relocatable = false
