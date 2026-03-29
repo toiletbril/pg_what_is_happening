@@ -1,0 +1,73 @@
+name: Regression Test Suite
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  POSTGRES_VERSION: REL_12_STABLE
+
+jobs:
+  build-image:
+    uses: ./.github/workflows/build-image.yml
+    permissions:
+      contents: read
+      packages: write
+
+  run-tests:
+    needs: build-image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Clone PostgreSQL
+        run: |
+          git clone --depth 1 --branch ${{ env.POSTGRES_VERSION }} https://github.com/postgres/postgres.git postgres
+
+      - name: Cache PostgreSQL build
+        id: cache-postgres
+        uses: actions/cache@v4
+        with:
+          path: postgres-bin
+          key: postgres-bin-${{ env.POSTGRES_VERSION }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull cached image
+        run: |
+          docker pull ${{ needs.build-image.outputs.image }}
+          docker tag ${{ needs.build-image.outputs.image }} pg-what-is-happening-test
+
+      - name: Build PostgreSQL if not cached
+        if: steps.cache-postgres.outputs.cache-hit != 'true'
+        run: |
+          cd postgres
+          ./configure --prefix=$(pwd)/../postgres-bin --enable-debug --enable-cassert CFLAGS="-g3 -O0"
+          make -j$(nproc) install
+          cd ..
+
+      - name: Run tests
+        run: |
+          POSTGRES_SOURCE=$(pwd)/postgres ./Shfile.sh test
+
+      - name: Collect test results on failure
+        if: failure()
+        run: |
+          echo "## Test Failure Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f test/regression.diffs ]; then
+            echo "### Regression Diffs" >> $GITHUB_STEP_SUMMARY
+            echo '```diff' >> $GITHUB_STEP_SUMMARY
+            cat test/regression.diffs >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
