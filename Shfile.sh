@@ -35,7 +35,6 @@ case $C in
 "build")
   require_pg_src
   docker run --pull=never --rm --network=host \
-             --user "$(id -u):$(id -g)" \
              -e MODE="${MODE:-rel}" \
              -e WITH_BGWORKER="${WITH_BGWORKER:-yes}" \
              -v "$PWD":/pg_what_is_happening \
@@ -45,7 +44,6 @@ case $C in
 "test")
   require_pg_src
   docker run --pull=never --rm --network=host \
-             --user "$(id -u):$(id -g)" \
              -e MODE="${MODE:-rel}" \
              -e WITH_BGWORKER="${WITH_BGWORKER:-yes}" \
              -v "$PWD":/pg_what_is_happening \
@@ -55,7 +53,6 @@ case $C in
 "dev")
   require_pg_src
   docker run --pull=never --rm --network=host -it \
-             --user "$(id -u):$(id -g)" \
              -e MODE="${MODE:-dbg}" \
              -e WITH_BGWORKER="${WITH_BGWORKER:-yes}" \
              -v "$PWD":/pg_what_is_happening \
