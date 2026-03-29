@@ -43,7 +43,7 @@ nodes are spilling to disk, cache hit ratios, or easily find the slowest joins.
 
 Example PromQL queries for your dashboards:
 
-```promql
+```sql
 # Top 5 slowest nodes right now
 topk(5, pg_what_is_happening_active_query_node_time_seconds)
 
@@ -58,30 +58,30 @@ sum by (node_tag) (pg_what_is_happening_active_query_node_shared_hit)
 
 ## Settings
 
-`what_is_happening.enabled` defaults to true. Set it to `false` if you want the
-extension loaded but dormant. Toggled with a `SIGHUP`
+- `what_is_happening.enabled` defaults to true. Set it to `false` if you want
+  the extension loaded but dormant. Toggled with a `SIGHUP`
 
-`what_is_happening.signal_timeout_ms` defaults to 10ms, range is 1 to 1000. How
-long we wait for each backend to respond to request for metrics before giving
-up. Toggled with a `SIGHUP`.
+- `what_is_happening.signal_timeout_ms` defaults to 10ms, range is 1 to 1000.
+  How long we wait for each backend to respond to request for metrics before
+  giving up. Toggled with a `SIGHUP`.
 
-`what_is_happening.listen_address` defaults to `127.0.0.1:9187` and controls
-where the background worker binds for the `/metrics` HTTP endpoint. Only
-available if compiled `WITH_BGWORKER`. Requires restart.
+- `what_is_happening.listen_address` defaults to `127.0.0.1:9187` and controls
+  where the background worker binds for the `/metrics` HTTP endpoint. Only
+  available if compiled `WITH_BGWORKER`. Requires restart.
 
-`what_is_happening.max_tracked_queries` defaults to 128, range is 1 to
-65536. This is how many concurrent query slots is allocated in shared memory.
-Each slot can hold one backend's metrics. If you have more active backends than
-slots, some queries won't get tracked. Requires restart.
+- `what_is_happening.max_tracked_queries` defaults to 128, range is 1 to 65536.
+  This is how many concurrent query slots is allocated in shared memory. Each
+  slot can hold one backend's metrics. If you have more active backends than
+  slots, some queries won't get tracked. Requires restart.
 
-`what_is_happening.max_nodes_per_query` defaults to 128, range is 16 to
-1024. Maximum plan nodes tracked per query. If your query plan has 200 nodes
-but this is set to 128, you'll only see the first 128 nodes in the output.
-Requires restart.
+- `what_is_happening.max_nodes_per_query` defaults to 128, range is 16 to 1024.
+  Maximum plan nodes tracked per query. If your query plan has 200 nodes but
+  this is set to 128, you'll only see the first 128 nodes in the output.
+  Requires restart.
 
-`what_is_happening.query_text_len` defaults to 1024, range is 64 to 8192. How
-many bytes of query text get stored. Longer queries get truncated. Requires
-restart.
+- `what_is_happening.query_text_len` defaults to 1024, range is 64 to 8192. How
+  many bytes of query text get stored. Longer queries get truncated. Requires
+  restart.
 
 ## Performance
 
@@ -102,7 +102,7 @@ and with default settings, that's about
 
 ---
 
-## Development
+# Development
 
 [`Dockerfile`](./Dockerfile) is used as a base image for integration tests.
 Take a look inside [`Shfile.sh`](./Shfile.sh) for more context.
