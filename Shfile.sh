@@ -2,11 +2,23 @@
 
 set -eu
 
-IMG='pg-what-is-happening-test'
+#
+# Containerized makefile. Used to create containers and invoke Nakefile
+# commands inside.
+#
+# Usage:
+#   POSTGRES_SOURCE='<path/to/postgres/source>' Shfile.sh <make-image/build/test/dev/reset>
+#
+# The flow is:
+#   - Make an image via make-image.
+#   - Run 'build' to produce static binaries.
+#   - Run 'dev' to fall into interactive container for development.
+#   - Run 'test' to invoke 'make installcheck' using provided postgres source
+#     tree.
+#   - Run 'reset' to clean up the image and all build artifacts.
+#
 
-BUILD_CMD=$(cat "$(dirname "$0")/scripts/build.sh")
-TEST_CMD=$(cat "$(dirname "$0")/scripts/test.sh")
-DEV_CMD=$(cat "$(dirname "$0")/scripts/dev.sh")
+IMG='pg-what-is-happening-test'
 
 clean_docker_target() {
   if docker image inspect "$IMG" > /dev/null 2>&1; then
@@ -14,7 +26,7 @@ clean_docker_target() {
   fi
 }
 
-require_pg_src() {
+make_sure_postgres_source_is_available() {
   if test -z "${POSTGRES_SOURCE:-}"; then
     echo "ERROR: POSTGRES_SOURCE environment variable must be set to postgres source directory." >&2
     exit 1
@@ -26,6 +38,7 @@ require_pg_src() {
 
 C="${1:-}"
 
+
 case $C in
 "make-image")
   clean_docker_target
@@ -33,7 +46,8 @@ case $C in
                -t "$IMG" "$(dirname "$0")"
   ;;
 "build")
-  require_pg_src
+  make_sure_postgres_source_is_available
+  BUILD_CMD=$(cat "$(dirname "$0")/scripts/build.sh")
   docker run --pull=never --rm --network=host \
              -e MODE="${MODE:-rel}" \
              -e WITH_BGWORKER="${WITH_BGWORKER:-yes}" \
@@ -42,7 +56,8 @@ case $C in
              "$IMG" sh -c "$BUILD_CMD"
   ;;
 "test")
-  require_pg_src
+  make_sure_postgres_source_is_available
+  TEST_CMD=$(cat "$(dirname "$0")/scripts/test.sh")
   docker run --pull=never --rm --network=host \
              -e MODE="${MODE:-rel}" \
              -e WITH_BGWORKER="${WITH_BGWORKER:-yes}" \
@@ -51,25 +66,21 @@ case $C in
              "$IMG" sh -c "$TEST_CMD"
   ;;
 "dev")
-  require_pg_src
+  make_sure_postgres_source_is_available
+  DEVELOPMENT_CMD=$(cat "$(dirname "$0")/scripts/development.sh")
   docker run --pull=never --rm --network=host -it \
              -e MODE="${MODE:-dbg}" \
              -e WITH_BGWORKER="${WITH_BGWORKER:-yes}" \
              -v "$PWD":/pg_what_is_happening \
              -v "$POSTGRES_SOURCE":/postgres \
-             "$IMG" sh -c "$DEV_CMD"
+             "$IMG" sh -c "$DEVELOPMENT_CMD"
   ;;
 "reset")
   echo "Cleaning extension build artifacts..."
-  rm -f pg_what_is_happening.so
   make reset
-
   if test -n "${POSTGRES_SOURCE:-}" && test -d "$POSTGRES_SOURCE"; then
-    echo "Cleaning postgres source directory..."
     make -C "$POSTGRES_SOURCE" -s distclean >/dev/null 2>&1 || true
   fi
-
-  echo "Removing docker image..."
   clean_docker_target
   ;;
 *)

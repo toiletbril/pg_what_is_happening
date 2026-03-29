@@ -1,3 +1,10 @@
+#
+# This file is supposed to be used only from Docker container or a host with a
+# running postgres instance on production-like environments.
+#
+# For development, please use Shfile.sh wrapper.
+#
+
 MODE ?= dbg
 
 HTTP_BACKEND ?= mongoose
