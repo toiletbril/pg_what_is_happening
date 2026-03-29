@@ -44,16 +44,19 @@ nodes are spilling to disk, cache hit ratios, or easily find the slowest joins.
 Example PromQL queries for your dashboards:
 
 ```sql
-# Top 5 slowest nodes right now
-topk(5, pg_what_is_happening_active_query_node_time_seconds)
+# Top 10 slowest nodes right now
+topk(10, pg_what_is_happening_active_query_node_time_seconds)
 
 # Nodes spilling to disk
-pg_what_is_happening_active_query_node_temp_written > 0
+pg_what_is_happening_active_query_node_spill_file_writes > 0
 
 # Cache hit ratio by node type
-sum by (node_tag) (pg_what_is_happening_active_query_node_shared_hit)
+sum by (node_tag) (pg_what_is_happening_active_query_node_cache_hits)
 /
-(sum by (node_tag) (pg_what_is_happening_active_query_node_shared_hit + pg_what_is_happening_active_query_node_shared_read))
+sum by (node_tag) (
+  pg_what_is_happening_active_query_node_cache_hits +
+  pg_what_is_happening_active_query_node_cache_misses
+)
 ```
 
 ## Settings
