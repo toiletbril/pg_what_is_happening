@@ -177,3 +177,27 @@ pwh_get_entry_plan_nodes(PwhSharedMemoryBackendEntry *entry)
 	return (PwhNode *) ((char *) entry + sizeof(PwhSharedMemoryBackendEntry) +
 						PWH_QUERY_TEXT_LEN_GUC);
 }
+
+/*
+ * Send SIGUSR2 to all active backends to refresh metrics.
+ * Returns the number of backends signaled.
+ */
+u32
+pwh_signal_active_backends(void)
+{
+	u32 signaled = 0;
+
+	for (u64 i = 0; i < (u64) PWH_MAX_TRACKED_QUERIES_GUC; i++)
+	{
+		PwhSharedMemoryBackendEntry *shmem_be_entry = pwh_get_backend_entry(i);
+
+		if (shmem_be_entry && shmem_be_entry->is_query_active &&
+			shmem_be_entry->backend_pid != 0)
+		{
+			kill(shmem_be_entry->backend_pid, SIGUSR2);
+			signaled++;
+		}
+	}
+
+	return signaled;
+}

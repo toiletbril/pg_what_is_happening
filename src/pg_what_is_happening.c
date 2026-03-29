@@ -384,37 +384,18 @@ v1_status_f(PG_FUNCTION_ARGS)
 		MemoryContext	 oldcontext =
 			MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
-		funcctx->tuple_desc = BlessTupleDesc(make_v1_status_tupdesc());
+		TupleDesc td = make_v1_status_tupdesc();
+		PWH_TUPLE_DESC_FINALIZE(td);
+		funcctx->tuple_desc = BlessTupleDesc(td);
 
 		/* Send SIGUSR2 to all active backends to refresh metrics. */
-		u64	 slot_count = pwh_get_backend_entry_count();
-		u64 *generations = (u64 *) palloc(sizeof(u64) * slot_count);
+		u32 signaled = pwh_signal_active_backends();
 
-		u32 signaled = 0;
-		for (u64 i = 0; i < slot_count; i++)
-		{
-			PwhSharedMemoryBackendEntry *shmem_be_entry =
-				pwh_get_backend_entry(i);
-			if (shmem_be_entry && shmem_be_entry->is_query_active &&
-				shmem_be_entry->backend_pid != 0)
-			{
-				generations[i] = shmem_be_entry->poll_generation;
-				kill(shmem_be_entry->backend_pid, SIGUSR2);
-				signaled++;
-			}
-			else
-			{
-				generations[i] = 0;
-			}
-		}
-
-		elog(DEBUG1, "PWH: What_is_happening() called, signaled %d backends",
+		elog(DEBUG1, "PWH: What_is_happening() called, signaled %u backends",
 			 signaled);
 
-		/* Wait for generation counters to increment (with timeout). */
+		/* Wait for backends to refresh metrics. */
 		pg_usleep(PWH_SIGNAL_TIMEOUT_MS_GUC * 1000L);
-
-		pfree(generations);
 
 		/* Initialize state: we iterate through all slots and nodes. */
 		u32 *state = (u32 *) palloc(2 * sizeof(i32));

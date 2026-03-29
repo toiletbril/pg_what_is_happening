@@ -92,5 +92,6 @@ extern u64							pwh_get_backend_entry_count(void);
 extern PwhSharedMemoryBackendEntry *pwh_get_backend_entry(u64 index);
 extern char	   *pwh_get_entry_query_text(PwhSharedMemoryBackendEntry *entry);
 extern PwhNode *pwh_get_entry_plan_nodes(PwhSharedMemoryBackendEntry *entry);
+extern u32		pwh_signal_active_backends(void);
 
 #endif /* PWH_SHARED_MEMORY_H. */
