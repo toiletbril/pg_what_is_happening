@@ -1,7 +1,0 @@
-Signal-Based Reliability: The extension relies on SIGUSR2 signals to
-prompt active backends to flush instrumentation data , which can be
-unreliable under high load or if signals are blocked.
-
-Fixed Resource Constraints: Uses pre-allocated shared memory slots with
-a fixed-size global registry , potentially limiting scalability with
-many concurrent queries.

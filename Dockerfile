@@ -31,8 +31,9 @@ RUN apk add \
 
 RUN adduser -D -u 1000 "postgres" && \
     echo "postgres ALL=(ALL) NOPASSWD: ALL" >> "/etc/sudoers"
-
 RUN mkdir -p "/postgres-bin" "/data" && \
     chown postgres:postgres "/data" "/postgres-bin"
+
+ENV PATH="/postgres-bin/bin:$PATH"
 
 WORKDIR "/pg_what_is_happening"

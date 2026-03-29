@@ -114,16 +114,5 @@ pwh_http_response_free_contents(HttpResponse *resp)
 static const HttpServerVtable *
 choose_backend(void)
 {
-	const char *b = HTTP_BACKEND;
-
-	if (streq(b, "mongoose"))
-	{
-		return pwh_http_server_get_mongoose_impl();
-	}
-	if (streq(b, "dumb"))
-	{
-		return pwh_http_server_get_dumb_impl();
-	}
-
-	return NULL;
+	return pwh_http_server_get_impl();
 }

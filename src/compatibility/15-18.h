@@ -26,6 +26,26 @@ typedef struct
 
 #define PWH_GET_GUC(name) GetConfigOptionByName(name, NULL, false)
 
+#define PWH_SHMEM_REQUEST_HOOK_DECL                                  \
+	static shmem_request_hook_type PREV_SHMEM_REQUEST_HOOK = NULL;   \
+	static void					   pwh_shmem_request_hook_impl(void) \
+	{                                                                \
+		if (PREV_SHMEM_REQUEST_HOOK)                                 \
+			PREV_SHMEM_REQUEST_HOOK();                               \
+		RequestNamedLWLockTranche("pg_what_is_happening", 1);        \
+		RequestAddinShmemSpace(pwh_get_shared_memory_size());        \
+	}
+
+#define PWH_INSTALL_SHMEM_REQUEST_HOOK()                  \
+	do                                                    \
+	{                                                     \
+		PREV_SHMEM_REQUEST_HOOK = shmem_request_hook;     \
+		shmem_request_hook = pwh_shmem_request_hook_impl; \
+	} while (0)
+
+#define PWH_SHMEM_REQUEST_IN_STARTUP_HOOK_HOOK() /* nothing, done in request \
+													hook */
+
 #define PWH_CREATE_TUPLE_DESC(natts) CreateTemplateTupleDesc(natts)
 
 #define PWH_BGWORKER_BYPASS_ALLOWCONN 0

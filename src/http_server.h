@@ -64,8 +64,7 @@ struct HttpServer
 	void				   *impl; /* Backend-specific data. */
 };
 
-extern const HttpServerVtable *pwh_http_server_get_dumb_impl(void);
-extern const HttpServerVtable *pwh_http_server_get_mongoose_impl(void);
+extern const HttpServerVtable *pwh_http_server_get_impl(void);
 
 extern HttpServer *pwh_http_server_create(const char *listen_addr);
 extern void		   pwh_http_server_destroy(HttpServer *server);
