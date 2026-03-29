@@ -100,8 +100,6 @@ and with default settings, that's about
 48 + 1024 + 12288 = 13.3KB per slot * 128 slots = 1.7MB total.
 ```
 
----
-
 # Development
 
 [`Dockerfile`](./Dockerfile) is used as a base image for integration tests.
@@ -118,3 +116,5 @@ $ make -j$(nproc)
 $ make install
 # otherwise put the static .so and utility files to your instance manually.
 ```
+
+Happy hacking!
