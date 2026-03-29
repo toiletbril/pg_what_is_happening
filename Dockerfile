@@ -36,4 +36,6 @@ RUN mkdir -p "/postgres-bin" "/data" && \
 
 ENV PATH="/postgres-bin/bin:$PATH"
 
+USER postgres
+
 WORKDIR "/pg_what_is_happening"
