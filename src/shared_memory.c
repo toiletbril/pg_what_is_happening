@@ -183,7 +183,7 @@ pwh_get_entry_plan_nodes(PwhSharedMemoryBackendEntry *entry)
  * Returns the number of backends signaled.
  */
 u32
-pwh_signal_active_backends(void)
+pwh_request_backend_metrics(void)
 {
 	u32 signaled = 0;
 

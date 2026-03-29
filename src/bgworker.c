@@ -111,7 +111,7 @@ pwh_metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 		return;
 	}
 
-	u32 signaled = pwh_signal_active_backends();
+	u32 signaled = pwh_request_backend_metrics();
 
 	elog(LOG, "PWH: Sent SIGUSR2 to %u active backends", signaled);
 
@@ -152,18 +152,28 @@ pwh_format_openmetrics(void)
 		"# HELP pg_what_is_happening_active_query_node_time_percent "
 		"Percentage of total query time spent in this node\n"
 		"# TYPE pg_what_is_happening_active_query_node_time_percent gauge\n"
-		"# HELP pg_what_is_happening_active_query_node_shared_hit Shared "
-		"buffer hits\n"
-		"# TYPE pg_what_is_happening_active_query_node_shared_hit gauge\n"
-		"# HELP pg_what_is_happening_active_query_node_shared_read Shared "
-		"buffer reads\n"
-		"# TYPE pg_what_is_happening_active_query_node_shared_read gauge\n"
-		"# HELP pg_what_is_happening_active_query_node_temp_read Temp blocks "
-		"read (spills)\n"
-		"# TYPE pg_what_is_happening_active_query_node_temp_read gauge\n"
-		"# HELP pg_what_is_happening_active_query_node_temp_written Temp "
-		"blocks written (spills)\n"
-		"# TYPE pg_what_is_happening_active_query_node_temp_written gauge\n");
+		"# HELP pg_what_is_happening_active_query_node_cache_hits Shared "
+		"buffer cache hits\n"
+		"# TYPE pg_what_is_happening_active_query_node_cache_hits gauge\n"
+		"# HELP pg_what_is_happening_active_query_node_cache_misses Shared "
+		"buffer cache misses\n"
+		"# TYPE pg_what_is_happening_active_query_node_cache_misses gauge\n"
+		"# HELP pg_what_is_happening_active_query_node_local_cache_hits "
+		"Local buffer cache hits\n"
+		"# TYPE pg_what_is_happening_active_query_node_local_cache_hits "
+		"gauge\n"
+		"# HELP pg_what_is_happening_active_query_node_local_cache_misses "
+		"Local buffer cache misses\n"
+		"# TYPE pg_what_is_happening_active_query_node_local_cache_misses "
+		"gauge\n"
+		"# HELP pg_what_is_happening_active_query_node_spill_file_reads "
+		"Blocks read from spill files\n"
+		"# TYPE pg_what_is_happening_active_query_node_spill_file_reads "
+		"gauge\n"
+		"# HELP pg_what_is_happening_active_query_node_spill_file_writes "
+		"Blocks written to spill files\n"
+		"# TYPE pg_what_is_happening_active_query_node_spill_file_writes "
+		"gauge\n");
 
 	for (i32 i = 0; i < (i32) pwh_get_backend_entry_count(); i++)
 	{
@@ -234,39 +244,57 @@ pwh_format_openmetrics(void)
 
 			offset += snprintf(
 				buffer + offset, buffer_size - offset,
-				"pg_what_is_happening_active_query_node_shared_hit{pid=\"%d\","
+				"pg_what_is_happening_active_query_node_cache_hits{pid=\"%d\","
 				"query_id=\"%lu\",node_id=\"%d\",node_tag=\"%s\"} %ld\n",
 				shmem_be_entry->backend_pid,
 				(unsigned long) shmem_be_entry->query_id, node->node_id,
 				pwh_node_tag_to_string(node->tag),
-				(long) node->buffer_usage.shared_hit);
+				(long) node->buffer_usage.cache_hits);
 
 			offset += snprintf(
 				buffer + offset, buffer_size - offset,
-				"pg_what_is_happening_active_query_node_shared_read{pid=\"%d\","
+				"pg_what_is_happening_active_query_node_cache_misses{pid=\"%d\","
 				"query_id=\"%lu\",node_id=\"%d\",node_tag=\"%s\"} %ld\n",
 				shmem_be_entry->backend_pid,
 				(unsigned long) shmem_be_entry->query_id, node->node_id,
 				pwh_node_tag_to_string(node->tag),
-				(long) node->buffer_usage.shared_read);
+				(long) node->buffer_usage.cache_misses);
 
 			offset += snprintf(
 				buffer + offset, buffer_size - offset,
-				"pg_what_is_happening_active_query_node_temp_read{pid=\"%d\","
+				"pg_what_is_happening_active_query_node_local_cache_hits{pid=\"%d\","
 				"query_id=\"%lu\",node_id=\"%d\",node_tag=\"%s\"} %ld\n",
 				shmem_be_entry->backend_pid,
 				(unsigned long) shmem_be_entry->query_id, node->node_id,
 				pwh_node_tag_to_string(node->tag),
-				(long) node->buffer_usage.temp_read);
+				(long) node->buffer_usage.local_cache_hits);
 
 			offset += snprintf(
 				buffer + offset, buffer_size - offset,
-				"pg_what_is_happening_active_query_node_temp_written{pid=\"%d\","
+				"pg_what_is_happening_active_query_node_local_cache_misses{pid=\"%d\","
 				"query_id=\"%lu\",node_id=\"%d\",node_tag=\"%s\"} %ld\n",
 				shmem_be_entry->backend_pid,
 				(unsigned long) shmem_be_entry->query_id, node->node_id,
 				pwh_node_tag_to_string(node->tag),
-				(long) node->buffer_usage.temp_written);
+				(long) node->buffer_usage.local_cache_misses);
+
+			offset += snprintf(
+				buffer + offset, buffer_size - offset,
+				"pg_what_is_happening_active_query_node_spill_file_reads{pid=\"%d\","
+				"query_id=\"%lu\",node_id=\"%d\",node_tag=\"%s\"} %ld\n",
+				shmem_be_entry->backend_pid,
+				(unsigned long) shmem_be_entry->query_id, node->node_id,
+				pwh_node_tag_to_string(node->tag),
+				(long) node->buffer_usage.spill_file_reads);
+
+			offset += snprintf(
+				buffer + offset, buffer_size - offset,
+				"pg_what_is_happening_active_query_node_spill_file_writes{pid=\"%d\","
+				"query_id=\"%lu\",node_id=\"%d\",node_tag=\"%s\"} %ld\n",
+				shmem_be_entry->backend_pid,
+				(unsigned long) shmem_be_entry->query_id, node->node_id,
+				pwh_node_tag_to_string(node->tag),
+				(long) node->buffer_usage.spill_file_writes);
 		}
 	}
 

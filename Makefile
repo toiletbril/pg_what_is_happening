@@ -19,7 +19,7 @@ endif
 MODULE_big = pg_what_is_happening
 EXTENSION = pg_what_is_happening
 DATA = pg_what_is_happening--1.0.sql
-REGRESS = basic
+REGRESS = basic status_via_query openmetrics
 REGRESS_OPTS = --inputdir=test --outputdir=test --load-extension=pg_what_is_happening
 EXTRA_CLEAN = src/o/
 

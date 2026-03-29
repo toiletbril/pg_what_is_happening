@@ -9,7 +9,7 @@ description is work-in-progress.
 ## Development
 
 [`Dockerfile`](./Dockerfile) is used as a base image for integration tests.
-Take a look inside [`./Shfile.sh`](Shfile.sh) for more context.
+Take a look inside [`Shfile.sh`](./Shfile.sh) for more context.
 
 ## Building
 

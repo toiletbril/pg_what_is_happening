@@ -8,23 +8,23 @@ CREATE SCHEMA what_is_happening;
 
 -- what_is_happening.v1_status_f()
 CREATE FUNCTION what_is_happening.v1_status_f(
-	OUT pid int4,
+	OUT backend_pid int4,
 	OUT query_id int8,
 	OUT query_text text,
-	OUT active boolean,
+	OUT is_query_active boolean,
 	OUT node_id int4,
-	OUT parent_id int4,
-	OUT node_tag text,
-	OUT ntuples float8,
-	OUT startup_us float8,
-	OUT total_us float8,
-	OUT nloops float8,
-	OUT shared_blks_hit int8,
-	OUT shared_blks_read int8,
-	OUT local_blks_hit int8,
-	OUT local_blks_read int8,
-	OUT temp_blks_read int8,
-	OUT temp_blks_written int8
+	OUT parent_node_id int4,
+	OUT tag text,
+	OUT tuples_returned float8,
+	OUT startup_time_us float8,
+	OUT total_time_us float8,
+	OUT loops_executed float8,
+	OUT cache_hits int8,
+	OUT cache_misses int8,
+	OUT local_cache_hits int8,
+	OUT local_cache_misses int8,
+	OUT spill_file_reads int8,
+	OUT spill_file_writes int8
 )
 RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'v1_status_f'

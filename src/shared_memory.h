@@ -50,12 +50,12 @@ typedef struct
 
 	struct
 	{
-		u64 shared_hit;
-		u64 shared_read;
-		u64 local_hit;
-		u64 local_read;
-		u64 temp_read;
-		u64 temp_written;
+		u64 cache_hits;
+		u64 cache_misses;
+		u64 local_cache_hits;
+		u64 local_cache_misses;
+		u64 spill_file_reads;
+		u64 spill_file_writes;
 	} buffer_usage;
 
 	u64 magic;
@@ -92,6 +92,6 @@ extern u64							pwh_get_backend_entry_count(void);
 extern PwhSharedMemoryBackendEntry *pwh_get_backend_entry(u64 index);
 extern char	   *pwh_get_entry_query_text(PwhSharedMemoryBackendEntry *entry);
 extern PwhNode *pwh_get_entry_plan_nodes(PwhSharedMemoryBackendEntry *entry);
-extern u32		pwh_signal_active_backends(void);
+extern u32		pwh_request_backend_metrics(void);
 
 #endif /* PWH_SHARED_MEMORY_H. */

@@ -160,12 +160,12 @@ topology_visitor(PlanState *planstate, void *context)
 	ctx->metrics[id].execution.startup_time_us = 0;
 	ctx->metrics[id].execution.total_time_us = 0;
 	ctx->metrics[id].execution.loops_executed = 0;
-	ctx->metrics[id].buffer_usage.shared_hit = 0;
-	ctx->metrics[id].buffer_usage.shared_read = 0;
-	ctx->metrics[id].buffer_usage.local_hit = 0;
-	ctx->metrics[id].buffer_usage.local_read = 0;
-	ctx->metrics[id].buffer_usage.temp_read = 0;
-	ctx->metrics[id].buffer_usage.temp_written = 0;
+	ctx->metrics[id].buffer_usage.cache_hits = 0;
+	ctx->metrics[id].buffer_usage.cache_misses = 0;
+	ctx->metrics[id].buffer_usage.local_cache_hits = 0;
+	ctx->metrics[id].buffer_usage.local_cache_misses = 0;
+	ctx->metrics[id].buffer_usage.spill_file_reads = 0;
+	ctx->metrics[id].buffer_usage.spill_file_writes = 0;
 
 	ctx->metrics[id].magic = PWH_NODE_MAGIC;
 
