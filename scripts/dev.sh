@@ -7,7 +7,7 @@ cd /pg_what_is_happening
 if ! test -f /postgres/config.status; then
   echo "Configuring PostgreSQL..."
   cd /postgres
-  ./configure --prefix=/postgres-bin --enable-debug --enable-cassert CFLAGS="-g3 -O0" >/dev/null
+  ./configure --prefix=/postgres-bin --enable-debug --enable-cassert CFLAGS="-std=gnu11 -g3 -O0 -Wno-error=incompatible-pointer-types" >/dev/null
   cd -
 fi
 

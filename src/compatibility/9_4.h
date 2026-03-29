@@ -2,6 +2,7 @@
 #ifndef PWH_COMPAT_94_H
 #define PWH_COMPAT_94_H
 
+#include "access/htup_details.h"
 #include "nodes/execnodes.h"
 
 #define PWH_GET_QUERY_ID(plannedstmt) 0
@@ -34,11 +35,11 @@ typedef struct
 #define PWH_CREATE_TUPLE_DESC(natts) CreateTemplateTupleDesc(natts, false)
 #define PWH_TUPLE_DESC_FINALIZE(tupdesc) ((void) 0)
 
-#define PWH_BGWORKER_BYPASS_ALLOWCONN BGWORKER_BYPASS_ALLOWCONN
+#define PWH_BGWORKER_BYPASS_ALLOWCONN 0
 
-#define PWH_COPY_BUFUSAGE(metrics, instr, idx)     \
-	do                                             \
-	{                                              \
+#define PWH_COPY_BUFUSAGE(metrics, instr, idx)           \
+	do                                                   \
+	{                                                    \
 		(metrics)[idx].buffer_usage.cache_hits =         \
 			(instr)->bufusage.shared_blks_hit;           \
 		(metrics)[idx].buffer_usage.cache_misses =       \
@@ -50,7 +51,7 @@ typedef struct
 		(metrics)[idx].buffer_usage.spill_file_reads =   \
 			(instr)->bufusage.temp_blks_read;            \
 		(metrics)[idx].buffer_usage.spill_file_writes =  \
-			(instr)->bufusage.temp_blks_written;   \
+			(instr)->bufusage.temp_blks_written;         \
 	} while (0)
 
 static forceinline bool

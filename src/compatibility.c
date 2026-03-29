@@ -49,7 +49,7 @@ pwh_compute_query_id(const char *query_text)
 pqsigfunc
 pwh_install_pqsignal(int signo, pqsigfunc func)
 {
-#if PG_VERSION_NUM >= 190000
+#if PG_VERSION_NUM >= 180000 || PG_VERSION_NUM < 100000
 	pqsignal(signo, func);
 	return NULL;
 #else

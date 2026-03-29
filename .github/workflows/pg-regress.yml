@@ -7,22 +7,35 @@ on:
   pull_request:
     branches: [ master ]
 
-env:
-  POSTGRES_VERSION: REL_12_STABLE
-
 jobs:
   build-image:
+    name: Build Base Image
     uses: ./.github/workflows/build-image.yml
     permissions:
       contents: read
       packages: write
 
   run-tests:
-    name: PostgreSQL ${{ env.POSTGRES_VERSION }}
+    name: Run regression tests on PostgreSQL ${{ matrix.pg_version }}
     needs: build-image
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pg_version: [9.4, 12.6, 14.4, 18]
+        include:
+          - pg_version: 9.4
+            pg_branch: REL9_4_STABLE
+          - pg_version: 12.6
+            pg_branch: REL_12_STABLE
+          - pg_version: 14.4
+            pg_branch: REL_14_4
+          - pg_version: 18
+            pg_branch: REL_18_STABLE
     environment:
       name: testing
+    env:
+      POSTGRES_VERSION: ${{ matrix.pg_branch }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,12 +60,17 @@ jobs:
         run: |
           POSTGRES_SOURCE=$(pwd)/postgres ./Shfile.sh test
 
+      - name: Upload PostgreSQL log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-log-${{ matrix.pg_version }}
+          path: /tmp/postgres.log
+          if-no-files-found: ignore
+
       - name: Collect test results on failure
         if: failure()
         run: |
-          echo "## Test Failure Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
           if [ -f test/regression.diffs ]; then
             echo "### Regression Diffs" >> $GITHUB_STEP_SUMMARY
             echo '```diff' >> $GITHUB_STEP_SUMMARY

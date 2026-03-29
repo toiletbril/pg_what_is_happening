@@ -41,9 +41,9 @@ typedef struct
 
 #define PWH_BGWORKER_BYPASS_ALLOWCONN 0
 
-#define PWH_COPY_BUFUSAGE(metrics, instr, idx)     \
-	do                                             \
-	{                                              \
+#define PWH_COPY_BUFUSAGE(metrics, instr, idx)           \
+	do                                                   \
+	{                                                    \
 		(metrics)[idx].buffer_usage.cache_hits =         \
 			(instr)->bufusage.shared_blks_hit;           \
 		(metrics)[idx].buffer_usage.cache_misses =       \
@@ -55,7 +55,7 @@ typedef struct
 		(metrics)[idx].buffer_usage.spill_file_reads =   \
 			(instr)->bufusage.temp_blks_read;            \
 		(metrics)[idx].buffer_usage.spill_file_writes =  \
-			(instr)->bufusage.temp_blks_written;   \
+			(instr)->bufusage.temp_blks_written;         \
 	} while (0)
 
 #define T_GatherMerge (-1) /* Not available until PG 10. */
