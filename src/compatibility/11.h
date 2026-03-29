@@ -44,17 +44,17 @@ typedef struct
 #define PWH_COPY_BUFUSAGE(metrics, instr, idx)     \
 	do                                             \
 	{                                              \
-		(metrics)[idx].buffer_usage.shared_hit =   \
-			(instr)->bufusage.shared_blks_hit;     \
-		(metrics)[idx].buffer_usage.shared_read =  \
-			(instr)->bufusage.shared_blks_read;    \
-		(metrics)[idx].buffer_usage.local_hit =    \
-			(instr)->bufusage.local_blks_hit;      \
-		(metrics)[idx].buffer_usage.local_read =   \
-			(instr)->bufusage.local_blks_read;     \
-		(metrics)[idx].buffer_usage.temp_read =    \
-			(instr)->bufusage.temp_blks_read;      \
-		(metrics)[idx].buffer_usage.temp_written = \
+		(metrics)[idx].buffer_usage.cache_hits =         \
+			(instr)->bufusage.shared_blks_hit;           \
+		(metrics)[idx].buffer_usage.cache_misses =       \
+			(instr)->bufusage.shared_blks_read;          \
+		(metrics)[idx].buffer_usage.local_cache_hits =   \
+			(instr)->bufusage.local_blks_hit;            \
+		(metrics)[idx].buffer_usage.local_cache_misses = \
+			(instr)->bufusage.local_blks_read;           \
+		(metrics)[idx].buffer_usage.spill_file_reads =   \
+			(instr)->bufusage.temp_blks_read;            \
+		(metrics)[idx].buffer_usage.spill_file_writes =  \
 			(instr)->bufusage.temp_blks_written;   \
 	} while (0)
 

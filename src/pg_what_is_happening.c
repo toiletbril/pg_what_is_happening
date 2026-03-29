@@ -346,28 +346,33 @@ make_v1_status_tupdesc(void)
 {
 	TupleDesc tupdesc = PWH_CREATE_TUPLE_DESC(17);
 
-	TupleDescInitEntry(tupdesc, (AttrNumber) 1, "pid", INT4OID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 1, "backend_pid", INT4OID, -1, 0);
 	TupleDescInitEntry(tupdesc, (AttrNumber) 2, "query_id", INT8OID, -1, 0);
 	TupleDescInitEntry(tupdesc, (AttrNumber) 3, "query_text", TEXTOID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 4, "active", BOOLOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 4, "is_query_active", BOOLOID, -1,
+					   0);
 	TupleDescInitEntry(tupdesc, (AttrNumber) 5, "node_id", INT4OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 6, "parent_id", INT4OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 7, "node_type", TEXTOID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 8, "ntuples", FLOAT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 9, "startup_us", FLOAT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 10, "total_us", FLOAT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 11, "nloops", FLOAT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 12, "shared_blks_hit", INT8OID, -1,
+	TupleDescInitEntry(tupdesc, (AttrNumber) 6, "parent_node_id", INT4OID, -1,
 					   0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 13, "shared_blks_read", INT8OID,
+	TupleDescInitEntry(tupdesc, (AttrNumber) 7, "tag", TEXTOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 8, "tuples_returned", FLOAT8OID,
 					   -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 14, "local_blks_hit", INT8OID, -1,
+	TupleDescInitEntry(tupdesc, (AttrNumber) 9, "startup_time_us", FLOAT8OID,
+					   -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 10, "total_time_us", FLOAT8OID, -1,
 					   0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 15, "local_blks_read", INT8OID, -1,
+	TupleDescInitEntry(tupdesc, (AttrNumber) 11, "loops_executed", FLOAT8OID,
+					   -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 12, "cache_hits", INT8OID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 13, "cache_misses", INT8OID, -1,
 					   0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 16, "temp_blks_read", INT8OID, -1,
-					   0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 17, "temp_blks_written", INT8OID,
+	TupleDescInitEntry(tupdesc, (AttrNumber) 14, "local_cache_hits", INT8OID,
+					   -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 15, "local_cache_misses", INT8OID,
+					   -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 16, "spill_file_reads", INT8OID,
+					   -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 17, "spill_file_writes", INT8OID,
 					   -1, 0);
 
 	return tupdesc;
@@ -389,7 +394,7 @@ v1_status_f(PG_FUNCTION_ARGS)
 		funcctx->tuple_desc = BlessTupleDesc(td);
 
 		/* Send SIGUSR2 to all active backends to refresh metrics. */
-		u32 signaled = pwh_signal_active_backends();
+		u32 signaled = pwh_request_backend_metrics();
 
 		elog(DEBUG1, "PWH: What_is_happening() called, signaled %u backends",
 			 signaled);
@@ -440,12 +445,12 @@ v1_status_f(PG_FUNCTION_ARGS)
 			values[8] = Float8GetDatum(node->execution.startup_time_us);
 			values[9] = Float8GetDatum(node->execution.total_time_us);
 			values[10] = Float8GetDatum(node->execution.loops_executed);
-			values[11] = Int64GetDatum(node->buffer_usage.shared_hit);
-			values[12] = Int64GetDatum(node->buffer_usage.shared_read);
-			values[13] = Int64GetDatum(node->buffer_usage.local_hit);
-			values[14] = Int64GetDatum(node->buffer_usage.local_read);
-			values[15] = Int64GetDatum(node->buffer_usage.temp_read);
-			values[16] = Int64GetDatum(node->buffer_usage.temp_written);
+			values[11] = Int64GetDatum(node->buffer_usage.cache_hits);
+			values[12] = Int64GetDatum(node->buffer_usage.cache_misses);
+			values[13] = Int64GetDatum(node->buffer_usage.local_cache_hits);
+			values[14] = Int64GetDatum(node->buffer_usage.local_cache_misses);
+			values[15] = Int64GetDatum(node->buffer_usage.spill_file_reads);
+			values[16] = Int64GetDatum(node->buffer_usage.spill_file_writes);
 
 			HeapTuple tuple =
 				heap_form_tuple(funcctx->tuple_desc, values, nulls);
