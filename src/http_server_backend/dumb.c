@@ -30,7 +30,6 @@
 
 #define DUMB_HTTP_BUFFER_SIZE 8192
 
-/* Dumb HTTP server implementation data. */
 typedef struct DumbHttpServer
 {
 	i32				   port;
@@ -40,15 +39,14 @@ typedef struct DumbHttpServer
 	void			  *user_data;
 } DumbHttpServer;
 
-/* Forward declarations. */
 static HttpServer *dumb_create(const char *listen_addr);
 static void		   dumb_destroy(HttpServer *server);
+
 static void dumb_set_handler(HttpServer *server, HttpRequestHandler handler,
 							 void *user_data);
 static i32	dumb_run(HttpServer *server);
 static void dumb_stop(HttpServer *server);
 
-/* Vtable. */
 static const HttpServerVtable dumb_vtable = {
 	.createFn = dumb_create,
 	.destroyFn = dumb_destroy,
@@ -57,18 +55,12 @@ static const HttpServerVtable dumb_vtable = {
 	.stopFn = dumb_stop,
 };
 
-/*
- * Get dumb implementation vtable
- */
-const HttpServerVtable *
-pwh_http_server_get_dumb_impl(void)
+donteliminate const HttpServerVtable *
+pwh_http_server_get_impl(void)
 {
 	return &dumb_vtable;
 }
 
-/*
- * Create dumb HTTP server
- */
 static HttpServer *
 dumb_create(const char *listen_addr)
 {
@@ -107,9 +99,6 @@ dumb_create(const char *listen_addr)
 	return server;
 }
 
-/*
- * Destroy dumb HTTP server
- */
 static void
 dumb_destroy(HttpServer *server)
 {
@@ -128,9 +117,6 @@ dumb_destroy(HttpServer *server)
 	free(server);
 }
 
-/*
- * Set request handler
- */
 static void
 dumb_set_handler(HttpServer *server, HttpRequestHandler handler,
 				 void *user_data)
@@ -141,9 +127,6 @@ dumb_set_handler(HttpServer *server, HttpRequestHandler handler,
 	impl->user_data = user_data;
 }
 
-/*
- * Parse HTTP request (minimal, only supports GET)
- */
 static bool
 parse_request(const char *buffer, HttpRequest *req)
 {
@@ -189,9 +172,6 @@ parse_request(const char *buffer, HttpRequest *req)
 	return true;
 }
 
-/*
- * Free HTTP request
- */
 static void
 free_request(HttpRequest *req)
 {
@@ -207,9 +187,6 @@ free_request(HttpRequest *req)
 		free(req->body);
 }
 
-/*
- * Handle single HTTP connection
- */
 static void
 handle_connection(DumbHttpServer *impl, i32 client_fd)
 {
@@ -265,9 +242,6 @@ handle_connection(DumbHttpServer *impl, i32 client_fd)
 	close(client_fd);
 }
 
-/*
- * Run dumb HTTP server (blocking)
- */
 static i32
 dumb_run(HttpServer *server)
 {
@@ -328,9 +302,6 @@ dumb_run(HttpServer *server)
 	return 0;
 }
 
-/*
- * Stop dumb HTTP server
- */
 static void
 dumb_stop(HttpServer *server)
 {

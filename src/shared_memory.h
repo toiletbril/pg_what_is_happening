@@ -27,10 +27,12 @@
 #include "nodes/nodeFuncs.h"
 #include "storage/lwlock.h"
 
-#define PWH_MAX_NODES_DEFAULT 128
-#define PWH_QUERY_TEXT_LEN 256
-
 #define PWH_NODE_MAGIC 0xDEADBEEF
+
+extern i32 PWH_MAX_TRACKED_QUERIES_GUC;
+extern i32 PWH_MAX_NODES_PER_QUERY_GUC;
+extern i32 PWH_QUERY_TEXT_LEN_GUC;
+extern i32 PWH_SIGNAL_TIMEOUT_MS_GUC;
 
 typedef struct
 {
@@ -63,27 +65,32 @@ typedef struct
 {
 	i32			backend_pid;
 	u64			query_id;
-	u64			poll_generation;
-	char		query_text[PWH_QUERY_TEXT_LEN];
+	u32			poll_generation;
 	TimestampTz query_start_time;
 	bool		is_query_active;
 	u32			num_nodes;
 	u32			lock_offset;
-
-	PwhNode plan_nodes[PWH_MAX_NODES_DEFAULT];
+	u32			query_text_capacity;
+	u32			plan_nodes_capacity;
 } PwhSharedMemoryBackendEntry;
 
 extern PwhSharedMemoryHeader *PWH_SHMEM;
 
-#define PWH_GET_BACKEND_ENTRY_UNSAFE(idx)                                \
-	(((PwhSharedMemoryBackendEntry *) ((char *) (PWH_SHMEM) +            \
-									   sizeof(PwhSharedMemoryHeader))) + \
-	 (idx))
+Size pwh_get_backend_entry_stride(void);
 
-extern Size							pwh_shared_memory_size(void);
-extern void							pwh_shared_memory_startup(void);
+#define PWH_GET_BACKEND_ENTRY_UNSAFE(idx)                             \
+	((PwhSharedMemoryBackendEntry *) ((char *) (PWH_SHMEM) +          \
+									  sizeof(PwhSharedMemoryHeader) + \
+									  ((idx) *                        \
+									   pwh_get_backend_entry_stride())))
+
+void							   *pwh_get_shared_memory_ptr(void);
+extern Size							pwh_get_shared_memory_size(void);
+extern void							pwh_shared_memory_startup_hook(void);
 extern PwhSharedMemoryBackendEntry *pwh_get_my_backend_entry(void);
 extern u64							pwh_get_backend_entry_count(void);
 extern PwhSharedMemoryBackendEntry *pwh_get_backend_entry(u64 index);
+extern char	   *pwh_get_entry_query_text(PwhSharedMemoryBackendEntry *entry);
+extern PwhNode *pwh_get_entry_plan_nodes(PwhSharedMemoryBackendEntry *entry);
 
 #endif /* PWH_SHARED_MEMORY_H. */

@@ -66,16 +66,7 @@ pwh_bgworker_main(Datum main_arg)
 	pqsignal(SIGTERM, handle_sigterm);
 	BackgroundWorkerUnblockSignals();
 
-	bool was_found;
-	PWH_SHMEM = ShmemInitStruct("pg_what_is_happening",
-								pwh_shared_memory_size(), &was_found);
-	if (PWH_SHMEM == NULL)
-	{
-		elog(ERROR, "PWH: Background worker failed to attach to shared memory");
-		proc_exit(1);
-	}
-
-	Assert(was_found);
+	PWH_SHMEM = pwh_get_shared_memory_ptr();
 	elog(LOG, "PWH: Background worker attached to shared memory");
 
 	const char *listen_addr =
@@ -120,8 +111,6 @@ pwh_metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 		return;
 	}
 
-	Assert(PWH_SHMEM != NULL);
-
 	u32 signaled = 0;
 
 	for (i32 i = 0; i < (i32) pwh_get_backend_entry_count(); i++)
@@ -156,7 +145,7 @@ pwh_metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 		return;
 	}
 
-	pwh_http_response_text(resp, 199, metrics);
+	pwh_http_response_text(resp, 200, metrics);
 
 	pfree(metrics);
 }
@@ -166,12 +155,6 @@ pwh_metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 static char *
 pwh_format_openmetrics(void)
 {
-	if (PWH_SHMEM == NULL)
-	{
-		elog(WARNING, "PWH: PWH_SHMEM is NULL in format_openmetrics");
-		return NULL;
-	}
-
 	u64	  buffer_size = METRIC_BUFFER_SIZE;
 	char *buffer = (char *) palloc(buffer_size);
 
@@ -218,16 +201,17 @@ pwh_format_openmetrics(void)
 		if (!shmem_be_entry->is_query_active)
 			continue;
 
+		PwhNode *plan_nodes = pwh_get_entry_plan_nodes(shmem_be_entry);
+
 		double total_query_time = 0.0;
 		for (u32 j = 0; j < shmem_be_entry->num_nodes; j++)
 		{
-			total_query_time +=
-				shmem_be_entry->plan_nodes[j].execution.total_time_us;
+			total_query_time += plan_nodes[j].execution.total_time_us;
 		}
 
 		for (u32 j = 0; j < shmem_be_entry->num_nodes; j++)
 		{
-			PwhNode *node = &shmem_be_entry->plan_nodes[j];
+			PwhNode *node = &plan_nodes[j];
 
 			if (unlikely(offset + 1024 >= buffer_size))
 			{

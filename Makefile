@@ -45,4 +45,7 @@ reset:
 	echo "    " RM src/o/$(MODE) pg_what_is_happening.so
 	rm -rf src/o/$(MODE) pg_what_is_happening.so
 
-.PHONY: fmt tidy reset dirs
+relaunch: install
+	pg_ctl -D /data -l /tmp/postgres.log restart
+
+.PHONY: fmt tidy reset relaunch dirs

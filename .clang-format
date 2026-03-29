@@ -68,12 +68,11 @@ KeepEmptyLinesAtTheStartOfBlocks: false
 MaxEmptyLinesToKeep: 3
 PenaltyBreakAssignment: 2
 PenaltyBreakBeforeFirstCallParameter: 1
-PenaltyBreakComment: 300
 PenaltyBreakString: 1000
 PenaltyExcessCharacter: 1000000
 PenaltyReturnTypeOnItsOwnLine: 200
 PointerAlignment: Right
-ReflowComments:  false
+ReflowComments:  true
 SortIncludes:    true
 SpaceAfterCStyleCast: true
 SpaceAfterLogicalNot: false

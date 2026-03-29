@@ -54,18 +54,12 @@ static const HttpServerVtable mongoose_vtable = {
 	.stopFn = mongoose_stop,
 };
 
-/*
- * Get mongoose implementation vtable
- */
-const HttpServerVtable *
-pwh_http_server_get_mongoose_impl(void)
+donteliminate const HttpServerVtable *
+pwh_http_server_get_impl(void)
 {
 	return &mongoose_vtable;
 }
 
-/*
- * Mongoose event handler callback
- */
 static void
 mongoose_event_handler(struct mg_connection *c, int ev, void *ev_data)
 {
@@ -111,9 +105,6 @@ mongoose_event_handler(struct mg_connection *c, int ev, void *ev_data)
 	}
 }
 
-/*
- * Create mongoose HTTP server
- */
 static HttpServer *
 mongoose_create(const char *listen_addr)
 {
@@ -153,9 +144,6 @@ mongoose_create(const char *listen_addr)
 	return server;
 }
 
-/*
- * Destroy mongoose HTTP server
- */
 static void
 mongoose_destroy(HttpServer *server)
 {
@@ -173,9 +161,6 @@ mongoose_destroy(HttpServer *server)
 	free(server);
 }
 
-/*
- * Set request handler
- */
 static void
 mongoose_set_handler(HttpServer *server, HttpRequestHandler handler,
 					 void *user_data)
@@ -186,9 +171,6 @@ mongoose_set_handler(HttpServer *server, HttpRequestHandler handler,
 	impl->user_data = user_data;
 }
 
-/*
- * Run mongoose HTTP server (blocking)
- */
 static i32
 mongoose_run(HttpServer *server)
 {
@@ -211,9 +193,6 @@ mongoose_run(HttpServer *server)
 	return 0;
 }
 
-/*
- * Stop mongoose HTTP server
- */
 static void
 mongoose_stop(HttpServer *server)
 {

@@ -34,7 +34,7 @@
 #include "utils/builtins.h"
 #include "utils/guc.h"
 #include "utils/timestamp.h"
-#ifdef PWH_WITH_BGWORKER
+#ifdef WITH_BGWORKER
 #include "bgworker.h"
 #endif
 
@@ -42,12 +42,14 @@ PG_MODULE_MAGIC;
 
 /* GUC variables. */
 static bool PWH_ENABLED = true;
-#ifdef PWH_WITH_BGWORKER
+#ifdef WITH_BGWORKER
 static char *PWH_LISTEN_ADDRESS = NULL;
 #endif
 
-static i32 PWH_MAX_NODES_PER_QUERY = PWH_MAX_NODES_DEFAULT;
-static i32 PWH_SIGNAL_TIMEOUT_MS = 10;
+i32 PWH_MAX_TRACKED_QUERIES_GUC = 128;
+i32 PWH_MAX_NODES_PER_QUERY_GUC = 128;
+i32 PWH_QUERY_TEXT_LEN_GUC = 1024;
+i32 PWH_SIGNAL_TIMEOUT_MS_GUC = 10;
 
 /* Previous hooks. */
 static ExecutorStart_hook_type PREV_EXECUTOR_START_HOOK = NULL;
@@ -60,7 +62,20 @@ void _PG_fini(void);
 static void pwh_executor_start_hook(QueryDesc *queryDesc, i32 eflags);
 static void pwh_executor_end_hook(QueryDesc *queryDesc);
 
-#ifdef PWH_WITH_BGWORKER
+static bool pwh_check_positive_guc(int *newval, void **extra, GucSource source);
+
+static bool
+pwh_check_positive_guc(int *newval, void **extra, GucSource source)
+{
+	if (*newval <= 0)
+	{
+		GUC_check_errdetail("Value must be positive");
+		return false;
+	}
+	return true;
+}
+
+#ifdef WITH_BGWORKER
 static bool pwh_check_listen_address(char **newval, void **extra,
 									 GucSource source);
 
@@ -114,6 +129,8 @@ pwh_check_listen_address(char **newval, void **extra, GucSource source)
 }
 #endif
 
+PWH_SHMEM_REQUEST_HOOK_DECL;
+
 void
 _PG_init(void)
 {
@@ -122,12 +139,14 @@ _PG_init(void)
 			ERROR,
 			"pg_what_is_happening must be loaded via shared_preload_libraries");
 
+	PWH_SHMEM = NULL;
+
 	/* Define GUC variables. */
 	DefineCustomBoolVariable(
 		"pg_what_is_happening.enabled", "Enable pg_what_is_happening extension",
 		NULL, &PWH_ENABLED, true, PGC_SIGHUP, 0, NULL, NULL, NULL);
 
-#ifdef PWH_WITH_BGWORKER
+#ifdef WITH_BGWORKER
 	DefineCustomStringVariable(
 		"pg_what_is_happening.listen_address",
 		"Listen address for metrics endpoint (host:port)", NULL,
@@ -135,23 +154,33 @@ _PG_init(void)
 		pwh_check_listen_address, NULL, NULL);
 #endif
 
+	DefineCustomIntVariable("pg_what_is_happening.max_tracked_queries",
+							"Maximum number of concurrent queries to track",
+							NULL, &PWH_MAX_TRACKED_QUERIES_GUC, 128, 1, 65536,
+							PGC_POSTMASTER, 0, pwh_check_positive_guc, NULL,
+							NULL);
+
 	DefineCustomIntVariable("pg_what_is_happening.max_nodes_per_query",
 							"Maximum plan nodes tracked per query", NULL,
-							&PWH_MAX_NODES_PER_QUERY, PWH_MAX_NODES_DEFAULT, 16,
-							1024, PGC_POSTMASTER, 0, NULL, NULL, NULL);
+							&PWH_MAX_NODES_PER_QUERY_GUC, 128, 16, 1024,
+							PGC_POSTMASTER, 0, pwh_check_positive_guc, NULL,
+							NULL);
+
+	DefineCustomIntVariable(
+		"pg_what_is_happening.query_text_len",
+		"Maximum query text length to store", NULL, &PWH_QUERY_TEXT_LEN_GUC,
+		1024, 64, 8192, PGC_POSTMASTER, 0, pwh_check_positive_guc, NULL, NULL);
 
 	DefineCustomIntVariable("pg_what_is_happening.signal_timeout_ms",
 							"Timeout waiting for signal handler response", NULL,
-							&PWH_SIGNAL_TIMEOUT_MS, 10, 1, 1000, PGC_SIGHUP, 0,
-							NULL, NULL, NULL);
-
-	/* Request shared memory. */
-	RequestAddinShmemSpace(pwh_shared_memory_size());
-	PWH_REQUEST_LWLOCKS("pg_what_is_happening", 1);
+							&PWH_SIGNAL_TIMEOUT_MS_GUC, 10, 1, 1000, PGC_SIGHUP,
+							0, NULL, NULL, NULL);
 
 	/* Install hooks. */
+	PWH_INSTALL_SHMEM_REQUEST_HOOK();
+
 	PREV_SHMEM_STARTUP_HOOK = shmem_startup_hook;
-	shmem_startup_hook = pwh_shared_memory_startup;
+	shmem_startup_hook = pwh_shared_memory_startup_hook;
 
 	PREV_EXECUTOR_START_HOOK = ExecutorStart_hook;
 	ExecutorStart_hook = pwh_executor_start_hook;
@@ -160,7 +189,7 @@ _PG_init(void)
 	ExecutorEnd_hook = pwh_executor_end_hook;
 
 	pwh_install_signal_handler();
-#ifdef PWH_WITH_BGWORKER
+#ifdef WITH_BGWORKER
 	pwh_register_openmetrics_worker();
 #endif
 
@@ -178,20 +207,28 @@ _PG_fini(void)
 	elog(LOG, "pg_what_is_happening unloaded");
 }
 
+static u64
+get_query_id(const QueryDesc *qd)
+{
+	u64 id = PWH_GET_QUERY_ID(qd->plannedstmt);
+
+	/* Fallback to hash if queryId is 0 (not populated without
+	 * pg_stat_statements). */
+	if (id == 0)
+	{
+		id = pwh_compute_query_id(qd->sourceText);
+	}
+
+	return id;
+}
+
 static void
 pwh_executor_start_hook(QueryDesc *queryDesc, i32 eflags)
 {
 	static bool handler_was_installed = false;
 
 	/* Attach to shared memory if not already attached. */
-	bool was_found;
-	PWH_SHMEM = ShmemInitStruct("pg_what_is_happening",
-								pwh_shared_memory_size(), &was_found);
-	if (PWH_SHMEM)
-	{
-		elog(DEBUG1, "PWH: Backend %d attached to shared memory (found=%d)",
-			 MyProcPid, was_found);
-	}
+	PWH_SHMEM = pwh_get_shared_memory_ptr();
 
 	/* Install signal handler once per backend. */
 	if (!handler_was_installed)
@@ -226,34 +263,33 @@ pwh_executor_start_hook(QueryDesc *queryDesc, i32 eflags)
 		return;
 	}
 
+	PwhNode *plan_nodes = pwh_get_entry_plan_nodes(shmem_be_entry);
+	char	*query_text = pwh_get_entry_query_text(shmem_be_entry);
+
 	u64 num_nodes =
-		pwh_walk_plan_topology(queryDesc->planstate, shmem_be_entry->plan_nodes,
-							   (u64) PWH_MAX_NODES_PER_QUERY, -1);
+		pwh_walk_plan_topology(queryDesc->planstate, plan_nodes,
+							   (u64) PWH_MAX_NODES_PER_QUERY_GUC, -1);
+
+	shmem_be_entry->is_query_active = true;
 
 	elog(DEBUG1, "PWH: Tracking query with %zu nodes for PID %d", num_nodes,
 		 MyProcPid);
 
-	shmem_be_entry->is_query_active = true;
 	shmem_be_entry->num_nodes = (u32) num_nodes;
 	shmem_be_entry->query_start_time = GetCurrentTimestamp();
-
-	shmem_be_entry->query_id = PWH_GET_QUERY_ID(queryDesc->plannedstmt);
-	/* Fallback to hash if queryId is 0 (not populated without pg_stat_statements). */
-	if (shmem_be_entry->query_id == 0)
-		shmem_be_entry->query_id = pwh_compute_query_id(queryDesc->sourceText);
+	shmem_be_entry->query_id = get_query_id(queryDesc);
 
 	/* Copy query text (truncated to buffer size). */
 	if (queryDesc->sourceText)
-		snprintf(shmem_be_entry->query_text, PWH_QUERY_TEXT_LEN, "%s",
+		snprintf(query_text, PWH_QUERY_TEXT_LEN_GUC, "%s",
 				 queryDesc->sourceText);
 	else
-		shmem_be_entry->query_text[0] = '\0';
+		query_text[0] = '\0';
 
 	elog(
 		LOG,
 		"PWH: ExecutorStart PID=%lu query_id=%lu num_nodes=%d shmem=%p query='%s'",
-		MyProcPid, shmem_be_entry->query_id, num_nodes,
-		PWH_SHMEM, shmem_be_entry->query_text);
+		MyProcPid, shmem_be_entry->query_id, num_nodes, PWH_SHMEM, query_text);
 
 	/* Store QueryDesc for signal handler. */
 	pwh_set_current_query_desc(queryDesc);
@@ -278,10 +314,11 @@ pwh_executor_end_hook(QueryDesc *queryDesc)
 			pwh_get_my_backend_entry();
 		if (likely(shmem_be_entry && shmem_be_entry->is_query_active))
 		{
+			PwhNode *plan_nodes = pwh_get_entry_plan_nodes(shmem_be_entry);
+
 			/* Capture final instrumentation. */
-			pwh_walk_plan_instrumentation(queryDesc->planstate,
-										  shmem_be_entry->plan_nodes,
-										  PWH_MAX_NODES_PER_QUERY);
+			pwh_walk_plan_instrumentation(queryDesc->planstate, plan_nodes,
+										  PWH_MAX_NODES_PER_QUERY_GUC);
 
 			elog(DEBUG1,
 				 "PWH: Completed query tracking for PID %d (generation %lu)",
@@ -347,8 +384,7 @@ v1_status_f(PG_FUNCTION_ARGS)
 		MemoryContext	 oldcontext =
 			MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
-		funcctx->tuple_desc =
-			BlessTupleDesc(make_v1_status_tupdesc());
+		funcctx->tuple_desc = BlessTupleDesc(make_v1_status_tupdesc());
 
 		/* Send SIGUSR2 to all active backends to refresh metrics. */
 		u64	 slot_count = pwh_get_backend_entry_count();
@@ -376,7 +412,7 @@ v1_status_f(PG_FUNCTION_ARGS)
 			 signaled);
 
 		/* Wait for generation counters to increment (with timeout). */
-		pg_usleep(PWH_SIGNAL_TIMEOUT_MS * 1000L);
+		pg_usleep(PWH_SIGNAL_TIMEOUT_MS_GUC * 1000L);
 
 		pfree(generations);
 
@@ -403,7 +439,9 @@ v1_status_f(PG_FUNCTION_ARGS)
 		if (shmem_be_entry && shmem_be_entry->backend_pid != 0 &&
 			node_idx < shmem_be_entry->num_nodes)
 		{
-			PwhNode *node = &shmem_be_entry->plan_nodes[node_idx];
+			PwhNode *plan_nodes = pwh_get_entry_plan_nodes(shmem_be_entry);
+			char	*query_text = pwh_get_entry_query_text(shmem_be_entry);
+			PwhNode *node = &plan_nodes[node_idx];
 
 			/* Build result row. */
 			Datum values[17];
@@ -412,7 +450,7 @@ v1_status_f(PG_FUNCTION_ARGS)
 
 			values[0] = Int32GetDatum(shmem_be_entry->backend_pid);
 			values[1] = Int64GetDatum(shmem_be_entry->query_id);
-			values[2] = CStringGetTextDatum(shmem_be_entry->query_text);
+			values[2] = CStringGetTextDatum(query_text);
 			values[3] = BoolGetDatum(shmem_be_entry->is_query_active);
 			values[4] = Int32GetDatum(node->node_id);
 			values[5] = Int32GetDatum(node->parent_node_id);

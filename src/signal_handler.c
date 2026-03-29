@@ -102,9 +102,9 @@ pwh_sigusr2_handler(SIGNAL_ARGS)
 	}
 
 	/* Refresh instrumentation data. */
-	pwh_walk_plan_instrumentation(queryDesc->planstate,
-								  shmem_be_entry->plan_nodes,
-								  PWH_MAX_NODES_DEFAULT);
+	PwhNode *plan_nodes = pwh_get_entry_plan_nodes(shmem_be_entry);
+	pwh_walk_plan_instrumentation(queryDesc->planstate, plan_nodes,
+								  PWH_MAX_NODES_PER_QUERY_GUC);
 
 	/* Increment generation counter to signal completion. */
 	shmem_be_entry->poll_generation++;
