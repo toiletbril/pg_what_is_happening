@@ -20,6 +20,8 @@ jobs:
   run-tests:
     needs: build-image
     runs-on: ubuntu-latest
+    environment:
+      name: testing
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,13 +29,6 @@ jobs:
       - name: Clone PostgreSQL
         run: |
           git clone --depth 1 --branch ${{ env.POSTGRES_VERSION }} https://github.com/postgres/postgres.git postgres
-
-      - name: Cache PostgreSQL build
-        id: cache-postgres
-        uses: actions/cache@v4
-        with:
-          path: postgres-bin
-          key: postgres-bin-${{ env.POSTGRES_VERSION }}
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -46,14 +41,6 @@ jobs:
         run: |
           docker pull ${{ needs.build-image.outputs.image }}
           docker tag ${{ needs.build-image.outputs.image }} pg-what-is-happening-test
-
-      - name: Build PostgreSQL if not cached
-        if: steps.cache-postgres.outputs.cache-hit != 'true'
-        run: |
-          cd postgres
-          ./configure --prefix=$(pwd)/../postgres-bin --enable-debug --enable-cassert CFLAGS="-g3 -O0"
-          make -j$(nproc) install
-          cd ..
 
       - name: Run tests
         run: |
