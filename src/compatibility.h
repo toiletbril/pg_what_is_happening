@@ -63,6 +63,12 @@ extern bool pwh_walk_planstate_recursive(PlanState		 *planstate,
 #include "compatibility/9_4.h"
 #endif
 
+#if PG_VERSION_NUM >= 190000
+#define PWH_INSTR_TIME_MAYBE_GET_DOUBLE(n) (INSTR_TIME_GET_DOUBLE(n))
+#else
+#define PWH_INSTR_TIME_MAYBE_GET_DOUBLE(n) (n)
+#endif
+
 /* Query ID computation fallback, used when queryId is 0. */
 extern u64 pwh_compute_query_id(const char *query_text);
 
