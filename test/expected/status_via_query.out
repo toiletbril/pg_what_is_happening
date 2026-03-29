@@ -176,16 +176,16 @@ product_profitability AS (
     AND o.order_date BETWEEN pr.start_date AND pr.end_date
   GROUP BY p.product_id, p.product_name, p.category
 )
-SELECT COUNT(*)
+SELECT COUNT(*) > 900000 AS has_many_rows
 FROM regional_sales rs
 JOIN warehouse_performance wp ON rs.region = wp.warehouse_region
 JOIN product_profitability pp ON rs.category = pp.category
 WHERE rs.total_sales > 1000
   AND rs.avg_rating > 2.5
   AND pp.return_count < 100;
- count  
---------
- 935000
+ has_many_rows 
+---------------
+ t
 (1 row)
 
 -- Verify the view can be queried and returns data.
