@@ -1,5 +1,7 @@
 set -eu
 
+sudo chown -R postgres:postgres /postgres /pg_what_is_happening
+
 cd /pg_what_is_happening
 
 if ! test -f /postgres/config.status; then
