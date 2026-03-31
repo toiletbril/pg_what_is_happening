@@ -99,4 +99,4 @@ pwh_hash_djb2(u64 seed, const u8 *data, u64 data_size)
 	return hash;
 }
 
-#endif /* PWH_COMMON_H. */
+#endif /* PWH_COMMON_H */

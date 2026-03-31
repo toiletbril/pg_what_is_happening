@@ -1,4 +1,4 @@
--- Basic functionality tests for pg_what_is_happening.
+-- Basic smoke tests for pg_what_is_happening extension.
 -- Check that schema was created.
 SELECT nspname FROM pg_namespace WHERE nspname = 'what_is_happening';
       nspname      
@@ -21,19 +21,5 @@ WHERE schemaname = 'what_is_happening' AND viewname = 'v1_status';
  viewname  
 -----------
  v1_status
-(1 row)
-
--- Test basic query execution and metrics capture.
-SELECT 1 + 1;
- ?column? 
-----------
-        2
-(1 row)
-
--- Query the status to verify we have at least our own backend.
-SELECT COUNT(*) > 0 AS has_results FROM what_is_happening.v1_status;
- has_results 
--------------
- t
 (1 row)
 

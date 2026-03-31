@@ -5,12 +5,6 @@ SOURCES = \
 	src/signal_handler.c \
 	src/compatibility.c
 
-ifeq ($(WITH_BGWORKER), yes)
-SOURCES += \
-	src/bgworker.c \
-	src/http_server.c
-endif
-
 ENVCFLAGS := $(CFLAGS)
 
 OS_INFO := $(shell uname -rvom || echo "<no uname>")
@@ -43,8 +37,11 @@ CFLAGS2 := \
 	$(ENVCFLAGS)
 
 ifeq ($(WITH_BGWORKER), yes)
+SOURCES += \
+	src/bg_worker.c \
+	src/http_server.c
+
 CFLAGS2 += -DWITH_BGWORKER
-endif
 
 ifeq ($(HTTP_BACKEND), mongoose)
 CFLAGS2 += -DMG_ENABLE_LOG=0 -DMG_ENABLE_PACKED_FS=0 -DMG_ENABLE_LINES=0
@@ -52,6 +49,9 @@ SOURCES += src/http_server_backend/mongoose.c vendor/mongoose.c
 else ifeq ($(HTTP_BACKEND), dumb)
 SOURCES += src/http_server_backend/dumb.c
 endif
+endif
+
+OBJS := $(SOURCES:%.c=src/o/$(MODE)/%.o)
 
 ifeq ($(MODE), rel)
 CFLAGS2 += -O2 -DNDEBUG
@@ -73,5 +73,3 @@ dirs:
 src/o/$(MODE)/%.o: %.c | dirs
 	printf "\t%-42s $@\n" $<
 	$(CC) $(CPPFLAGS) $(CFLAGS2) -c $< -o $@
-
-OBJS := $(SOURCES:%.c=src/o/$(MODE)/%.o)

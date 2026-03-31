@@ -37,4 +37,4 @@ extern u64 pwh_walk_plan_topology(PlanState *planstate, PwhNode *metrics,
 extern void pwh_walk_plan_instrumentation(PlanState *planstate,
 										  PwhNode *metrics, u64 max_nodes);
 
-#endif /* PWH_PLAN_TREE_WALKER_H. */
+#endif /* PWH_PLAN_TREE_WALKER_H */

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -eu
+set -xeu
 
 sudo chown -R postgres:postgres /postgres /pg_what_is_happening
 

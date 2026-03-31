@@ -16,8 +16,8 @@
  * See top-level LICENSE file.
  */
 
-#ifndef PWH_BGWORKER_H
-#define PWH_BGWORKER_H
+#ifndef PWH_BG_WORKER_H
+#define PWH_BG_WORKER_H
 
 #include "postgres.h"
 
@@ -26,4 +26,4 @@
 extern void			   pwh_register_openmetrics_worker(void);
 extern wontreturn void pwh_bgworker_main(Datum main_arg);
 
-#endif /* PWH_BGWORKER_H. */
+#endif /* PWH_BG_WORKER_H */
