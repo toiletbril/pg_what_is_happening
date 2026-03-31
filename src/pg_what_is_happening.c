@@ -34,6 +34,7 @@
 #include "utils/builtins.h"
 #include "utils/guc.h"
 #include "utils/timestamp.h"
+#include "access/xact.h"
 #ifdef WITH_BGWORKER
 #include "bg_worker.h"
 #endif
@@ -52,15 +53,16 @@ i32 PWH_QUERY_TEXT_LEN_GUC = 1024;
 i32 PWH_SIGNAL_TIMEOUT_MS_GUC = 10;
 
 /* Previous hooks. */
-static ExecutorStart_hook_type PREV_EXECUTOR_START_HOOK = NULL;
-static ExecutorEnd_hook_type   PREV_EXECUTOR_END_HOOK = NULL;
+static ExecutorStart_hook_type PREV_QUERY_START_HOOK = NULL;
+static ExecutorEnd_hook_type   PREV_QUERY_FINISH_HOOK = NULL;
 extern shmem_startup_hook_type PREV_SHMEM_STARTUP_HOOK;
 
 void _PG_init(void);
 void _PG_fini(void);
 
-static void pwh_executor_start_hook(QueryDesc *queryDesc, i32 eflags);
-static void pwh_executor_end_hook(QueryDesc *queryDesc);
+static void pwh_query_start_hook(QueryDesc *queryDesc, i32 eflags);
+static void pwh_query_end_hook(QueryDesc *queryDesc);
+static void pwh_query_cleanup_callback(XactEvent event, void *arg);
 
 static bool pwh_check_positive_guc(int *newval, void **extra, GucSource source);
 
@@ -182,11 +184,11 @@ _PG_init(void)
 	PREV_SHMEM_STARTUP_HOOK = shmem_startup_hook;
 	shmem_startup_hook = pwh_shared_memory_startup_hook;
 
-	PREV_EXECUTOR_START_HOOK = ExecutorStart_hook;
-	ExecutorStart_hook = pwh_executor_start_hook;
+	PREV_QUERY_START_HOOK = ExecutorStart_hook;
+	ExecutorStart_hook = pwh_query_start_hook;
 
-	PREV_EXECUTOR_END_HOOK = ExecutorEnd_hook;
-	ExecutorEnd_hook = pwh_executor_end_hook;
+	PREV_QUERY_FINISH_HOOK = ExecutorEnd_hook;
+	ExecutorEnd_hook = pwh_query_end_hook;
 
 	pwh_install_signal_handler();
 #ifdef WITH_BGWORKER
@@ -201,8 +203,8 @@ _PG_fini(void)
 {
 	/* Restore hooks. */
 	shmem_startup_hook = PREV_SHMEM_STARTUP_HOOK;
-	ExecutorStart_hook = PREV_EXECUTOR_START_HOOK;
-	ExecutorEnd_hook = PREV_EXECUTOR_END_HOOK;
+	ExecutorStart_hook = PREV_QUERY_START_HOOK;
+	ExecutorEnd_hook = PREV_QUERY_FINISH_HOOK;
 
 	elog(LOG, "pg_what_is_happening unloaded");
 }
@@ -222,10 +224,47 @@ get_query_id(const QueryDesc *qd)
 	return id;
 }
 
+/*
+ * Cleanup callback invoked on transaction abort or commit.
+ * Ensures CURRENT_QUERY_DESC is cleared even when ExecutorEnd_hook is not called.
+ */
 static void
-pwh_executor_start_hook(QueryDesc *queryDesc, i32 eflags)
+pwh_query_cleanup_callback(XactEvent event, void *arg)
+{
+	unused(arg);
+
+	/* Only clean up on abort - commit path goes through ExecutorEnd normally. */
+	if (event != XACT_EVENT_ABORT
+#ifdef XACT_EVENT_PARALLEL_ABORT
+		&& event != XACT_EVENT_PARALLEL_ABORT
+#endif
+	)
+		return;
+
+	/* Clear QueryDesc pointer to prevent dangling reference. */
+	pwh_set_current_query_desc(NULL);
+
+	if (!PWH_ENABLED)
+		return;
+
+	/* Get our backend entry and mark query as inactive. */
+	PwhSharedMemoryBackendEntry *shmem_be_entry = pwh_get_my_backend_entry();
+	if (shmem_be_entry != NULL && shmem_be_entry->is_query_active)
+	{
+		shmem_be_entry->is_query_active = false;
+		shmem_be_entry->poll_generation++;
+
+		elog(DEBUG1,
+			 "PWH: Cleaned up query state on abort for PID %d (generation %lu)",
+			 MyProcPid, (unsigned long) shmem_be_entry->poll_generation);
+	}
+}
+
+static void
+pwh_query_start_hook(QueryDesc *queryDesc, i32 eflags)
 {
 	static bool handler_was_installed = false;
+	static bool cleanup_callback_registered = false;
 
 	/* Attach to shared memory if not already attached. */
 	PWH_SHMEM = pwh_get_shared_memory_ptr();
@@ -237,14 +276,21 @@ pwh_executor_start_hook(QueryDesc *queryDesc, i32 eflags)
 		handler_was_installed = true;
 	}
 
+	/* Register cleanup callback once per backend. */
+	if (!cleanup_callback_registered)
+	{
+		RegisterXactCallback(pwh_query_cleanup_callback, NULL);
+		cleanup_callback_registered = true;
+	}
+
 	elog(LOG, "PWH: ExecutorStart hook called PID=%d enabled=%d", MyProcPid,
 		 PWH_ENABLED);
 
 	/* Force instrumentation on all nodes. */
 	queryDesc->instrument_options |= INSTRUMENT_ALL;
 
-	if (PREV_EXECUTOR_START_HOOK)
-		PREV_EXECUTOR_START_HOOK(queryDesc, eflags);
+	if (PREV_QUERY_START_HOOK)
+		PREV_QUERY_START_HOOK(queryDesc, eflags);
 	else
 		standard_ExecutorStart(queryDesc, eflags);
 
@@ -287,7 +333,7 @@ pwh_executor_start_hook(QueryDesc *queryDesc, i32 eflags)
 		query_text[0] = '\0';
 
 	elog(
-		LOG,
+		DEBUG1,
 		"PWH: ExecutorStart PID=%lu query_id=%lu num_nodes=%d shmem=%p query='%s'",
 		MyProcPid, shmem_be_entry->query_id, num_nodes, PWH_SHMEM, query_text);
 
@@ -296,10 +342,10 @@ pwh_executor_start_hook(QueryDesc *queryDesc, i32 eflags)
 }
 
 static void
-pwh_executor_end_hook(QueryDesc *queryDesc)
+pwh_query_end_hook(QueryDesc *queryDesc)
 {
 	elog(
-		LOG,
+		DEBUG1,
 		"PWH: ExecutorEnd PID=%d calls=%ld success=%ld no_qd=%ld shm_null=%ld no_slot=%ld",
 		MyProcPid, (long) pwh_get_signal_handler_call_count(),
 		(long) pwh_get_signal_handler_success_count(),
@@ -312,7 +358,7 @@ pwh_executor_end_hook(QueryDesc *queryDesc)
 		/* Get our backend entry. */
 		PwhSharedMemoryBackendEntry *shmem_be_entry =
 			pwh_get_my_backend_entry();
-		if (likely(shmem_be_entry && shmem_be_entry->is_query_active))
+		if (likely(shmem_be_entry != NULL && shmem_be_entry->is_query_active))
 		{
 			PwhNode *plan_nodes = pwh_get_entry_plan_nodes(shmem_be_entry);
 
@@ -335,8 +381,8 @@ pwh_executor_end_hook(QueryDesc *queryDesc)
 	}
 
 	/* Call previous hook or standard function. */
-	if (PREV_EXECUTOR_END_HOOK)
-		PREV_EXECUTOR_END_HOOK(queryDesc);
+	if (PREV_QUERY_FINISH_HOOK)
+		PREV_QUERY_FINISH_HOOK(queryDesc);
 	else
 		standard_ExecutorEnd(queryDesc);
 }
