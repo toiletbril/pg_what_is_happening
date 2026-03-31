@@ -33,6 +33,7 @@ max_connections = 50
 pg_what_is_happening.max_tracked_queries = 16
 pg_what_is_happening.max_nodes = 64
 pg_what_is_happening.query_text_length = 512
+shared_buffers = 256 MB
 EOF
 
 echo "Starting PostgreSQL..."
