@@ -25,7 +25,7 @@ endif
 
 MODULE_big = pg_what_is_happening
 EXTENSION = pg_what_is_happening
-DATA = pg_what_is_happening--1.0.sql
+DATA = pg_what_is_happening--1.0.sql pg_what_is_happening--1.0--1.1.sql
 REGRESS_OPTS = --inputdir=test --outputdir=test --schedule=test/schedule
 REGRESS = teardown
 EXTRA_CLEAN = src/o/
@@ -52,7 +52,9 @@ reset:
 	echo "    " RM src/o/$(MODE) pg_what_is_happening.so
 	rm -rf src/o/$(MODE) pg_what_is_happening.so
 
-relaunch: install
+dev-reset:
+	$(MAKE) reset
+	$(MAKE) install -j$(shell nproc)
 	pg_ctl -D /data -l /tmp/postgres.log restart
 
 .PHONY: fmt tidy reset relaunch dirs

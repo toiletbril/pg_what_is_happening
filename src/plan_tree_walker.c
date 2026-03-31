@@ -107,8 +107,8 @@ pwh_walk_planstate_recursive(PlanState *planstate, PwhNodeVisitorFn visitor,
 		ListCell *lc;
 		foreach (lc, planstate->subPlan)
 		{
-			PlanState *subplan = (PlanState *) lfirst(lc);
-			if (!pwh_walk_planstate_recursive(subplan, visitor, context))
+			SubPlanState *subplanstate = (SubPlanState *) lfirst(lc);
+			if (!pwh_walk_planstate_recursive(subplanstate->planstate, visitor, context))
 			{
 				return false;
 			}
@@ -146,6 +146,12 @@ static bool
 topology_visitor(PlanState *planstate, void *context)
 {
 	TopologyContext *ctx = (TopologyContext *) context;
+
+	if (planstate == NULL || planstate->plan == NULL)
+		return false;
+
+	if (planstate->type == T_ProjectionInfo)
+		return false;
 
 	if (*ctx->node_counter >= ctx->max_nodes)
 		return false;
@@ -194,18 +200,18 @@ walk_topology_with_parent(PlanState *planstate, i32 parent_id,
 	i32 current_id = (*ctx->node_counter) - 1;
 	ctx->parent_id = current_id;
 
-	if (planstate->lefttree)
+	if (planstate->lefttree != NULL)
 		walk_topology_with_parent(planstate->lefttree, current_id, ctx);
-	if (planstate->righttree)
+	if (planstate->righttree != NULL)
 		walk_topology_with_parent(planstate->righttree, current_id, ctx);
 
-	if (planstate->subPlan)
+	if (planstate->subPlan != NULL)
 	{
 		ListCell *lc;
 		foreach (lc, planstate->subPlan)
 		{
-			PlanState *subplan = (PlanState *) lfirst(lc);
-			walk_topology_with_parent(subplan, current_id, ctx);
+			SubPlanState *subplanstate = (SubPlanState *) lfirst(lc);
+			walk_topology_with_parent(subplanstate->planstate, current_id, ctx);
 		}
 	}
 
@@ -222,7 +228,7 @@ pwh_walk_plan_instrumentation(PlanState *planstate, PwhNode *metrics,
 {
 	u64 node_counter = 0;
 
-	if (unlikely(!planstate || !metrics))
+	if (unlikely(planstate == NULL || metrics == NULL))
 	{
 		return;
 	}
@@ -241,13 +247,19 @@ instrumentation_visitor(PlanState *planstate, void *context)
 {
 	InstrumentationContext *ctx = (InstrumentationContext *) context;
 
+	if (planstate == NULL)
+		return false;
+
+	if (planstate->type == T_ProjectionInfo)
+		return false;
+
 	if (*ctx->node_counter >= ctx->max_nodes)
 		return false;
 
 	u64				 current_id = (*ctx->node_counter)++;
 	Instrumentation *instr = planstate->instrument;
 
-	if (likely(instr))
+	if (likely(instr != NULL))
 	{
 		ctx->metrics[current_id].execution.tuples_returned =
 			instr->ntuples + instr->tuplecount;

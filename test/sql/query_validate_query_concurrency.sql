@@ -1,0 +1,25 @@
+\! psql -d contrib_regression -c "SELECT pg_sleep(0.03), COUNT(*) FROM orders o JOIN users u ON o.user_id = u.user_id;" > /dev/null 2>&1 &
+\! psql -d contrib_regression -c "SELECT pg_sleep(0.04), COUNT(*) FROM products p JOIN reviews r ON p.product_id = r.product_id;" > /dev/null 2>&1 &
+
+SELECT pg_sleep(0.06);
+
+SELECT
+  COUNT(DISTINCT backend_pid) >= 2 AS has_multiple_pids,
+  COUNT(DISTINCT query_id) >= 2 AS has_multiple_query_ids
+FROM what_is_happening.v1_status
+WHERE query_text LIKE '%pg_sleep(0.0%';
+
+SELECT
+  COUNT(*) = COUNT(DISTINCT backend_pid || '-' || query_id || '-' || node_id) AS no_duplicate_nodes
+FROM what_is_happening.v1_status
+WHERE query_text LIKE '%pg_sleep(0.0%';
+
+SELECT
+  COUNT(*) FILTER (WHERE backend_pid IN (
+    SELECT backend_pid FROM what_is_happening.v1_status WHERE query_text LIKE '%pg_sleep(0.03)%'
+  ) AND query_text NOT LIKE '%pg_sleep(0.03)%') = 0 AS no_cross_contamination_q1,
+  COUNT(*) FILTER (WHERE backend_pid IN (
+    SELECT backend_pid FROM what_is_happening.v1_status WHERE query_text LIKE '%pg_sleep(0.04)%'
+  ) AND query_text NOT LIKE '%pg_sleep(0.04)%') = 0 AS no_cross_contamination_q2
+FROM what_is_happening.v1_status
+WHERE query_text LIKE '%pg_sleep(0.0%';

@@ -27,9 +27,12 @@ initdb -D /data
 
 echo "Configuring postgresql.conf..."
 cat >> /data/postgresql.conf <<EOF
-max_connections = 50
 shared_preload_libraries = 'pg_what_is_happening'
 log_min_messages = debug1
+max_connections = 50
+pg_what_is_happening.max_tracked_queries = 16
+pg_what_is_happening.max_nodes = 64
+pg_what_is_happening.query_text_length = 512
 EOF
 
 echo "Starting PostgreSQL..."
