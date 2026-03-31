@@ -150,9 +150,6 @@ topology_visitor(PlanState *planstate, void *context)
 	if (planstate == NULL || planstate->plan == NULL)
 		return false;
 
-	if (planstate->type == T_ProjectionInfo)
-		return false;
-
 	if (*ctx->node_counter >= ctx->max_nodes)
 		return false;
 
@@ -248,9 +245,6 @@ instrumentation_visitor(PlanState *planstate, void *context)
 	InstrumentationContext *ctx = (InstrumentationContext *) context;
 
 	if (planstate == NULL)
-		return false;
-
-	if (planstate->type == T_ProjectionInfo)
 		return false;
 
 	if (*ctx->node_counter >= ctx->max_nodes)
