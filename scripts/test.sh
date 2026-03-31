@@ -26,13 +26,12 @@ initdb -D /data
 
 echo "Configuring postgresql.conf..."
 cat >> /data/postgresql.conf <<EOF
-max_connections = 50
 shared_preload_libraries = 'pg_what_is_happening'
 log_min_messages = debug1
+max_connections = 50
 pg_what_is_happening.max_tracked_queries = 16
 pg_what_is_happening.max_nodes = 64
 pg_what_is_happening.query_text_length = 512
-shared_buffers = 256MB
 EOF
 
 if ! pg_ctl -D /data -l /tmp/postgres.log -w start; then
@@ -43,15 +42,15 @@ fi
 
 if ! make -C /pg_what_is_happening installcheck; then
   echo "ERROR: Tests failed"
-  if test -f /pg_what_is_happening/test/regression.diffs; then
-    echo ""
-    echo "=== Regression diffs ==="
-    cat /pg_what_is_happening/test/regression.diffs
-  fi
   echo ""
   echo "=== PostgreSQL log ==="
   cat /tmp/postgres.log
   pg_ctl -D /data stop
+  echo ""
+  if test -f /pg_what_is_happening/test/regression.diffs; then
+    echo "=== Regression diffs ==="
+    cat /pg_what_is_happening/test/regression.diffs
+  fi
   exit 1
 fi
 
