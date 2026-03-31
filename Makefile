@@ -25,7 +25,7 @@ endif
 
 MODULE_big = pg_what_is_happening
 EXTENSION = pg_what_is_happening
-DATA = pg_what_is_happening--1.0.sql pg_what_is_happening--1.0--1.1.sql
+DATA = pg_what_is_happening--1.0.sql pg_what_is_happening--1.0--1.1.sql pg_what_is_happening--1.1.sql
 REGRESS_OPTS = --inputdir=test --outputdir=test --schedule=test/schedule
 REGRESS = teardown
 EXTRA_CLEAN = src/o/

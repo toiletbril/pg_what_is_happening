@@ -2,18 +2,18 @@
 -- This test launches a slow query and queries /metrics while it's running.
 
 -- Launch async query that will run for ~0.1 second.
-\! psql -d contrib_regression -c "SELECT pg_sleep(0.1), COUNT(*) FROM orders o JOIN users u ON o.user_id = u.user_id LIMIT 10;" > /dev/null 2>&1 &
+\! psql -d contrib_regression -c "SELECT pg_sleep(0.01), COUNT(*) FROM orders o JOIN users u ON o.user_id = u.user_id LIMIT 10;" > /dev/null 2>&1 &
 
 -- Give the background query time to start and begin execution.
-SELECT pg_sleep(0.05);
+SELECT pg_sleep(0.01);
 
 -- Query the /metrics endpoint while the query is running.
 -- We should see OpenMetrics output with node-level metrics.
-\! curl -s http://localhost:9187/metrics > /tmp/pwh_metrics_output.txt
+\! curl -s http://localhost:9187/metrics > /data/pwh_metrics_output.txt
 
 -- Verify OpenMetrics format - check for HELP and TYPE declarations.
-\set help_count `grep -c "^# HELP pg_what_is_happening_active_query_node" /tmp/pwh_metrics_output.txt`
-\set type_count `grep -c "^# TYPE pg_what_is_happening_active_query_node" /tmp/pwh_metrics_output.txt`
+\set help_count `grep -c "^# HELP pg_what_is_happening_active_query_node" /data/pwh_metrics_output.txt`
+\set type_count `grep -c "^# TYPE pg_what_is_happening_active_query_node" /data/pwh_metrics_output.txt`
 
 SELECT
   :help_count AS help_count,
@@ -22,7 +22,7 @@ SELECT
   :type_count > 0 AS has_type_declarations;
 
 -- Verify actual metric lines are present (with labels and values).
-\set metric_count `grep -c "^pg_what_is_happening_active_query_node_.*{pid=" /tmp/pwh_metrics_output.txt`
+\set metric_count `grep -c "^pg_what_is_happening_active_query_node_.*{pid=" /data/pwh_metrics_output.txt`
 SELECT
   :metric_count > 200 AS has_sufficient_metrics;
 
@@ -32,4 +32,4 @@ SELECT
   :'http_code' = '200' AS http_status_ok;
 
 -- Cleanup temp files.
-\! rm -f /tmp/pwh_*.txt
+\! rm -f /data/pwh_*.txt
