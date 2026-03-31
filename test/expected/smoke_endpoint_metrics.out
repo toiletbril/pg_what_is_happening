@@ -32,7 +32,7 @@ SELECT
   (SELECT pg_read_file('/tmp/pwh_metric_count.txt')::text::int) > 0 AS has_metric_values;
  metric_count | has_metric_values 
 --------------+-------------------
-           54 | t
+          279 | t
 (1 row)
 
 -- Check HTTP status code is 200.

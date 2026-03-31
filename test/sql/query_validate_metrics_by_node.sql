@@ -1,0 +1,21 @@
+\! psql -d contrib_regression -c "SELECT pg_sleep(0.1), o.order_id, u.username, p.product_name, SUM(o.quantity * p.price) as total FROM orders o JOIN users u ON o.user_id = u.user_id JOIN products p ON o.product_id = p.product_id GROUP BY o.order_id, u.username, p.product_name ORDER BY total DESC LIMIT 100;" > /dev/null 2>&1 &
+
+SELECT pg_sleep(0.05);
+
+SELECT
+  COUNT(*) FILTER (WHERE node_tag = 'SeqScan' AND cache_hits + cache_misses > 0) > 0 AS seqscan_has_buffer_activity,
+  COUNT(*) FILTER (WHERE node_tag LIKE '%Hash%') > 0 AS has_hash_nodes,
+  COUNT(*) FILTER (WHERE node_tag = 'Sort') > 0 AS has_sort_nodes,
+  COUNT(*) FILTER (WHERE node_tag = 'Agg') > 0 AS has_agg_nodes,
+  COUNT(*) FILTER (WHERE node_tag = 'Limit' AND tuples_returned <= 100) > 0 AS limit_respects_bound
+FROM what_is_happening.v1_status
+WHERE query_text LIKE '%pg_sleep(0.1)%';
+
+SELECT
+  COUNT(*) FILTER (WHERE parent_node_id >= 0 AND NOT EXISTS (
+    SELECT 1 FROM what_is_happening.v1_status parent
+    WHERE parent.query_id = what_is_happening.v1_status.query_id
+      AND parent.node_id = what_is_happening.v1_status.parent_node_id
+  )) = 0 AS all_parents_valid
+FROM what_is_happening.v1_status
+WHERE query_text LIKE '%pg_sleep(0.1)%';

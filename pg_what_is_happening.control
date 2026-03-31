@@ -1,6 +1,6 @@
 # pg_what_is_happening extension
 comment = 'Real-time per-node execution metrics'
-default_version = '1.0'
+default_version = '1.1'
 module_pathname = '$libdir/pg_what_is_happening'
 relocatable = false
 requires = ''

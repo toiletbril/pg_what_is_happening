@@ -32,6 +32,7 @@ log_min_messages = debug1
 pg_what_is_happening.max_tracked_queries = 16
 pg_what_is_happening.max_nodes = 64
 pg_what_is_happening.query_text_length = 512
+shared_buffers = 256MB
 EOF
 
 if ! pg_ctl -D /data -l /tmp/postgres.log -w start; then

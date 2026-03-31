@@ -79,7 +79,9 @@ static void		   append_metric(Formatter *fmt, PwhNode *node, MetricType type,
 static void		   buffer_append(FormatterBuffer *buf, const char *fmt, ...);
 static void		   buffer_ensure_capacity(FormatterBuffer *buf, u64 needed);
 
-static void handle_sigterm(SIGNAL_ARGS);
+static void		   handle_sigterm(SIGNAL_ARGS);
+
+static HttpServer *PWH_SERVER = NULL;
 
 void
 pwh_register_openmetrics_worker(void)
@@ -123,9 +125,9 @@ pwh_bgworker_main(Datum main_arg)
 
 	elog(LOG, "PWH: Starting openmetrics exporter on %s", listen_addr);
 
-	HttpServer *server = pwh_http_server_create(listen_addr);
+	PWH_SERVER = pwh_http_server_create(listen_addr);
 
-	if (server == NULL)
+	if (PWH_SERVER == NULL)
 	{
 		elog(ERROR, "PWH: Failed to create HTTP server on %s", listen_addr);
 		proc_exit(1);
@@ -133,9 +135,9 @@ pwh_bgworker_main(Datum main_arg)
 
 	elog(LOG, "PWH: Metrics endpoint listening on %s", listen_addr);
 
-	pwh_http_server_set_handler(server, metrics_handler, NULL);
-	pwh_http_server_run(server); /* Blocking. */
-	pwh_http_server_destroy(server);
+	pwh_http_server_set_handler(PWH_SERVER, metrics_handler, NULL);
+	pwh_http_server_run(PWH_SERVER); /* Blocking. */
+	pwh_http_server_destroy(PWH_SERVER);
 
 	elog(LOG, "PWH: Metrics endpoint shutting down");
 
@@ -388,6 +390,12 @@ static void
 handle_sigterm(SIGNAL_ARGS)
 {
 	int save_errno = errno;
+
+	if (PWH_SERVER != NULL)
+	{
+		pwh_http_server_stop(PWH_SERVER);
+	}
+
 	proc_exit(0);
 	errno = save_errno;
 }

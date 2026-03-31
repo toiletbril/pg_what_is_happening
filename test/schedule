@@ -1,6 +1,11 @@
 test: setup
-test: basic
-test: status_via_query
-test: http_server
-test: status_via_http_endpoint
-# teardown will be launched automatically
+test: smoke_test
+test: smoke_query_metrics
+test: query_validate_metrics_by_node
+test: query_validate_spill_metrics
+test: query_validate_nested_loop
+test: query_validate_query_concurrency
+test: smoke_endpoint_metrics
+test: endpoint_stress
+test: endpoint_openmetrics_conformity
+test: endpoint_validate_metrics_by_node

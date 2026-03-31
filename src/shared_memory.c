@@ -34,6 +34,29 @@ shmem_startup_hook_type PREV_SHMEM_STARTUP_HOOK = NULL;
 
 PWH_LWLOCK_TRANCHE_ID_DECL;
 
+static void pwh_backend_exit_callback(int code, Datum arg);
+
+static void
+pwh_backend_exit_callback(int code, Datum arg)
+{
+	unused(code);
+	unused(arg);
+
+	for (u64 i = 0; i < (u64) PWH_MAX_TRACKED_QUERIES_GUC; i++)
+	{
+		PwhSharedMemoryBackendEntry *be = pwh_get_backend_entry(i);
+
+		if (be && be->backend_pid == MyProcPid)
+		{
+			be->backend_pid = 0;
+			be->is_query_active = false;
+			elog(DEBUG2, "PWH: Released backend entry %lu for PID %u", i,
+				 MyProcPid);
+			return;
+		}
+	}
+}
+
 Size
 pwh_get_backend_entry_stride(void)
 {
@@ -126,6 +149,8 @@ pwh_get_my_backend_entry(void)
 			PWH_LWLOCK_RELEASE(PWH_SHMEM->lock);
 			elog(DEBUG2, "PWH: Allocated backend entry %lu for PID %u", i,
 				 MyProcPid);
+
+			before_shmem_exit(pwh_backend_exit_callback, (Datum) 0);
 
 			return be;
 		}
