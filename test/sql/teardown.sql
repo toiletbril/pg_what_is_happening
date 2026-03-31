@@ -8,11 +8,12 @@ BEGIN
     FROM pg_stat_activity
     WHERE datname = current_database()
       AND pid != pg_backend_pid()
-      AND backend_type = 'client backend'
   LOOP
     PERFORM pg_terminate_backend(r.pid);
   END LOOP;
 END $$;
+
+SELECT pg_sleep(0.1);
 
 DROP TABLE IF EXISTS promotions CASCADE;
 DROP TABLE IF EXISTS returns CASCADE;
