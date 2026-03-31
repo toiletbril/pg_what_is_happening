@@ -24,8 +24,7 @@ SELECT
 -- Verify actual metric lines are present (with labels and values).
 \! grep -c "^pg_what_is_happening_active_query_node_.*{pid=" /tmp/pwh_metrics_output.txt > /tmp/pwh_metric_count.txt
 SELECT
-  (SELECT pg_read_file('/tmp/pwh_metric_count.txt')::text::int) AS metric_count,
-  (SELECT pg_read_file('/tmp/pwh_metric_count.txt')::text::int) > 0 AS has_metric_values;
+  (SELECT pg_read_file('/tmp/pwh_metric_count.txt')::text::int) > 200 AS has_sufficient_metrics;
 
 -- Check HTTP status code is 200.
 \! curl -s -o /dev/null -w "%{http_code}" http://localhost:9187/metrics > /tmp/pwh_status_code.txt
