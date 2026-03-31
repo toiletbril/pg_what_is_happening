@@ -12,23 +12,24 @@ SELECT pg_sleep(0.05);
 \! curl -s http://localhost:9187/metrics > /tmp/pwh_metrics_output.txt
 
 -- Verify OpenMetrics format - check for HELP and TYPE declarations.
-\! grep -c "^# HELP pg_what_is_happening_active_query_node" /tmp/pwh_metrics_output.txt > /tmp/pwh_help_count.txt
-\! grep -c "^# TYPE pg_what_is_happening_active_query_node" /tmp/pwh_metrics_output.txt > /tmp/pwh_type_count.txt
+\set help_count `grep -c "^# HELP pg_what_is_happening_active_query_node" /tmp/pwh_metrics_output.txt`
+\set type_count `grep -c "^# TYPE pg_what_is_happening_active_query_node" /tmp/pwh_metrics_output.txt`
 
 SELECT
-  (SELECT pg_read_file('/tmp/pwh_help_count.txt')::text::int) AS help_count,
-  (SELECT pg_read_file('/tmp/pwh_help_count.txt')::text::int) > 0 AS has_help_declarations,
-  (SELECT pg_read_file('/tmp/pwh_type_count.txt')::text::int) AS type_count,
-  (SELECT pg_read_file('/tmp/pwh_type_count.txt')::text::int) > 0 AS has_type_declarations;
+  :help_count AS help_count,
+  :help_count > 0 AS has_help_declarations,
+  :type_count AS type_count,
+  :type_count > 0 AS has_type_declarations;
 
 -- Verify actual metric lines are present (with labels and values).
-\! grep -c "^pg_what_is_happening_active_query_node_.*{pid=" /tmp/pwh_metrics_output.txt > /tmp/pwh_metric_count.txt
+\set metric_count `grep -c "^pg_what_is_happening_active_query_node_.*{pid=" /tmp/pwh_metrics_output.txt`
 SELECT
-  (SELECT pg_read_file('/tmp/pwh_metric_count.txt')::text::int) > 200 AS has_sufficient_metrics;
+  :metric_count > 200 AS has_sufficient_metrics;
 
 -- Check HTTP status code is 200.
-\! curl -s -o /dev/null -w "%{http_code}" http://localhost:9187/metrics > /tmp/pwh_status_code.txt
-SELECT regexp_replace(pg_read_file('/tmp/pwh_status_code.txt')::text, E'[\\n\\r]+', '', 'g') = '200' AS http_status_ok;
+\set http_code `curl -s -o /dev/null -w "%{http_code}" http://localhost:9187/metrics`
+SELECT
+  :'http_code' = '200' AS http_status_ok;
 
 -- Cleanup temp files.
 \! rm -f /tmp/pwh_*.txt
