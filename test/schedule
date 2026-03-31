@@ -1,0 +1,6 @@
+test: setup
+test: basic
+test: status_via_query
+test: http_server
+test: status_via_http_endpoint
+# teardown will be launched automatically

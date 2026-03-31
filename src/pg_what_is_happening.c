@@ -35,7 +35,7 @@
 #include "utils/guc.h"
 #include "utils/timestamp.h"
 #ifdef WITH_BGWORKER
-#include "bgworker.h"
+#include "bg_worker.h"
 #endif
 
 PG_MODULE_MAGIC;
@@ -354,7 +354,7 @@ make_v1_status_tupdesc(void)
 	TupleDescInitEntry(tupdesc, (AttrNumber) 5, "node_id", INT4OID, -1, 0);
 	TupleDescInitEntry(tupdesc, (AttrNumber) 6, "parent_node_id", INT4OID, -1,
 					   0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 7, "tag", TEXTOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 7, "node_tag", TEXTOID, -1, 0);
 	TupleDescInitEntry(tupdesc, (AttrNumber) 8, "tuples_returned", FLOAT8OID,
 					   -1, 0);
 	TupleDescInitEntry(tupdesc, (AttrNumber) 9, "startup_time_us", FLOAT8OID,

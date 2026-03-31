@@ -7,8 +7,8 @@
 
 MODE ?= dbg
 
-HTTP_BACKEND ?= mongoose
 WITH_BGWORKER ?= yes
+HTTP_BACKEND ?= mongoose
 
 ifndef VERBOSE
 MAKEFLAGS += -s
@@ -26,8 +26,8 @@ endif
 MODULE_big = pg_what_is_happening
 EXTENSION = pg_what_is_happening
 DATA = pg_what_is_happening--1.0.sql
-REGRESS = basic status_via_query openmetrics
-REGRESS_OPTS = --inputdir=test --outputdir=test --load-extension=pg_what_is_happening
+REGRESS_OPTS = --inputdir=test --outputdir=test --schedule=test/schedule
+REGRESS = teardown
 EXTRA_CLEAN = src/o/
 
 include src/Makefile

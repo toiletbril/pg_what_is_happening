@@ -72,6 +72,7 @@ typedef struct
 	u32			lock_offset;
 	u32			query_text_capacity;
 	u32			plan_nodes_capacity;
+	/* Plan nodes follow after. */
 } PwhSharedMemoryBackendEntry;
 
 extern PwhSharedMemoryHeader *PWH_SHMEM;
@@ -94,4 +95,4 @@ extern char	   *pwh_get_entry_query_text(PwhSharedMemoryBackendEntry *entry);
 extern PwhNode *pwh_get_entry_plan_nodes(PwhSharedMemoryBackendEntry *entry);
 extern u32		pwh_request_backend_metrics(void);
 
-#endif /* PWH_SHARED_MEMORY_H. */
+#endif /* PWH_SHARED_MEMORY_H */

@@ -79,4 +79,4 @@ extern void pwh_http_response_text(HttpResponse *resp, u32 status_code,
 
 extern void pwh_http_response_free_contents(HttpResponse *resp);
 
-#endif /* PWH_HTTP_SERVER_H. */
+#endif /* PWH_HTTP_SERVER_H */

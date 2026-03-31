@@ -80,4 +80,4 @@ extern bool pwh_walk_planstate_children(PlanState		*planstate,
 
 extern pqsigfunc pwh_install_pqsignal(int signo, pqsigfunc func);
 
-#endif /* PWH_COMPATIBILITY_H. */
+#endif /* PWH_COMPATIBILITY_H */

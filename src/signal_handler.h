@@ -42,4 +42,4 @@ extern u64 pwh_get_signal_handler_no_querydesc(void);
 extern u64 pwh_get_signal_handler_shmem_null(void);
 extern u64 pwh_get_signal_handler_no_slot(void);
 
-#endif /* PWH_SIGNAL_HANDLER_H. */
+#endif /* PWH_SIGNAL_HANDLER_H */

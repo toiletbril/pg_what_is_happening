@@ -1,0 +1,142 @@
+CREATE EXTENSION pg_what_is_happening;
+
+CREATE TABLE users (
+  user_id int PRIMARY KEY,
+  username text,
+  region text,
+  created_at timestamp
+);
+
+CREATE TABLE products (
+  product_id int PRIMARY KEY,
+  product_name text,
+  category text,
+  price numeric
+);
+
+CREATE TABLE orders (
+  order_id int PRIMARY KEY,
+  user_id int,
+  product_id int,
+  order_date timestamp,
+  quantity int
+);
+
+CREATE TABLE payments (
+  payment_id int PRIMARY KEY,
+  order_id int,
+  amount numeric,
+  payment_date timestamp
+);
+
+CREATE TABLE reviews (
+  review_id int PRIMARY KEY,
+  product_id int,
+  user_id int,
+  rating int,
+  review_date timestamp
+);
+
+CREATE TABLE inventory (
+  inventory_id int PRIMARY KEY,
+  product_id int,
+  warehouse_id int,
+  stock_level int
+);
+
+CREATE TABLE warehouses (
+  warehouse_id int PRIMARY KEY,
+  warehouse_name text,
+  region text
+);
+
+CREATE TABLE shipping (
+  shipping_id int PRIMARY KEY,
+  order_id int,
+  warehouse_id int,
+  ship_date timestamp
+);
+
+CREATE TABLE returns (
+  return_id int PRIMARY KEY,
+  order_id int,
+  return_date timestamp,
+  reason text
+);
+
+CREATE TABLE promotions (
+  promo_id int PRIMARY KEY,
+  product_id int,
+  discount_pct numeric,
+  start_date timestamp,
+  end_date timestamp
+);
+
+INSERT INTO users
+SELECT i, 'user_' || i,
+  CASE WHEN i % 3 = 0 THEN 'US'
+       WHEN i % 3 = 1 THEN 'EU'
+       ELSE 'APAC' END,
+  now() - (i || ' days')::interval
+FROM generate_series(1, 10000) i;
+
+INSERT INTO products
+SELECT i, 'product_' || i,
+  CASE WHEN i % 5 = 0 THEN 'Electronics'
+       WHEN i % 5 = 1 THEN 'Clothing'
+       WHEN i % 5 = 2 THEN 'Food'
+       WHEN i % 5 = 3 THEN 'Books'
+       ELSE 'Other' END,
+  (i * 10.5)::numeric
+FROM generate_series(1, 5000) i;
+
+INSERT INTO orders
+SELECT i, (i % 10000) + 1, (i % 5000) + 1,
+  now() - (i || ' hours')::interval,
+  (i % 10) + 1
+FROM generate_series(1, 50000) i;
+
+INSERT INTO payments
+SELECT i, i, (i * 25.5)::numeric,
+  now() - (i || ' hours')::interval
+FROM generate_series(1, 50000) i;
+
+INSERT INTO reviews
+SELECT i, (i % 5000) + 1, (i % 10000) + 1,
+  (i % 5) + 1,
+  now() - (i || ' days')::interval
+FROM generate_series(1, 30000) i;
+
+INSERT INTO inventory
+SELECT i, (i % 5000) + 1, (i % 20) + 1, i % 1000
+FROM generate_series(1, 25000) i;
+
+INSERT INTO warehouses
+SELECT i, 'warehouse_' || i,
+  CASE WHEN i % 4 = 0 THEN 'US'
+       WHEN i % 4 = 1 THEN 'EU'
+       WHEN i % 4 = 2 THEN 'APAC'
+       ELSE 'LATAM' END
+FROM generate_series(1, 20) i;
+
+INSERT INTO shipping
+SELECT i, i, (i % 20) + 1,
+  now() - ((i * 2) || ' hours')::interval
+FROM generate_series(1, 50000) i;
+
+INSERT INTO returns
+SELECT i, i,
+  now() - ((i * 3) || ' days')::interval,
+  CASE WHEN i % 3 = 0 THEN 'defective'
+       WHEN i % 3 = 1 THEN 'wrong_item'
+       ELSE 'changed_mind' END
+FROM generate_series(1, 5000) i;
+
+INSERT INTO promotions
+SELECT i, (i % 5000) + 1,
+  ((i % 50) + 5)::numeric,
+  now() - (i || ' days')::interval,
+  now() + (i || ' days')::interval
+FROM generate_series(1, 10000) i;
+
+ANALYZE;
