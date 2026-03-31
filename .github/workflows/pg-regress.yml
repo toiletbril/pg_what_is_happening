@@ -9,7 +9,7 @@ on:
 
 jobs:
   build-image:
-    name: Build Base Image
+    name: Build base image
     uses: ./.github/workflows/build-image.yml
     permissions:
       contents: read
