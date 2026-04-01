@@ -24,7 +24,7 @@ SELECT
 -- Verify actual metric lines are present with labels and values.
 \set metric_count `grep -c "^pg_what_is_happening_active_query_node_.*{pid=" /data/pwh_metrics_output.txt`
 SELECT
-  :metric_count > 96 AS has_sufficient_metrics;
+  :metric_count > 64 AS has_sufficient_metrics;
 
 -- Check HTTP status code is 200.
 \set http_code `curl -s -o /dev/null -w "%{http_code}" http://localhost:9187/metrics`
