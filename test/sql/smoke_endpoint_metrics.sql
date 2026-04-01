@@ -2,10 +2,10 @@
 -- This test launches a slow query and queries /metrics while it's running.
 
 -- Launch async query that will run for ~0.1 second.
-\! psql -d contrib_regression -c "SELECT pg_sleep(0.05), COUNT(*) FROM orders o JOIN users u ON o.user_id = u.user_id JOIN products p ON o.user_id = p.product_id JOIN reviews r ON p.product_id = r.product_id;" > /dev/null 2>&1 &
+\! psql -d contrib_regression -c "SELECT pg_sleep(0.2), COUNT(*) FROM orders o JOIN users u ON o.user_id = u.user_id JOIN products p ON o.user_id = p.product_id JOIN reviews r ON p.product_id = r.product_id;" > /dev/null 2>&1 &
 
 -- Give the background query time to start and begin execution.
-SELECT pg_sleep(0.01);
+SELECT pg_sleep(0.05);
 
 -- Query the /metrics endpoint while the query is running.
 -- We should see OpenMetrics output with node-level metrics.
@@ -24,7 +24,7 @@ SELECT
 -- Verify actual metric lines are present with labels and values.
 \set metric_count `grep -c "^pg_what_is_happening_active_query_node_.*{pid=" /data/pwh_metrics_output.txt`
 SELECT
-  :metric_count > 64 AS has_sufficient_metrics;
+  :metric_count > 96 AS has_sufficient_metrics;
 
 -- Check HTTP status code is 200.
 \set http_code `curl -s -o /dev/null -w "%{http_code}" http://localhost:9187/metrics`

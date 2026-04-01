@@ -1,11 +1,10 @@
 -- Test status view with async complex query running in background.
 -- This test launches a slow query in another connection and queries metrics.
 
--- Launch async query that will run for roughly 0.1 second.
-\! psql -d contrib_regression -c "SELECT pg_sleep(0.01), COUNT(*) FROM orders o JOIN users u ON o.user_id = u.user_id LIMIT 10;" > /dev/null 2>&1 &
+\! psql -d contrib_regression -c "SELECT pg_sleep(0.05), COUNT(*) FROM orders o JOIN users u ON o.user_id = u.user_id LIMIT 10;" > /dev/null 2>&1 &
 
 -- Give the background query time to start and begin execution.
-SELECT pg_sleep(0.01);
+SELECT pg_sleep(0.05);
 
 -- Query the status view to capture metrics from the running query.
 -- We should see node-level execution metrics for the complex query.

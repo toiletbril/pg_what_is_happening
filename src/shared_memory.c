@@ -165,7 +165,10 @@ pwh_get_backend_entry(u64 index)
 	if (index >= (u64) PWH_MAX_TRACKED_QUERIES_GUC)
 		return NULL;
 
-	return PWH_GET_BACKEND_ENTRY_UNSAFE(index);
+	PwhSharedMemoryBackendEntry *be = PWH_GET_BACKEND_ENTRY_UNSAFE(index);
+	Assert(be != NULL);
+
+	return be;
 }
 
 /*
@@ -216,12 +219,12 @@ pwh_request_backend_metrics(void)
 bool
 pwh_validate_node_magic(PwhNodeMetrics *node, u32 node_id)
 {
-	unused(node_id);
-
 	if (node->magic != PWH_NODE_MAGIC)
 	{
+		ereport(LOG, (errmsg("PWH: Node ID %u magic mismatch", node_id)));
 		return false;
 	}
+
 	return true;
 }
 
