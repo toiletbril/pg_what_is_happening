@@ -76,10 +76,6 @@ typedef struct
 	u32					  poll_generation;
 	TimestampTz			  query_start_time;
 	u32					  num_nodes;
-	slock_t slot_lock; /* Spinlock for per-slot synchronization. */
-	u32		query_text_capacity;
-	u32		metrics_capacity;
-	/* Metrics follow after. */
 } PwhSharedMemoryBackendEntry;
 
 extern PwhSharedMemoryHeader *PWH_SHMEM;

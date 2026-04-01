@@ -99,10 +99,6 @@ pwh_shared_memory_startup_hook(void)
 				PWH_GET_BACKEND_ENTRY_UNSAFE(i);
 			MemSet(shmem_be_entry, 0, pwh_get_backend_entry_stride());
 			shmem_be_entry->backend_pid = 0;
-			SpinLockInit(&shmem_be_entry->slot_lock);
-			shmem_be_entry->query_text_capacity = (u32) PWH_QUERY_TEXT_LEN_GUC;
-			shmem_be_entry->metrics_capacity =
-				(u32) PWH_MAX_NODES_PER_QUERY_GUC;
 		}
 
 		PWH_LWLOCK_SETUP_TRANCHE(PWH_LWLOCK_TRANCHE_ID, "pg_what_is_happening");
@@ -247,7 +243,8 @@ pwh_cleanup_orphaned_slots(void)
 						 errdetail("Backend PID %u no longer exists",
 								   be->backend_pid)));
 
-				be->backend_pid = 0;
+				MemSet(be, 0, pwh_get_backend_entry_stride());
+				PWH_MEMORY_BARRIER();
 				n_cleaned++;
 			}
 		}
@@ -280,7 +277,8 @@ backend_exit_callback(int code, Datum arg)
 
 		if (be != NULL && be->backend_pid == MyProcPid)
 		{
-			be->backend_pid = 0;
+			MemSet(be, 0, pwh_get_backend_entry_stride());
+			PWH_MEMORY_BARRIER();
 			ereport(DEBUG2,
 					(errmsg("PWH: Released backend entry %lu for PID %u", i,
 							MyProcPid)));

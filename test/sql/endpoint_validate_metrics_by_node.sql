@@ -1,12 +1,13 @@
-\! psql -d contrib_regression -c "SELECT pg_sleep(0.01), o.order_id, u.username, p.product_name, SUM(o.quantity * p.price) as total FROM orders o JOIN users u ON o.user_id = u.user_id JOIN products p ON o.product_id = p.product_id GROUP BY o.order_id, u.username, p.product_name ORDER BY total DESC LIMIT 100;" > /dev/null 2>&1 &
+\! psql -d contrib_regression -c "SELECT o.order_id, u.username, p.product_name, SUM(o.quantity * p.price) as total FROM orders o JOIN users u ON o.user_id = u.user_id JOIN products p ON o.product_id = p.product_id GROUP BY o.order_id, u.username, p.product_name ORDER BY total DESC;" > /dev/null 2>&1 &
 
-SELECT pg_sleep(0.01);
+SELECT pg_sleep(0.1);
 
 \! curl -s http://localhost:9187/metrics > /data/pwh_endpoint_metrics.txt
 
-\! grep "^pg_what_is_happening_active_query_node_time_percent{" /data/pwh_endpoint_metrics.txt | awk '{print $NF}' | awk '{s+=$1} END {print s}' > /data/pwh_time_sum.txt
+\! grep "^pg_what_is_happening_active_query_node_time_percent{" /data/pwh_endpoint_metrics.txt | head -1 | sed 's/.*pid="\([^"]*\)".*/\1/' > /data/pwh_pid.txt
+\! test -s /data/pwh_pid.txt && grep "pid=\"$(cat /data/pwh_pid.txt)\"" /data/pwh_endpoint_metrics.txt | grep "time_percent{" | awk '{print $NF}' | awk '{s+=$1} END {print s}' > /data/pwh_time_sum.txt || echo "0" > /data/pwh_time_sum.txt
 SELECT
-  (SELECT pg_read_file('pwh_time_sum.txt')::text::float8) BETWEEN 95 AND 105 AS time_percent_sums_to_100;
+  (SELECT pg_read_file('pwh_time_sum.txt')::text::float8) BETWEEN 95 AND 105 AS time_percent_sums_to_100_per_query;
 
 \! grep "^pg_what_is_happening_active_query_node" /data/pwh_endpoint_metrics.txt | grep "node_tag=\"Hash" | wc -l > /data/pwh_hash_count.txt
 SELECT (SELECT pg_read_file('pwh_hash_count.txt')::text::int) > 0 AS has_hash_node_metrics;

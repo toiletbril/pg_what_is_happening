@@ -313,42 +313,43 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 			pwh_get_my_backend_entry();
 		if (unlikely(shmem_be_entry == NULL))
 		{
-			ereport(DEBUG1,
-					(errmsg("PWH: Could not allocate backend entry"),
-					 errdetail("PID %d - all slots exhausted", MyProcPid)));
-			PG_RE_THROW();
+			ereport(LOG, (errmsg("PWH: Could not allocate backend entry"),
+						  errdetail("PID %d exhausted all slots", MyProcPid)));
 		}
-
-		PwhNodeMetrics *metrics = pwh_get_backend_entry_metrics(shmem_be_entry);
-		char *query_text = pwh_get_backend_entry_query_text(shmem_be_entry);
-
-		u64 num_nodes =
-			pwh_walk_plan_topology(queryDesc->planstate, metrics,
-								   shmem_be_entry->metrics_capacity, -1);
-
-		ereport(DEBUG1, (errmsg("PWH: Tracking query with %lu nodes",
-								(unsigned long) num_nodes),
-						 errdetail("PID %d", MyProcPid)));
-
-		shmem_be_entry->num_nodes = (u32) num_nodes;
-		shmem_be_entry->query_start_time = GetCurrentTimestamp();
-		shmem_be_entry->query_id = get_query_id(queryDesc);
-
-		/* Copy query text (truncated to buffer size). */
-		if (queryDesc->sourceText)
-			snprintf(query_text, shmem_be_entry->query_text_capacity, "%s",
-					 queryDesc->sourceText);
 		else
-			query_text[0] = '\0';
+		{
+			PwhNodeMetrics *metrics =
+				pwh_get_backend_entry_metrics(shmem_be_entry);
+			char *query_text = pwh_get_backend_entry_query_text(shmem_be_entry);
 
-		ereport(DEBUG1,
+			u64 num_nodes = pwh_walk_plan_topology(
+				queryDesc->planstate, metrics, PWH_MAX_NODES_PER_QUERY_GUC, -1);
+
+			ereport(DEBUG1, (errmsg("PWH: Tracking query with %lu nodes",
+									(unsigned long) num_nodes),
+							 errdetail("PID %d", MyProcPid)));
+
+			shmem_be_entry->num_nodes = (u32) num_nodes;
+			shmem_be_entry->query_start_time = GetCurrentTimestamp();
+			shmem_be_entry->query_id = get_query_id(queryDesc);
+
+			/* Copy query text. */
+			if (queryDesc->sourceText)
+				snprintf(query_text, PWH_QUERY_TEXT_LEN_GUC, "%s",
+						 queryDesc->sourceText);
+			else
+				query_text[0] = '\0';
+
+			ereport(
+				DEBUG1,
 				(errmsg("PWH: ExecutorStart complete"),
 				 errdetail("PID=%d query_id=%lu num_nodes=%lu query='%.100s'",
 						   MyProcPid, (unsigned long) shmem_be_entry->query_id,
 						   (unsigned long) num_nodes, query_text)));
 
-		/* Store QueryDesc for signal handler. */
-		pwh_set_current_query_desc(queryDesc);
+			/* Store QueryDesc for signal handler. */
+			pwh_set_current_query_desc(queryDesc);
+		}
 	}
 	PG_CATCH();
 	{
@@ -399,7 +400,7 @@ query_end_hook(QueryDesc *queryDesc)
 
 				/* Capture final instrumentation. */
 				pwh_walk_plan_instrumentation(queryDesc->planstate, metrics,
-											  shmem_be_entry->metrics_capacity);
+											  PWH_MAX_NODES_PER_QUERY_GUC);
 
 				ereport(DEBUG1,
 						(errmsg("PWH: Completed query tracking for PID %d",
@@ -408,10 +409,9 @@ query_end_hook(QueryDesc *queryDesc)
 							 "Generation: %lu",
 							 (unsigned long) shmem_be_entry->poll_generation)));
 
-				/* Mark inactive, clear pid, and increment generation. */
-				shmem_be_entry->backend_pid = 0;
+				/* Clear entire slot to prevent cross-contamination. */
+				MemSet(shmem_be_entry, 0, pwh_get_backend_entry_stride());
 				PWH_MEMORY_BARRIER();
-				shmem_be_entry->poll_generation++;
 			}
 
 			/* Clear QueryDesc pointer. */

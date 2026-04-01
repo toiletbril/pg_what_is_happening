@@ -114,6 +114,7 @@ pwh_fill_metrics_tuple(Datum *values, bool *nulls,
 	values[0] = Int32GetDatum(entry->backend_pid);
 	values[1] = Int64GetDatum(entry->query_id);
 	values[2] = CStringGetTextDatum(pwh_get_backend_entry_query_text(entry));
+
 	values[3] = Int32GetDatum(node->node_id);
 	values[4] = Int32GetDatum(node->parent_node_id);
 	values[5] = CStringGetTextDatum(pwh_node_tag_to_string(node->tag));
