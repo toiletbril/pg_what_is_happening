@@ -22,7 +22,6 @@ WARNINGS := \
 	-Wall \
 	-Wextra \
 	-Wshadow \
-	-Wstrict-prototypes \
 	-Wno-unused-parameter \
 	-Wno-unused-function \
 	-Wno-unused \
