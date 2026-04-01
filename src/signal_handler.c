@@ -27,6 +27,7 @@
 #include "plan_tree_walker.h"
 #include "shared_memory.h"
 #include "storage/ipc.h"
+#include "storage/spin.h"
 
 /* Static storage for current QueryDesc pointer. */
 static volatile QueryDesc *CURRENT_QUERY_DESC = NULL;
@@ -66,6 +67,7 @@ pwh_get_current_query_desc(void)
 void
 pwh_sigusr2_handler(SIGNAL_ARGS)
 {
+	int save_errno = errno;
 	SIGNAL_HANDLER_CALL_COUNT++;
 
 	/* Check if we have an active query. */
@@ -85,7 +87,7 @@ pwh_sigusr2_handler(SIGNAL_ARGS)
 	}
 
 	PwhSharedMemoryBackendEntry *shmem_be_entry = NULL;
-	for (u64 i = 0; i < (u64) MaxBackends; i++)
+	for (u64 i = 0; i < (u64) PWH_MAX_TRACKED_QUERIES_GUC; i++)
 	{
 		PwhSharedMemoryBackendEntry *be = PWH_GET_BACKEND_ENTRY_UNSAFE(i);
 		if (be->backend_pid == MyProcPid)
@@ -101,13 +103,18 @@ pwh_sigusr2_handler(SIGNAL_ARGS)
 		goto chain;
 	}
 
-	/* Refresh instrumentation data. */
-	PwhNode *plan_nodes = pwh_get_entry_plan_nodes(shmem_be_entry);
-	pwh_walk_plan_instrumentation(queryDesc->planstate, plan_nodes,
-								  PWH_MAX_NODES_PER_QUERY_GUC);
+	/* Refresh instrumentation data with spinlock protection. */
+	SpinLockAcquire(&shmem_be_entry->slot_lock);
+
+	PwhNodeMetrics *metrics = pwh_get_backend_entry_metrics(shmem_be_entry);
+	pwh_walk_plan_instrumentation(queryDesc->planstate, metrics,
+								  shmem_be_entry->metrics_capacity);
 
 	/* Increment generation counter to signal completion. */
+	PWH_MEMORY_BARRIER();
 	shmem_be_entry->poll_generation++;
+
+	SpinLockRelease(&shmem_be_entry->slot_lock);
 	SIGNAL_HANDLER_SUCCESS_COUNT++;
 
 chain:
@@ -115,8 +122,11 @@ chain:
 	if (PREV_SIGUSR2_HANDLER && PREV_SIGUSR2_HANDLER != SIG_IGN &&
 		PREV_SIGUSR2_HANDLER != SIG_DFL)
 	{
+		errno = save_errno;
 		(*PREV_SIGUSR2_HANDLER)(postgres_signal_arg);
+		return;
 	}
+	errno = save_errno;
 }
 
 void
@@ -125,12 +135,13 @@ pwh_install_signal_handler(void)
 	PREV_SIGUSR2_HANDLER = pwh_install_pqsignal(SIGUSR2, pwh_sigusr2_handler);
 	if (PREV_SIGUSR2_HANDLER != NULL)
 	{
-		elog(LOG, "PWH: SIGUSR2 handler installed (previous handler: %p)",
-			 PREV_SIGUSR2_HANDLER);
+		ereport(DEBUG1,
+				(errmsg("PWH: SIGUSR2 handler installed"),
+				 errdetail("Previous handler at %p", PREV_SIGUSR2_HANDLER)));
 	}
 	else
 	{
-		elog(LOG, "PWH: SIGUSR2 handler installed");
+		ereport(DEBUG1, (errmsg("PWH: SIGUSR2 handler installed")));
 	}
 }
 

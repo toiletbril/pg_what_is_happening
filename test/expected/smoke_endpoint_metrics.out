@@ -22,7 +22,7 @@ SELECT
   :type_count > 0 AS has_type_declarations;
  help_count | has_help_declarations | type_count | has_type_declarations 
 ------------+-----------------------+------------+-----------------------
-          9 | t                     |          9 | t
+         13 | t                     |         13 | t
 (1 row)
 
 -- Verify actual metric lines are present (with labels and values).

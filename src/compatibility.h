@@ -80,4 +80,24 @@ extern bool pwh_walk_planstate_children(PlanState		*planstate,
 
 extern pqsigfunc pwh_install_pqsignal(int signo, pqsigfunc func);
 
+/* Memory barrier compatibility (pg_memory_barrier introduced in PG 9.5). */
+#if PG_VERSION_NUM >= 90500
+#define PWH_MEMORY_BARRIER() pg_memory_barrier()
+#else
+#define PWH_MEMORY_BARRIER()                   \
+	do                                         \
+	{                                          \
+		__asm__ __volatile__("" ::: "memory"); \
+	} while (0)
+#endif
+
+/* Transaction event compatibility (XACT_EVENT_PARALLEL_ABORT introduced in
+ * PG 9.6). */
+#ifdef XACT_EVENT_PARALLEL_ABORT
+#define PWH_IS_ABORT_EVENT(event) \
+	((event) == XACT_EVENT_ABORT || (event) == XACT_EVENT_PARALLEL_ABORT)
+#else
+#define PWH_IS_ABORT_EVENT(event) ((event) == XACT_EVENT_ABORT)
+#endif
+
 #endif /* PWH_COMPATIBILITY_H */
