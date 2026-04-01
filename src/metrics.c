@@ -30,32 +30,34 @@
 #include "shared_memory.h"
 #include "utils/builtins.h"
 
+#define METRIC_BUFFER_SIZE 65536
+
 typedef struct
 {
 	char *data;
 	u64	  offset;
 	u64	  size;
-} PwhMetricBuffer;
+} FormatterBuffer;
 
 typedef struct
 {
-	PwhMetricBuffer *buffer;
+	FormatterBuffer *buffer;
 	u32				 pid;
 	u64				 query_id;
-} PwhMetricFormatter;
+} Formatter;
 
-static void buffer_init(PwhMetricBuffer *buf);
-static void buffer_ensure_capacity(PwhMetricBuffer *buf, u64 needed);
-static void buffer_append(PwhMetricBuffer *buf, const char *fmt, ...);
-static void formatter_init(PwhMetricFormatter *fmt, PwhMetricBuffer *buf,
-						   u32 pid, u64 query_id);
-static void append_metric(PwhMetricFormatter *fmt, PwhNodeMetrics *node,
-						  MetricType type, const char *value_fmt, ...);
+static void buffer_init(FormatterBuffer *buf);
+static void buffer_ensure_capacity(FormatterBuffer *buf, u64 needed);
+static void buffer_append(FormatterBuffer *buf, const char *fmt, ...);
+static void formatter_init(Formatter *fmt, FormatterBuffer *buf, u32 pid,
+						   u64 query_id);
+static void append_metric(Formatter *fmt, PwhNodeMetrics *node, MetricType type,
+						  const char *value_fmt, ...);
 
 TupleDesc
-pwh_create_metrics_tupdesc(void)
+pwh_create_v1_status_tupdesc(void)
 {
-	TupleDesc tupdesc = PWH_CREATE_TUPLE_DESC(19);
+	TupleDesc tupdesc = PWH_CREATE_TUPLE_DESC(PWH_V1_STATUS_TUPLE_COUNT);
 
 	/* Utility columns. */
 	TupleDescInitEntry(tupdesc, (AttrNumber) 1, "backend_pid", INT4OID, -1, 0);
@@ -99,9 +101,9 @@ pwh_create_metrics_tupdesc(void)
 }
 
 void
-pwh_fill_metrics_tuple(Datum *values, bool *nulls,
-					   PwhSharedMemoryBackendEntry *entry, PwhNodeMetrics *node,
-					   double total_query_time)
+pwh_fill_v1_status_tuple(Datum *values, bool *nulls,
+						 PwhSharedMemoryBackendEntry *entry,
+						 PwhNodeMetrics *node, double total_query_time)
 {
 	double node_time_seconds = node->execution.total_time_us / 1000000.0;
 	double node_percent =
@@ -109,7 +111,8 @@ pwh_fill_metrics_tuple(Datum *values, bool *nulls,
 			? (node->execution.total_time_us / total_query_time) * 100.0
 			: 0.0;
 
-	MemSet(nulls, 0, 19 * sizeof(bool));
+
+	MemSet(nulls, 0, PWH_V1_STATUS_TUPLE_COUNT * sizeof(bool));
 
 	values[0] = Int32GetDatum(entry->backend_pid);
 	values[1] = Int64GetDatum(entry->query_id);
@@ -134,7 +137,7 @@ pwh_fill_metrics_tuple(Datum *values, bool *nulls,
 }
 
 static void
-append_all_node_metrics(PwhMetricFormatter *fmt, PwhNodeMetrics *node,
+append_all_node_metrics(Formatter *fmt, PwhNodeMetrics *node,
 						double total_query_time)
 {
 	double node_time_seconds = node->execution.total_time_us / 1000000.0;
@@ -163,7 +166,7 @@ append_all_node_metrics(PwhMetricFormatter *fmt, PwhNodeMetrics *node,
 
 
 static void
-buffer_init(PwhMetricBuffer *buf)
+buffer_init(FormatterBuffer *buf)
 {
 	buf->offset = 0;
 	buf->size = METRIC_BUFFER_SIZE;
@@ -171,7 +174,7 @@ buffer_init(PwhMetricBuffer *buf)
 }
 
 static void
-buffer_ensure_capacity(PwhMetricBuffer *buf, u64 needed)
+buffer_ensure_capacity(FormatterBuffer *buf, u64 needed)
 {
 	if (unlikely(buf->offset + needed >= buf->size))
 	{
@@ -181,7 +184,7 @@ buffer_ensure_capacity(PwhMetricBuffer *buf, u64 needed)
 }
 
 static void
-buffer_append(PwhMetricBuffer *buf, const char *fmt, ...)
+buffer_append(FormatterBuffer *buf, const char *fmt, ...)
 {
 	va_list args;
 	i32		written;
@@ -198,8 +201,7 @@ buffer_append(PwhMetricBuffer *buf, const char *fmt, ...)
 }
 
 static void
-formatter_init(PwhMetricFormatter *fmt, PwhMetricBuffer *buf, u32 pid,
-			   u64 query_id)
+formatter_init(Formatter *fmt, FormatterBuffer *buf, u32 pid, u64 query_id)
 {
 	fmt->buffer = buf;
 	fmt->pid = pid;
@@ -207,7 +209,7 @@ formatter_init(PwhMetricFormatter *fmt, PwhMetricBuffer *buf, u32 pid,
 }
 
 static void
-append_metric(PwhMetricFormatter *fmt, PwhNodeMetrics *node, MetricType type,
+append_metric(Formatter *fmt, PwhNodeMetrics *node, MetricType type,
 			  const char *value_fmt, ...)
 {
 	va_list		args;
@@ -229,9 +231,10 @@ append_metric(PwhMetricFormatter *fmt, PwhNodeMetrics *node, MetricType type,
 char *
 pwh_format_openmetrics(void)
 {
-	PwhMetricBuffer buf;
+	FormatterBuffer buf;
 	buffer_init(&buf);
 
+	/* Initialize help. */
 	for (u32 i = METRIC_START; i < METRIC_COUNT; i++)
 	{
 		const char *suffix = metric_suffix((MetricType) i);
@@ -259,7 +262,7 @@ pwh_format_openmetrics(void)
 
 		PwhNodeMetrics *metrics = pwh_get_backend_entry_metrics(shmem_be_entry);
 
-		PwhMetricFormatter fmt;
+		Formatter fmt;
 		formatter_init(&fmt, &buf, shmem_be_entry->backend_pid,
 					   shmem_be_entry->query_id);
 

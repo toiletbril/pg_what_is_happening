@@ -43,7 +43,7 @@
 PG_MODULE_MAGIC;
 
 /* GUC variables. */
-static bool PWH_ENABLED_GUC = true;
+static bool PWH_IS_ENABLED_GUC = true;
 #ifdef WITH_BGWORKER
 static char *PWH_LISTEN_ADDRESS_GUC = NULL;
 #endif
@@ -66,6 +66,7 @@ static void query_end_hook(QueryDesc *queryDesc);
 static void query_cleanup_callback(XactEvent event, void *arg);
 static u64	get_query_id(const QueryDesc *qd);
 static bool check_positive_guc(int *newval, void **extra, GucSource source);
+
 #ifdef WITH_BGWORKER
 static bool check_listen_address(char **newval, void **extra, GucSource source);
 #endif
@@ -89,7 +90,7 @@ _PG_init(void)
 	/* Define GUC variables. */
 	DefineCustomBoolVariable(
 		"pg_what_is_happening.enabled", "Enable pg_what_is_happening extension",
-		NULL, &PWH_ENABLED_GUC, true, PGC_SIGHUP, 0, NULL, NULL, NULL);
+		NULL, &PWH_IS_ENABLED_GUC, true, PGC_SIGHUP, 0, NULL, NULL, NULL);
 
 #ifdef WITH_BGWORKER
 	DefineCustomStringVariable(
@@ -245,7 +246,7 @@ query_cleanup_callback(XactEvent event, void *arg)
 	/* Clear QueryDesc pointer to prevent dangling reference. */
 	pwh_set_current_query_desc(NULL);
 
-	if (!PWH_ENABLED_GUC)
+	if (!PWH_IS_ENABLED_GUC)
 		return;
 
 	/* Get our backend entry and mark query as inactive. */
@@ -263,42 +264,46 @@ query_cleanup_callback(XactEvent event, void *arg)
 	}
 }
 
+volatile bool WAS_BACKEND_INITIALIZED = false;
+
+static void
+initialize_state_once_per_backend(void)
+{
+	/* Query backend state on error. */
+	RegisterXactCallback(query_cleanup_callback, NULL);
+	/* Report metrics when signaled. */
+	pwh_install_signal_handler();
+	/* Communicate with BG worker. */
+	PWH_SHMEM = pwh_get_shared_memory_ptr();
+
+	WAS_BACKEND_INITIALIZED = true;
+}
+
 static void
 query_start_hook(QueryDesc *queryDesc, i32 eflags)
 {
-	static bool handler_was_installed = false;
-	static bool cleanup_callback_registered = false;
-
-	/* Attach to shared memory if not already attached. */
-	PWH_SHMEM = pwh_get_shared_memory_ptr();
-
-	/* Install signal handler once per backend. */
-	if (!handler_was_installed)
+	if (!WAS_BACKEND_INITIALIZED)
 	{
-		pwh_install_signal_handler();
-		handler_was_installed = true;
-	}
-
-	/* Register cleanup callback once per backend. */
-	if (!cleanup_callback_registered)
-	{
-		RegisterXactCallback(query_cleanup_callback, NULL);
-		cleanup_callback_registered = true;
+		initialize_state_once_per_backend();
 	}
 
 	ereport(DEBUG2,
 			(errmsg("PWH: ExecutorStart hook called"),
-			 errdetail("PID=%d enabled=%d", MyProcPid, PWH_ENABLED_GUC)));
+			 errdetail("PID=%d enabled=%d", MyProcPid, PWH_IS_ENABLED_GUC)));
 
 	/* Force instrumentation on all nodes. */
 	queryDesc->instrument_options |= INSTRUMENT_ALL;
 
 	if (PREV_QUERY_START_HOOK)
+	{
 		PREV_QUERY_START_HOOK(queryDesc, eflags);
+	}
 	else
+	{
 		standard_ExecutorStart(queryDesc, eflags);
+	}
 
-	if (unlikely(!PWH_ENABLED_GUC))
+	if (unlikely(!PWH_IS_ENABLED_GUC))
 	{
 		ereport(DEBUG2, (errmsg("PWH: ExecutorStart disabled, returning")));
 		return;
@@ -322,6 +327,7 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 				pwh_get_backend_entry_metrics(shmem_be_entry);
 			char *query_text = pwh_get_backend_entry_query_text(shmem_be_entry);
 
+			/* Set initial backend state and prepare for metric collection. */
 			u64 num_nodes = pwh_walk_plan_topology(
 				queryDesc->planstate, metrics, PWH_MAX_NODES_PER_QUERY_GUC, -1);
 
@@ -334,11 +340,15 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 			shmem_be_entry->query_id = get_query_id(queryDesc);
 
 			/* Copy query text. */
-			if (queryDesc->sourceText)
+			if (queryDesc->sourceText != NULL)
+			{
 				snprintf(query_text, PWH_QUERY_TEXT_LEN_GUC, "%s",
 						 queryDesc->sourceText);
+			}
 			else
+			{
 				query_text[0] = '\0';
+			}
 
 			ereport(
 				DEBUG1,
@@ -347,7 +357,7 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 						   MyProcPid, (unsigned long) shmem_be_entry->query_id,
 						   (unsigned long) num_nodes, query_text)));
 
-			/* Store QueryDesc for signal handler. */
+			/* We're set. Store QueryDesc for signal handler. */
 			pwh_set_current_query_desc(queryDesc);
 		}
 	}
@@ -383,7 +393,7 @@ query_end_hook(QueryDesc *queryDesc)
 			 (unsigned long) pwh_get_signal_handler_shmem_null(),
 			 (unsigned long) pwh_get_signal_handler_no_slot())));
 
-	if (likely(PWH_ENABLED_GUC))
+	if (likely(PWH_IS_ENABLED_GUC))
 	{
 		MemoryContext old_context = CurrentMemoryContext;
 
@@ -436,11 +446,14 @@ query_end_hook(QueryDesc *queryDesc)
 		PG_END_TRY();
 	}
 
-	/* Call previous hook or standard function. */
 	if (PREV_QUERY_FINISH_HOOK)
+	{
 		PREV_QUERY_FINISH_HOOK(queryDesc);
+	}
 	else
+	{
 		standard_ExecutorEnd(queryDesc);
+	}
 }
 
 
@@ -455,7 +468,7 @@ v1_status_f(PG_FUNCTION_ARGS)
 		MemoryContext	 oldcontext =
 			MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
-		TupleDesc td = pwh_create_metrics_tupdesc();
+		TupleDesc td = pwh_create_v1_status_tupdesc();
 		PWH_TUPLE_DESC_FINALIZE(td);
 		funcctx->tuple_desc = BlessTupleDesc(td);
 
@@ -468,7 +481,7 @@ v1_status_f(PG_FUNCTION_ARGS)
 		/* Wait for backends to refresh metrics. */
 		pg_usleep(PWH_SIGNAL_TIMEOUT_MS_GUC * 1000L);
 
-		/* Initialize state: we iterate through all slots and nodes. */
+		/* XXX do it via static u64? */
 		u32 *state = (u32 *) palloc(2 * sizeof(u32));
 		state[0] = 0; /* slot index. */
 		state[1] = 0; /* node index. */
@@ -501,11 +514,11 @@ v1_status_f(PG_FUNCTION_ARGS)
 				total_query_time += metrics[j].execution.total_time_us;
 			}
 
-			Datum values[20];
-			bool  nulls[20];
+			Datum values[PWH_V1_STATUS_TUPLE_COUNT];
+			bool  nulls[PWH_V1_STATUS_TUPLE_COUNT];
 
-			pwh_fill_metrics_tuple(values, nulls, shmem_be_entry, node,
-								   total_query_time);
+			pwh_fill_v1_status_tuple(values, nulls, shmem_be_entry, node,
+									 total_query_time);
 
 			HeapTuple tuple =
 				heap_form_tuple(funcctx->tuple_desc, values, nulls);

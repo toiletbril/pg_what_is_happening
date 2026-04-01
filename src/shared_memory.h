@@ -76,6 +76,7 @@ typedef struct
 	u32					  poll_generation;
 	TimestampTz			  query_start_time;
 	u32					  num_nodes;
+	/* Query text and metrics follow after. */
 } PwhSharedMemoryBackendEntry;
 
 extern PwhSharedMemoryHeader *PWH_SHMEM;

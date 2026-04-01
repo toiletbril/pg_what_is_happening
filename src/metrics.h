@@ -25,6 +25,8 @@
 #include "funcapi.h"
 #include "shared_memory.h"
 
+#define PWH_V1_STATUS_TUPLE_COUNT 19
+
 typedef enum
 {
 	METRIC_START = 0,
@@ -43,8 +45,6 @@ typedef enum
 	METRIC_SPILL_FILE_WRITES,
 	METRIC_COUNT
 } MetricType;
-
-#define METRIC_BUFFER_SIZE 65536
 
 static forceinline const char *
 metric_suffix(MetricType type)
@@ -80,7 +80,8 @@ metric_suffix(MetricType type)
 		case METRIC_COUNT:
 			break;
 	}
-	return "unknown";
+
+	unreachable;
 }
 
 static forceinline const char *
@@ -117,13 +118,15 @@ metric_help(MetricType type)
 		case METRIC_COUNT:
 			break;
 	}
-	return "Unknown metric";
+
+	unreachable;
 }
 
-TupleDesc pwh_create_metrics_tupdesc(void);
-void	  pwh_fill_metrics_tuple(Datum *values, bool *nulls,
-								 PwhSharedMemoryBackendEntry *entry,
-								 PwhNodeMetrics *node, double total_query_time);
-char	 *pwh_format_openmetrics(void);
+TupleDesc pwh_create_v1_status_tupdesc(void);
+void	  pwh_fill_v1_status_tuple(Datum *values, bool *nulls,
+								   PwhSharedMemoryBackendEntry *entry,
+								   PwhNodeMetrics *node, double total_query_time);
+
+char *pwh_format_openmetrics(void);
 
 #endif

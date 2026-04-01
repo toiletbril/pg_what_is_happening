@@ -67,6 +67,7 @@ typedef i8 ichar;
 #define maybeunused pwh__maybeunused
 #define forceinline pwh__forceinline
 #define fallthrough pwh__fallthrough
+#define unreachable pwh__unreachable()
 
 #if !defined likely
 #define likely(x) pwh__likely(x)
