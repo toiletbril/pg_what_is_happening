@@ -1,7 +1,7 @@
 -- Test status view with async complex query running in background.
 -- This test launches a slow query in another connection and queries metrics.
 
--- Launch async query that will run for ~0.1 second.
+-- Launch async query that will run for roughly 0.1 second.
 \! psql -d contrib_regression -c "SELECT pg_sleep(0.01), COUNT(*) FROM orders o JOIN users u ON o.user_id = u.user_id LIMIT 10;" > /dev/null 2>&1 &
 
 -- Give the background query time to start and begin execution.
@@ -25,6 +25,14 @@ SELECT
   COUNT(*) FILTER (WHERE cache_hits < 0 OR cache_misses < 0) = 0 AS valid_buffer_stats,
   COUNT(*) FILTER (WHERE parent_node_id < -1) = 0 AS valid_parent_refs,
   COUNT(*) FILTER (WHERE node_id < 0) = 0 AS valid_node_ids
+FROM what_is_happening.v1_status
+WHERE query_text LIKE '%pg_sleep(0.01)%';
+
+-- Validate metrics are actually being captured with non-zero values.
+SELECT
+  COUNT(*) FILTER (WHERE tuples_returned > 0) > 0 AS has_nonzero_tuples,
+  COUNT(*) FILTER (WHERE total_time_us > 0) > 0 AS has_nonzero_time,
+  COUNT(*) FILTER (WHERE cache_hits + cache_misses > 0) > 0 AS has_buffer_activity
 FROM what_is_happening.v1_status
 WHERE query_text LIKE '%pg_sleep(0.01)%';
 

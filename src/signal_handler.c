@@ -103,18 +103,14 @@ pwh_sigusr2_handler(SIGNAL_ARGS)
 		goto chain;
 	}
 
-	/* Refresh instrumentation data with spinlock protection. */
-	SpinLockAcquire(&shmem_be_entry->slot_lock);
-
+	/* Refresh instrumentation data. */
 	PwhNodeMetrics *metrics = pwh_get_backend_entry_metrics(shmem_be_entry);
 	pwh_walk_plan_instrumentation(queryDesc->planstate, metrics,
-								  shmem_be_entry->metrics_capacity);
+								  PWH_MAX_NODES_PER_QUERY_GUC);
 
 	/* Increment generation counter to signal completion. */
 	PWH_MEMORY_BARRIER();
 	shmem_be_entry->poll_generation++;
-
-	SpinLockRelease(&shmem_be_entry->slot_lock);
 	SIGNAL_HANDLER_SUCCESS_COUNT++;
 
 chain:
