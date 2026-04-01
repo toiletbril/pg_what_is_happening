@@ -20,6 +20,9 @@
 
 #include "shared_memory.h"
 
+#include <errno.h>
+#include <signal.h>
+
 #include "compatibility.h"
 #include "miscadmin.h"
 #include "storage/ipc.h"
@@ -34,36 +37,17 @@ shmem_startup_hook_type PREV_SHMEM_STARTUP_HOOK = NULL;
 
 PWH_LWLOCK_TRANCHE_ID_DECL;
 
-static void pwh_backend_exit_callback(int code, Datum arg);
-
-static void
-pwh_backend_exit_callback(int code, Datum arg)
-{
-	unused(code);
-	unused(arg);
-
-	for (u64 i = 0; i < (u64) PWH_MAX_TRACKED_QUERIES_GUC; i++)
-	{
-		PwhSharedMemoryBackendEntry *be = pwh_get_backend_entry(i);
-
-		if (be && be->backend_pid == MyProcPid)
-		{
-			be->backend_pid = 0;
-			be->is_query_active = false;
-			elog(DEBUG2, "PWH: Released backend entry %lu for PID %u", i,
-				 MyProcPid);
-			return;
-		}
-	}
-}
+static void backend_exit_callback(int code, Datum arg);
+static bool check_if_process_exists(u32 pid);
+static bool signal_process(u32 pid, int sig);
 
 Size
 pwh_get_backend_entry_stride(void)
 {
 	Size size = sizeof(PwhSharedMemoryBackendEntry);
 	size = add_size(size, PWH_QUERY_TEXT_LEN_GUC);
-	size =
-		add_size(size, mul_size(PWH_MAX_NODES_PER_QUERY_GUC, sizeof(PwhNode)));
+	size = add_size(
+		size, mul_size(PWH_MAX_NODES_PER_QUERY_GUC, sizeof(PwhNodeMetrics)));
 	return size;
 }
 
@@ -104,9 +88,10 @@ pwh_shared_memory_startup_hook(void)
 
 	if (unlikely(!was_found))
 	{
-		elog(LOG,
-			 "PWH: Initializing %zu bytes shared memory for %d backend entries",
-			 pwh_get_shared_memory_size(), PWH_MAX_TRACKED_QUERIES_GUC);
+		ereport(LOG, (errmsg("PWH: Initializing shared memory"),
+					  errdetail("%zu bytes for %d backend entries",
+								pwh_get_shared_memory_size(),
+								PWH_MAX_TRACKED_QUERIES_GUC)));
 
 		for (u64 i = 0; i < (u64) PWH_MAX_TRACKED_QUERIES_GUC; i++)
 		{
@@ -114,9 +99,9 @@ pwh_shared_memory_startup_hook(void)
 				PWH_GET_BACKEND_ENTRY_UNSAFE(i);
 			MemSet(shmem_be_entry, 0, pwh_get_backend_entry_stride());
 			shmem_be_entry->backend_pid = 0;
-			shmem_be_entry->lock_offset = i;
+			SpinLockInit(&shmem_be_entry->slot_lock);
 			shmem_be_entry->query_text_capacity = (u32) PWH_QUERY_TEXT_LEN_GUC;
-			shmem_be_entry->plan_nodes_capacity =
+			shmem_be_entry->metrics_capacity =
 				(u32) PWH_MAX_NODES_PER_QUERY_GUC;
 		}
 
@@ -147,18 +132,21 @@ pwh_get_my_backend_entry(void)
 		{
 			be->backend_pid = MyProcPid;
 			PWH_LWLOCK_RELEASE(PWH_SHMEM->lock);
-			elog(DEBUG2, "PWH: Allocated backend entry %lu for PID %u", i,
-				 MyProcPid);
+			ereport(DEBUG2,
+					(errmsg("PWH: Allocated backend entry %lu for PID %u", i,
+							MyProcPid)));
 
-			before_shmem_exit(pwh_backend_exit_callback, (Datum) 0);
+			before_shmem_exit(backend_exit_callback, (Datum) 0);
 
 			return be;
 		}
 	}
 	PWH_LWLOCK_RELEASE(PWH_SHMEM->lock);
 
-	elog(WARNING, "PWH: All %d backend entries exhausted for PID %d",
-		 PWH_MAX_TRACKED_QUERIES_GUC, MyProcPid);
+	ereport(DEBUG1,
+			(errmsg("PWH: All backend entries exhausted"),
+			 errdetail("All %d slots are in use, PID %d cannot be tracked",
+					   PWH_MAX_TRACKED_QUERIES_GUC, MyProcPid)));
 
 	return NULL;
 }
@@ -188,19 +176,20 @@ pwh_get_backend_entry(u64 index)
  * Get pointer to query_text for a backend entry.
  */
 char *
-pwh_get_entry_query_text(PwhSharedMemoryBackendEntry *entry)
+pwh_get_backend_entry_query_text(PwhSharedMemoryBackendEntry *entry)
 {
 	return (char *) entry + sizeof(PwhSharedMemoryBackendEntry);
 }
 
 /*
- * Get pointer to plan_nodes array for a backend entry.
+ * Get pointer to metrics array for a backend entry.
  */
-PwhNode *
-pwh_get_entry_plan_nodes(PwhSharedMemoryBackendEntry *entry)
+PwhNodeMetrics *
+pwh_get_backend_entry_metrics(PwhSharedMemoryBackendEntry *entry)
 {
-	return (PwhNode *) ((char *) entry + sizeof(PwhSharedMemoryBackendEntry) +
-						PWH_QUERY_TEXT_LEN_GUC);
+	return (PwhNodeMetrics *) ((char *) entry +
+							   sizeof(PwhSharedMemoryBackendEntry) +
+							   PWH_QUERY_TEXT_LEN_GUC);
 }
 
 /*
@@ -210,19 +199,92 @@ pwh_get_entry_plan_nodes(PwhSharedMemoryBackendEntry *entry)
 u32
 pwh_request_backend_metrics(void)
 {
-	u32 signaled = 0;
+	u32 n_signaled = 0;
 
 	for (u64 i = 0; i < (u64) PWH_MAX_TRACKED_QUERIES_GUC; i++)
 	{
 		PwhSharedMemoryBackendEntry *shmem_be_entry = pwh_get_backend_entry(i);
 
-		if (shmem_be_entry && shmem_be_entry->is_query_active &&
-			shmem_be_entry->backend_pid != 0)
+		if (shmem_be_entry != NULL && shmem_be_entry->backend_pid != 0)
 		{
-			kill(shmem_be_entry->backend_pid, SIGUSR2);
-			signaled++;
+			if (signal_process(shmem_be_entry->backend_pid, SIGUSR2))
+			{
+				n_signaled++;
+			}
 		}
 	}
 
-	return signaled;
+	return n_signaled;
+}
+
+bool
+pwh_validate_node_magic(PwhNodeMetrics *node, u32 node_id)
+{
+	unused(node_id);
+
+	if (node->magic != PWH_NODE_MAGIC)
+	{
+		return false;
+	}
+	return true;
+}
+
+u32
+pwh_cleanup_orphaned_slots(void)
+{
+	u32 n_cleaned = 0;
+
+	for (u64 i = 0; i < (u64) PWH_MAX_TRACKED_QUERIES_GUC; i++)
+	{
+		PwhSharedMemoryBackendEntry *be = pwh_get_backend_entry(i);
+
+		if (be != NULL && be->backend_pid != 0)
+		{
+			if (!check_if_process_exists(be->backend_pid))
+			{
+				ereport(DEBUG1,
+						(errmsg("PWH: Cleaning up orphaned slot %lu", i),
+						 errdetail("Backend PID %u no longer exists",
+								   be->backend_pid)));
+
+				be->backend_pid = 0;
+				n_cleaned++;
+			}
+		}
+	}
+
+	return n_cleaned;
+}
+
+static bool
+check_if_process_exists(u32 pid)
+{
+	return kill(pid, 0) == 0 || errno != ESRCH;
+}
+
+static bool
+signal_process(u32 pid, int sig)
+{
+	return kill(pid, sig) == 0;
+}
+
+static void
+backend_exit_callback(int code, Datum arg)
+{
+	unused(code);
+	unused(arg);
+
+	for (u64 i = 0; i < (u64) PWH_MAX_TRACKED_QUERIES_GUC; i++)
+	{
+		PwhSharedMemoryBackendEntry *be = pwh_get_backend_entry(i);
+
+		if (be != NULL && be->backend_pid == MyProcPid)
+		{
+			be->backend_pid = 0;
+			ereport(DEBUG2,
+					(errmsg("PWH: Released backend entry %lu for PID %u", i,
+							MyProcPid)));
+			return;
+		}
+	}
 }

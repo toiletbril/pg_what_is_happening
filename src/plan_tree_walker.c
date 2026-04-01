@@ -24,6 +24,7 @@
 #include "compatibility.h"
 #include "executor/executor.h"
 #include "executor/instrument.h"
+#include "miscadmin.h"
 #include "nodes/execnodes.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/plannodes.h"
@@ -32,25 +33,21 @@
 
 typedef struct
 {
-	PwhNode *metrics;
-	u64		 max_nodes;
-	u64		*node_counter;
-	i32		 parent_id;
+	PwhNodeMetrics *metrics;
+	u64				max_nodes;
+	u64			   *node_counter;
+	i32				parent_id; /* -1 means no parent. */
 } TopologyContext;
 
 typedef struct
 {
-	PwhNode *metrics;
-	u64		 max_nodes;
-	u64		*node_counter;
+	PwhNodeMetrics *metrics;
+	u64				max_nodes;
+	u64			   *node_counter;
 } InstrumentationContext;
 
 
 typedef bool (*PwhNodeVisitorFn)(PlanState *planstate, void *context);
-
-extern void pwh_walk_planstate_tree(PlanState		*planstate,
-									PwhNodeVisitorFn visitor, void *context);
-
 
 bool pwh_walk_planstate_recursive(PlanState		  *planstate,
 								  PwhNodeVisitorFn visitor, void *context);
@@ -60,10 +57,12 @@ static void walk_topology_with_parent(PlanState *planstate, i32 parent_id,
 									  TopologyContext *ctx);
 
 static bool instrumentation_visitor(PlanState *planstate, void *context);
+static void walk_planstate_tree(PlanState *planstate, PwhNodeVisitorFn visitor,
+								void *context);
 
-void
-pwh_walk_planstate_tree(PlanState *planstate, PwhNodeVisitorFn visitor,
-						void *context)
+static void
+walk_planstate_tree(PlanState *planstate, PwhNodeVisitorFn visitor,
+					void *context)
 {
 	if (planstate == NULL)
 		return;
@@ -75,6 +74,8 @@ bool
 pwh_walk_planstate_recursive(PlanState *planstate, PwhNodeVisitorFn visitor,
 							 void *context)
 {
+	check_stack_depth();
+
 	if (planstate == NULL)
 	{
 		return true;
@@ -108,7 +109,8 @@ pwh_walk_planstate_recursive(PlanState *planstate, PwhNodeVisitorFn visitor,
 		foreach (lc, planstate->subPlan)
 		{
 			SubPlanState *subplanstate = (SubPlanState *) lfirst(lc);
-			if (!pwh_walk_planstate_recursive(subplanstate->planstate, visitor, context))
+			if (!pwh_walk_planstate_recursive(subplanstate->planstate, visitor,
+											  context))
 			{
 				return false;
 			}
@@ -123,8 +125,8 @@ pwh_walk_planstate_recursive(PlanState *planstate, PwhNodeVisitorFn visitor,
  * Returns total number of nodes found.
  */
 u64
-pwh_walk_plan_topology(PlanState *planstate, PwhNode *metrics, u64 max_nodes,
-					   i32 parent_id)
+pwh_walk_plan_topology(PlanState *planstate, PwhNodeMetrics *metrics,
+					   u64 max_nodes, i32 parent_id)
 {
 	u64 node_counter = 0;
 
@@ -187,6 +189,8 @@ static void
 walk_topology_with_parent(PlanState *planstate, i32 parent_id,
 						  TopologyContext *ctx)
 {
+	check_stack_depth();
+
 	if (planstate == NULL || *ctx->node_counter >= ctx->max_nodes)
 		return;
 
@@ -220,7 +224,7 @@ walk_topology_with_parent(PlanState *planstate, i32 parent_id,
  * Must match the same traversal order as topology walk
  */
 void
-pwh_walk_plan_instrumentation(PlanState *planstate, PwhNode *metrics,
+pwh_walk_plan_instrumentation(PlanState *planstate, PwhNodeMetrics *metrics,
 							  u64 max_nodes)
 {
 	u64 node_counter = 0;
@@ -252,6 +256,10 @@ instrumentation_visitor(PlanState *planstate, void *context)
 
 	u64				 current_id = (*ctx->node_counter)++;
 	Instrumentation *instr = planstate->instrument;
+
+	/* Validate node magic before writing. */
+	if (!pwh_validate_node_magic(&ctx->metrics[current_id], (u32) current_id))
+		return false;
 
 	if (likely(instr != NULL))
 	{

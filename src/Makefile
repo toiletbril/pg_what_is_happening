@@ -3,7 +3,8 @@ SOURCES = \
 	src/shared_memory.c \
 	src/plan_tree_walker.c \
 	src/signal_handler.c \
-	src/compatibility.c
+	src/compatibility.c \
+	src/metrics.c
 
 ENVCFLAGS := $(CFLAGS)
 
@@ -20,10 +21,11 @@ DEFINES := \
 WARNINGS := \
 	-Wall \
 	-Wextra \
+	-Wshadow \
+	-Wstrict-prototypes \
 	-Wno-unused-parameter \
 	-Wno-unused-function \
 	-Wno-unused \
-	-Wno-format \
 	-Wno-unknown-warning-option
 
 CFLAGS2 := \

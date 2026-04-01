@@ -78,8 +78,19 @@ typedef i8 ichar;
 
 #define unused(x) ((void) (x))
 
-#define maximum(i, j) (((i) > (j)) ? (i) : (j))
-#define minimum(i, j) (((i) < (j)) ? (i) : (j))
+#define maximum(i, j)            \
+	({                           \
+		pwh__typeof(i) _i = (i); \
+		pwh__typeof(j) _j = (j); \
+		_i > _j ? _i : _j;       \
+	})
+
+#define minimum(i, j)            \
+	({                           \
+		pwh__typeof(i) _i = (i); \
+		pwh__typeof(j) _j = (j); \
+		_i < _j ? _i : _j;       \
+	})
 
 #define countof(arr) (sizeof(arr) / sizeof(*(arr)))
 
@@ -94,7 +105,7 @@ pwh_hash_djb2(u64 seed, const u8 *data, u64 data_size)
 	u64 hash = seed;
 	for (u64 i = 0; i < data_size; i++)
 	{
-		hash = ((hash << 5) + hash) + data[i];
+		hash = hash * 33 + data[i];
 	}
 	return hash;
 }

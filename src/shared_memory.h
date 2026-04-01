@@ -21,11 +21,19 @@
 
 #include "postgres.h"
 
+#include <signal.h>
+
 #include "common.h"
 #include "compatibility.h"
 #include "datatype/timestamp.h"
 #include "nodes/nodeFuncs.h"
 #include "storage/lwlock.h"
+#include "storage/spin.h"
+
+/* TODO: Test socket/pipe approach as alternative to shared memory.
+ * While shared memory is the only practical PostgreSQL IPC for metrics,
+ * investigate if domain sockets could reduce synchronization complexity.
+ */
 
 #define PWH_NODE_MAGIC 0xDEADBEEF
 
@@ -59,20 +67,19 @@ typedef struct
 	} buffer_usage;
 
 	u64 magic;
-} PwhNode;
+} PwhNodeMetrics;
 
 typedef struct
 {
-	i32			backend_pid;
-	u64			query_id;
-	u32			poll_generation;
-	TimestampTz query_start_time;
-	bool		is_query_active;
-	u32			num_nodes;
-	u32			lock_offset;
-	u32			query_text_capacity;
-	u32			plan_nodes_capacity;
-	/* Plan nodes follow after. */
+	volatile sig_atomic_t backend_pid;
+	u64					  query_id;
+	u32					  poll_generation;
+	TimestampTz			  query_start_time;
+	u32					  num_nodes;
+	slock_t slot_lock; /* Spinlock for per-slot synchronization. */
+	u32		query_text_capacity;
+	u32		metrics_capacity;
+	/* Metrics follow after. */
 } PwhSharedMemoryBackendEntry;
 
 extern PwhSharedMemoryHeader *PWH_SHMEM;
@@ -91,8 +98,12 @@ extern void							pwh_shared_memory_startup_hook(void);
 extern PwhSharedMemoryBackendEntry *pwh_get_my_backend_entry(void);
 extern u64							pwh_get_backend_entry_count(void);
 extern PwhSharedMemoryBackendEntry *pwh_get_backend_entry(u64 index);
-extern char	   *pwh_get_entry_query_text(PwhSharedMemoryBackendEntry *entry);
-extern PwhNode *pwh_get_entry_plan_nodes(PwhSharedMemoryBackendEntry *entry);
-extern u32		pwh_request_backend_metrics(void);
+extern char						   *pwh_get_backend_entry_query_text(
+						   PwhSharedMemoryBackendEntry *entry);
+extern PwhNodeMetrics *pwh_get_backend_entry_metrics(
+	PwhSharedMemoryBackendEntry *entry);
+extern u32	pwh_request_backend_metrics(void);
+extern bool pwh_validate_node_magic(PwhNodeMetrics *node, u32 node_id);
+extern u32	pwh_cleanup_orphaned_slots(void);
 
 #endif /* PWH_SHARED_MEMORY_H */

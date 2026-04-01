@@ -30,11 +30,12 @@
 extern const char *pwh_node_tag_to_string(NodeTag tag);
 
 /* Walk plan tree and populate topology (node_id, parent_id, node_type). */
-extern u64 pwh_walk_plan_topology(PlanState *planstate, PwhNode *metrics,
+extern u64 pwh_walk_plan_topology(PlanState *planstate, PwhNodeMetrics *metrics,
 								  u64 max_nodes, i32 parent_id);
 
 /* Walk plan tree and read Instrumentation data. */
-extern void pwh_walk_plan_instrumentation(PlanState *planstate,
-										  PwhNode *metrics, u64 max_nodes);
+extern void pwh_walk_plan_instrumentation(PlanState		 *planstate,
+										  PwhNodeMetrics *metrics,
+										  u64			  max_nodes);
 
 #endif /* PWH_PLAN_TREE_WALKER_H */

@@ -23,7 +23,7 @@
 
 #include "common.h"
 
-extern void			   pwh_register_openmetrics_worker(void);
+extern void			   pwh_register_openmetrics_exporter_as_bg_worker(void);
 extern wontreturn void pwh_bgworker_main(Datum main_arg);
 
 #endif /* PWH_BG_WORKER_H */

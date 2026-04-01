@@ -25,7 +25,7 @@
 
 #include "common.h"
 
-/* Shut up the compiler */
+/* Shut up the compiler. */
 #ifndef HTTP_BACKEND
 #define HTTP_BACKEND "\0"
 #endif
@@ -38,10 +38,7 @@ pwh_http_server_create(const char *listen_addr)
 	const HttpServerVtable *vtable = choose_backend();
 
 	if (vtable == NULL)
-	{
-		elog(WARNING, "No HTTP backend has been compiled in");
 		return NULL;
-	}
 
 	return vtable->createFn(listen_addr);
 }
