@@ -108,6 +108,11 @@ and with default settings, that's about
 [`Dockerfile`](./Dockerfile) is used as a base image for integration tests.
 Take a look inside [`Shfile.sh`](./Shfile.sh) for more context.
 
+`master` holds stable, tested versions. PRs targeting master trigger the full
+regression test suite.
+`staging` is the trunk branch and can break at any time during active
+development.
+
 ## Building
 
 ```bash
