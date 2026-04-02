@@ -92,7 +92,7 @@ pwh_bgworker_main(Datum main_arg)
 		ereport(FATAL,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("PWH: No HTTP backend compiled in"),
-				 errdetail("Recompile with WITH_MONGOOSE=1 or similar")));
+				 errdetail("Recompile with HTTP_BACKEND=mongoose or similar")));
 	}
 
 	ereport(LOG,
@@ -114,9 +114,12 @@ metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 
 	if (strcmp(req->method, "GET") != 0 || strcmp(req->path, "/metrics") != 0)
 	{
-		pwh_http_response_text(resp, 404, "Not Found");
+		pwh_http_response_set_text(resp, 404, "Not Found");
 		return;
 	}
+
+	/* Lock the shared memory until we are done reading. */
+	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_SHARED);
 
 	u32 n_cleaned = pwh_cleanup_orphaned_slots();
 	if (n_cleaned > 0)
@@ -125,7 +128,7 @@ metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 				(errmsg("PWH: Cleaned up %u orphaned slots", n_cleaned)));
 	}
 
-	u32 n_signaled = pwh_request_backend_metrics();
+	u32 n_signaled = pwh_request_backend_metrics_unlocked();
 
 	ereport(DEBUG2,
 			(errmsg("PWH: Sent SIGUSR2 to %u active backends", n_signaled)));
@@ -134,19 +137,21 @@ metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 
 	char *metrics = pwh_format_openmetrics();
 
+	PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+
 	if (metrics == NULL)
 	{
 		ereport(WARNING, (errmsg("PWH: Failed to format metrics")));
-		pwh_http_response_text(resp, 500, "Internal Server Error");
+		pwh_http_response_set_text(resp, 500, "Internal Server Error");
 		return;
 	}
 
-	pwh_http_response_text(resp, 200, metrics);
+	pwh_http_response_set_text(resp, 200, metrics);
 
 	pfree(metrics);
 }
 
-static void
+wontreturn static void
 handle_sigterm(SIGNAL_ARGS)
 {
 	if (HTTP_SERVER_INSTANCE != NULL)

@@ -8,11 +8,6 @@
 
 #define PWH_GET_QUERY_ID(plannedstmt) ((plannedstmt)->queryId)
 
-typedef struct
-{
-	LWLock lock;
-} PwhSharedMemoryHeader;
-
 #define PWH_LWLOCK_ACQUIRE(lock, mode) LWLockAcquire(&(lock), mode)
 #define PWH_LWLOCK_RELEASE(lock) LWLockRelease(&(lock))
 #define PWH_LWLOCK_INITIALIZE(lock, tranche_id) \

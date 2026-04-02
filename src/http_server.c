@@ -77,7 +77,7 @@ pwh_http_server_stop(HttpServer *server)
 }
 
 void
-pwh_http_response_text(HttpResponse *resp, u32 status_code, char *body)
+pwh_http_response_set_text(HttpResponse *resp, u32 status_code, char *body)
 {
 	resp->status_code = status_code;
 
@@ -103,7 +103,7 @@ pwh_http_response_text(HttpResponse *resp, u32 status_code, char *body)
 }
 
 void
-pwh_http_response_free_contents(HttpResponse *resp)
+pwh_http_response_destroy_body(HttpResponse *resp)
 {
 	pfree(resp->body);
 }

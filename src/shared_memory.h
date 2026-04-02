@@ -92,14 +92,14 @@ Size pwh_get_backend_entry_stride(void);
 void							   *pwh_get_shared_memory_ptr(void);
 extern Size							pwh_get_shared_memory_size(void);
 extern void							pwh_shared_memory_startup_hook(void);
-extern PwhSharedMemoryBackendEntry *pwh_get_my_backend_entry(void);
+extern PwhSharedMemoryBackendEntry *pwh_get_or_create_my_backend_entry(void);
 extern u64							pwh_get_backend_entry_count(void);
 extern PwhSharedMemoryBackendEntry *pwh_get_backend_entry(u64 index);
 extern char						   *pwh_get_backend_entry_query_text(
 						   PwhSharedMemoryBackendEntry *entry);
 extern PwhNodeMetrics *pwh_get_backend_entry_metrics(
 	PwhSharedMemoryBackendEntry *entry);
-extern u32	pwh_request_backend_metrics(void);
+extern u32	pwh_request_backend_metrics_unlocked(void);
 extern bool pwh_validate_node_magic(PwhNodeMetrics *node, u32 node_id);
 extern u32	pwh_cleanup_orphaned_slots(void);
 

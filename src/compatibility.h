@@ -69,6 +69,19 @@ extern bool pwh_walk_planstate_recursive(PlanState		 *planstate,
 #define PWH_INSTR_TIME_MAYBE_GET_DOUBLE(n) (n)
 #endif
 
+#if PG_VERSION_NUM >= 90500
+typedef struct
+{
+	LWLock entry_search_lock;
+} PwhSharedMemoryHeader;
+#else
+typedef struct
+{
+	LWLock *entry_search_lock;
+	u8		__pad[8];
+} PwhSharedMemoryHeader;
+#endif
+
 /* Query ID computation fallback, used when queryId is 0. */
 extern u64 pwh_compute_query_id(const char *query_text);
 

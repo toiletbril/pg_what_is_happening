@@ -37,7 +37,6 @@ shmem_startup_hook_type PREV_SHMEM_STARTUP_HOOK = NULL;
 
 PWH_LWLOCK_TRANCHE_ID_DECL;
 
-static void backend_exit_callback(int code, Datum arg);
 static bool check_if_process_exists(u32 pid);
 static bool signal_process(u32 pid, int sig);
 
@@ -102,42 +101,48 @@ pwh_shared_memory_startup_hook(void)
 		}
 
 		PWH_LWLOCK_SETUP_TRANCHE(PWH_LWLOCK_TRANCHE_ID, "pg_what_is_happening");
-		PWH_LWLOCK_INITIALIZE(PWH_SHMEM->lock, PWH_LWLOCK_TRANCHE_ID);
+		PWH_LWLOCK_INITIALIZE(PWH_SHMEM->entry_search_lock,
+							  PWH_LWLOCK_TRANCHE_ID);
 	}
 }
 
 PwhSharedMemoryBackendEntry *
-pwh_get_my_backend_entry(void)
+pwh_get_or_create_my_backend_entry(void)
 {
+	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_SHARED);
+
+	u64 free_slot_idx = -1U;
+
 	for (u64 i = 0; i < (u64) PWH_MAX_TRACKED_QUERIES_GUC; i++)
 	{
-		PwhSharedMemoryBackendEntry *be = pwh_get_backend_entry(i);
+		PwhSharedMemoryBackendEntry *be = PWH_GET_BACKEND_ENTRY_UNSAFE(i);
 
-		if (be->backend_pid == MyProcPid)
+		if (free_slot_idx == -1U && be->backend_pid == 0)
 		{
+			free_slot_idx = i;
+		}
+		else if (be->backend_pid == MyProcPid)
+		{
+			PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
 			return be;
 		}
 	}
 
-	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->lock, LW_EXCLUSIVE);
-	for (u64 i = 0; i < (u64) PWH_MAX_TRACKED_QUERIES_GUC; i++)
+	if (free_slot_idx != -1U)
 	{
-		PwhSharedMemoryBackendEntry *be = pwh_get_backend_entry(i);
+		PwhSharedMemoryBackendEntry *be =
+			PWH_GET_BACKEND_ENTRY_UNSAFE(free_slot_idx);
 
-		if (be->backend_pid == 0)
-		{
-			be->backend_pid = MyProcPid;
-			PWH_LWLOCK_RELEASE(PWH_SHMEM->lock);
-			ereport(DEBUG2,
-					(errmsg("PWH: Allocated backend entry %lu for PID %u", i,
-							MyProcPid)));
+		ereport(DEBUG2, (errmsg("PWH: Allocated backend entry %lu for PID %u",
+								free_slot_idx, MyProcPid)));
+		be->backend_pid = MyProcPid;
 
-			before_shmem_exit(backend_exit_callback, (Datum) 0);
+		PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
 
-			return be;
-		}
+		return be;
 	}
-	PWH_LWLOCK_RELEASE(PWH_SHMEM->lock);
+
+	PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
 
 	ereport(DEBUG1,
 			(errmsg("PWH: All backend entries exhausted"),
@@ -165,7 +170,10 @@ pwh_get_backend_entry(u64 index)
 	if (index >= (u64) PWH_MAX_TRACKED_QUERIES_GUC)
 		return NULL;
 
+	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_SHARED);
 	PwhSharedMemoryBackendEntry *be = PWH_GET_BACKEND_ENTRY_UNSAFE(index);
+	PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+
 	Assert(be != NULL);
 
 	return be;
@@ -196,20 +204,19 @@ pwh_get_backend_entry_metrics(PwhSharedMemoryBackendEntry *entry)
  * Returns the number of backends signaled.
  */
 u32
-pwh_request_backend_metrics(void)
+pwh_request_backend_metrics_unlocked(void)
 {
 	u32 n_signaled = 0;
 
 	for (u64 i = 0; i < (u64) PWH_MAX_TRACKED_QUERIES_GUC; i++)
 	{
-		PwhSharedMemoryBackendEntry *shmem_be_entry = pwh_get_backend_entry(i);
+		PwhSharedMemoryBackendEntry *shmem_be_entry =
+			PWH_GET_BACKEND_ENTRY_UNSAFE(i);
 
 		if (shmem_be_entry != NULL && shmem_be_entry->backend_pid != 0)
 		{
 			if (signal_process(shmem_be_entry->backend_pid, SIGUSR2))
-			{
 				n_signaled++;
-			}
 		}
 	}
 
@@ -259,33 +266,12 @@ pwh_cleanup_orphaned_slots(void)
 static bool
 check_if_process_exists(u32 pid)
 {
-	return kill(pid, 0) == 0 || errno != ESRCH;
+	return kill((pid_t) pid, 0) == 0 || errno != ESRCH;
 }
 
 static bool
 signal_process(u32 pid, int sig)
 {
-	return kill(pid, sig) == 0;
+	return kill((pid_t) pid, sig) == 0;
 }
 
-static void
-backend_exit_callback(int code, Datum arg)
-{
-	unused(code);
-	unused(arg);
-
-	for (u64 i = 0; i < (u64) PWH_MAX_TRACKED_QUERIES_GUC; i++)
-	{
-		PwhSharedMemoryBackendEntry *be = pwh_get_backend_entry(i);
-
-		if (be != NULL && be->backend_pid == MyProcPid)
-		{
-			MemSet(be, 0, pwh_get_backend_entry_stride());
-			PWH_MEMORY_BARRIER();
-			ereport(DEBUG2,
-					(errmsg("PWH: Released backend entry %lu for PID %u", i,
-							MyProcPid)));
-			return;
-		}
-	}
-}

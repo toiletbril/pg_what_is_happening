@@ -90,10 +90,14 @@ mongoose_event_handler(struct mg_connection *c, int ev, void *ev_data)
 		memset(&resp, 0, sizeof(resp));
 
 		/* Call handler. */
-		if (impl->handler)
+		if (impl->handler != NULL)
+		{
 			impl->handler(&req, &resp, impl->user_data);
+		}
 		else
-			pwh_http_response_text(&resp, 404, "Not Found");
+		{
+			pwh_http_response_set_text(&resp, 404, "Not Found");
+		}
 
 		/* Send response. */
 		mg_http_reply(
@@ -101,7 +105,7 @@ mongoose_event_handler(struct mg_connection *c, int ev, void *ev_data)
 			resp.headers ? resp.headers : "Content-Type: text/plain\r\n", "%s",
 			resp.body ? resp.body : "");
 
-		pwh_http_response_free_contents(&resp);
+		pwh_http_response_destroy_body(&resp);
 	}
 }
 
