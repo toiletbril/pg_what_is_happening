@@ -42,7 +42,7 @@ SELECT * FROM what_is_happening.v1_status;
 | `startup_time_us`              | `float8` | Time to produce the first tuple in microseconds.             |
 | `total_time_us`                | `float8` | Total execution time in microseconds.                        |
 | `loops_executed`               | `float8` | Number of times this plan node was executed.                 |
-| `rows`                         | `float8` | Number of rows produced by this plan node.                   |
+| `tuples_returned`              | `float8` | Number of tuples returned by this plan node.                 |
 | `time_seconds`                 | `float8` | Execution time in seconds.                                   |
 | `time_percent`                 | `float8` | Percentage of total query time spent in this node.           |
 | `rows_filtered_by_joins`       | `float8` | Rows removed by scan or join conditions.                     |
@@ -66,9 +66,15 @@ Prometheus, VictoriaMetrics, or et cetera.
 $ curl localhost:9187/metrics
 ```
 
-Point your Prometheus at this endpoint and you'll have per-node execution
-visibility in Grafana dashboards with maximum rizz to flex your friends which
-nodes are spilling to disk, cache hit ratios, or easily find the slowest joins.
+The HTTP endpoint exposes the same execution and buffer usage metrics from the
+SQL view (excluding identification columns), prefixed with
+`pg_what_is_happening_active_query_node_`. Each metric includes labels for
+`pid`, `query_id`, `node_id`, and `node_tag`.
+
+Available metrics: `tuples_returned`, `time_seconds`, `time_percent`,
+`cache_hits`, `cache_misses`, `local_cache_hits`, `local_cache_misses`,
+`spill_file_reads`, `spill_file_writes`, `rows_filtered_by_joins`,
+`rows_filtered_by_expressions`.
 
 Example PromQL queries for your dashboards:
 
