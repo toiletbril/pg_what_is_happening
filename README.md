@@ -39,11 +39,10 @@ SELECT * FROM what_is_happening.v1_status;
 | `parent_node_id`               | `int4`   | ID of the parent node in the plan tree.                      |
 | `node_tag`                     | `text`   | PostgreSQL plan node type (e.g., `SeqScan`, `HashJoin`).     |
 |                                |          |                                                              |
-| `tuples_returned`              | `float8` | Number of tuples returned by this plan node.                 |
 | `startup_time_us`              | `float8` | Time to produce the first tuple in microseconds.             |
 | `total_time_us`                | `float8` | Total execution time in microseconds.                        |
 | `loops_executed`               | `float8` | Number of times this plan node was executed.                 |
-| `rows`                         | `float8` | Rows produced by this plan node (same as `tuples_returned`). |
+| `rows`                         | `float8` | Number of rows produced by this plan node.                   |
 | `time_seconds`                 | `float8` | Execution time in seconds.                                   |
 | `time_percent`                 | `float8` | Percentage of total query time spent in this node.           |
 | `rows_filtered_by_joins`       | `float8` | Rows removed by scan or join conditions.                     |
