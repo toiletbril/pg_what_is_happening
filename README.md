@@ -9,6 +9,8 @@ braver than I am.
 PostgreSQL versions from 9.4 through 18+ are supported with varying levels of
 jank in the compatibility layer.
 
+See [`example/`](./example/) for a Prometheus/Grafana setup.
+
 ## Usage
 
 The extension exposes metrics through two interfaces: a SQL view for direct
