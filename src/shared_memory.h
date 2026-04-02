@@ -54,6 +54,8 @@ typedef struct
 		double loops_executed;
 		double startup_time_us;
 		double total_time_us;
+		double rows_filtered_by_joins;
+		double rows_filtered_by_expressions;
 	} execution;
 
 	struct

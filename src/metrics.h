@@ -25,7 +25,7 @@
 #include "funcapi.h"
 #include "shared_memory.h"
 
-#define PWH_V1_STATUS_TUPLE_COUNT 19
+#define PWH_V1_STATUS_TUPLE_COUNT 21
 
 typedef enum
 {
@@ -43,6 +43,8 @@ typedef enum
 	METRIC_LOCAL_CACHE_MISSES,
 	METRIC_SPILL_FILE_READS,
 	METRIC_SPILL_FILE_WRITES,
+	METRIC_ROWS_FILTERED_BY_JOINS,
+	METRIC_ROWS_FILTERED_BY_EXPRESSIONS,
 	METRIC_COUNT
 } MetricType;
 
@@ -77,6 +79,10 @@ metric_suffix(MetricType type)
 			return "spill_file_reads";
 		case METRIC_SPILL_FILE_WRITES:
 			return "spill_file_writes";
+		case METRIC_ROWS_FILTERED_BY_JOINS:
+			return "rows_filtered_by_joins";
+		case METRIC_ROWS_FILTERED_BY_EXPRESSIONS:
+			return "rows_filtered_by_expressions";
 		case METRIC_COUNT:
 			break;
 	}
@@ -115,6 +121,10 @@ metric_help(MetricType type)
 			return "Blocks read from spill files";
 		case METRIC_SPILL_FILE_WRITES:
 			return "Blocks written to spill files";
+		case METRIC_ROWS_FILTERED_BY_JOINS:
+			return "Rows filtered by scan or join conditions";
+		case METRIC_ROWS_FILTERED_BY_EXPRESSIONS:
+			return "Rows filtered by other filter expressions";
 		case METRIC_COUNT:
 			break;
 	}

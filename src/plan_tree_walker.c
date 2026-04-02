@@ -165,6 +165,8 @@ topology_visitor(PlanState *planstate, void *context)
 	ctx->metrics[id].execution.startup_time_us = 0;
 	ctx->metrics[id].execution.total_time_us = 0;
 	ctx->metrics[id].execution.loops_executed = 0;
+	ctx->metrics[id].execution.rows_filtered_by_joins = 0;
+	ctx->metrics[id].execution.rows_filtered_by_expressions = 0;
 	ctx->metrics[id].buffer_usage.cache_hits = 0;
 	ctx->metrics[id].buffer_usage.cache_misses = 0;
 	ctx->metrics[id].buffer_usage.local_cache_hits = 0;
@@ -275,6 +277,10 @@ instrumentation_visitor(PlanState *planstate, void *context)
 			(PWH_INSTR_TIME_MAYBE_GET_DOUBLE(instr->total) +
 			 INSTR_TIME_GET_DOUBLE(instr->counter)) *
 			1000000.0;
+		ctx->metrics[current_id].execution.rows_filtered_by_joins =
+			instr->nfiltered1;
+		ctx->metrics[current_id].execution.rows_filtered_by_expressions =
+			instr->nfiltered2;
 
 		PWH_COPY_BUFUSAGE(ctx->metrics, instr, current_id);
 	}
