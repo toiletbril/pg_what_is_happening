@@ -21,12 +21,40 @@ queries and an `/metrics` HTTP endpoint for your monitoring stack.
 Query the `what_is_happening.v1_status` view to see live metrics for all active
 queries across backends. Each row represents one plan node from one query, with
 timing, tuple counts, and buffer usage stats. This view is backed by the
-`what_is_happening.v1_status()` function which polls all backends via SIGUSR2
-and aggregates their current execution state into a result set.
+`what_is_happening.v1_status()` function which polls all backends and
+aggregates their current execution state into a result set.
 
 ```sql
 SELECT * FROM what_is_happening.v1_status;
 ```
+
+#### Available metrics
+
+| Column                         | Type     | Description                                                  |
+|--------------------------------|----------|--------------------------------------------------------------|
+| `backend_pid`                  | `int4`   | Process ID of the backend executing the query.               |
+| `query_id`                     | `int8`   | Unique identifier for the query.                             |
+| `query_text`                   | `text`   | The SQL query text (truncated to `query_text_len`).          |
+| `node_id`                      | `int4`   | Sequential ID of this plan node in the tree.                 |
+| `parent_node_id`               | `int4`   | ID of the parent node in the plan tree.                      |
+| `node_tag`                     | `text`   | PostgreSQL plan node type (e.g., `SeqScan`, `HashJoin`).     |
+|                                |          |                                                              |
+| `tuples_returned`              | `float8` | Number of tuples returned by this plan node.                 |
+| `startup_time_us`              | `float8` | Time to produce the first tuple in microseconds.             |
+| `total_time_us`                | `float8` | Total execution time in microseconds.                        |
+| `loops_executed`               | `float8` | Number of times this plan node was executed.                 |
+| `rows`                         | `float8` | Rows produced by this plan node (same as `tuples_returned`). |
+| `time_seconds`                 | `float8` | Execution time in seconds.                                   |
+| `time_percent`                 | `float8` | Percentage of total query time spent in this node.           |
+| `rows_filtered_by_joins`       | `float8` | Rows removed by scan or join conditions.                     |
+| `rows_filtered_by_expressions` | `float8` | Rows removed by other filter expressions.                    |
+|                                |          |                                                              |
+| `cache_hits`                   | `int8`   | Shared buffer cache hits.                                    |
+| `cache_misses`                 | `int8`   | Shared buffer cache misses (blocks read from disk).          |
+| `local_cache_hits`             | `int8`   | Local buffer cache hits.                                     |
+| `local_cache_misses`           | `int8`   | Local buffer cache misses.                                   |
+| `spill_file_reads`             | `int8`   | Blocks read from temporary spill files.                      |
+| `spill_file_writes`            | `int8`   | Blocks written to temporary spill files.                     |
 
 ### HTTP metrics endpoint
 
@@ -63,30 +91,14 @@ sum by (node_tag) (
 
 ## Settings
 
-- `what_is_happening.enabled` defaults to true. Set it to `false` if you want
-  the extension loaded but dormant. Toggled with a `SIGHUP`
-
-- `what_is_happening.signal_timeout_ms` defaults to 10ms, range is 1 to 1000.
-  How long we wait for each backend to respond to request for metrics before
-  giving up. Toggled with a `SIGHUP`.
-
-- `what_is_happening.listen_address` defaults to `127.0.0.1:9187` and controls
-  where the background worker binds for the `/metrics` HTTP endpoint. Only
-  available if compiled `WITH_BGWORKER`. Requires restart.
-
-- `what_is_happening.max_tracked_queries` defaults to 128, range is 1 to 65536.
-  This is how many concurrent query slots is allocated in shared memory. Each
-  slot can hold one backend's metrics. If you have more active backends than
-  slots, some queries won't get tracked. Requires restart.
-
-- `what_is_happening.max_nodes_per_query` defaults to 128, range is 16 to 1024.
-  Maximum plan nodes tracked per query. If your query plan has 200 nodes but
-  this is set to 128, you'll only see the first 128 nodes in the output.
-  Requires restart.
-
-- `what_is_happening.query_text_len` defaults to 1024, range is 64 to 8192. How
-  many bytes of query text get stored. Longer queries get truncated. Requires
-  restart.
+| Setting                                 | Default          | Range   | Reload   | Description                                                                                         |
+|-----------------------------------------|------------------|---------|----------|-----------------------------------------------------------------------------------------------------|
+| `what_is_happening.enabled`             | `true`           | —       | `SIGHUP` | Enable or disable the extension without unloading it.                                               |
+| `what_is_happening.signal_timeout_ms`   | `10`             | 1–1000  | `SIGHUP` | How long to wait for each backend to respond to metrics requests before giving up (milliseconds).   |
+| `what_is_happening.listen_address`      | `127.0.0.1:9187` | —       | Restart  | Address and port for the `/metrics` HTTP endpoint. Only available if compiled with `WITH_BGWORKER`. |
+| `what_is_happening.max_tracked_queries` | `128`            | 1–65536 | Restart  | Number of concurrent query slots allocated in shared memory. Each slot holds one backend's metrics. |
+| `what_is_happening.max_nodes_per_query` | `128`            | 16–1024 | Restart  | Maximum plan nodes tracked per query. Plans with more nodes get truncated.                          |
+| `what_is_happening.query_text_len`      | `1024`           | 64–8192 | Restart  | Maximum bytes of query text stored. Longer queries get truncated.                                   |
 
 ## Performance
 
