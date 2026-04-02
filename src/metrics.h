@@ -25,7 +25,7 @@
 #include "funcapi.h"
 #include "shared_memory.h"
 
-#define PWH_V1_STATUS_TUPLE_COUNT 21
+#define PWH_V1_STATUS_TUPLE_COUNT 20
 
 typedef enum
 {

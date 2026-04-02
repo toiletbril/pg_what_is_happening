@@ -70,36 +70,34 @@ pwh_create_v1_status_tupdesc(void)
 
 	/* Metrics. */
 	TupleDescInitEntry(tupdesc, (AttrNumber) 7,
-					   metric_suffix(METRIC_TUPLES_RETURNED), FLOAT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 8,
 					   metric_suffix(METRIC_STARTUP_TIME_US), FLOAT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 9,
+	TupleDescInitEntry(tupdesc, (AttrNumber) 8,
 					   metric_suffix(METRIC_TOTAL_TIME_US), FLOAT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 10,
+	TupleDescInitEntry(tupdesc, (AttrNumber) 9,
 					   metric_suffix(METRIC_LOOPS_EXECUTED), FLOAT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 11, metric_suffix(METRIC_ROWS),
+	TupleDescInitEntry(tupdesc, (AttrNumber) 10, metric_suffix(METRIC_ROWS),
 					   FLOAT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 12,
+	TupleDescInitEntry(tupdesc, (AttrNumber) 11,
 					   metric_suffix(METRIC_TIME_SECONDS), FLOAT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 13,
+	TupleDescInitEntry(tupdesc, (AttrNumber) 12,
 					   metric_suffix(METRIC_TIME_PERCENT), FLOAT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 14,
+	TupleDescInitEntry(tupdesc, (AttrNumber) 13,
 					   metric_suffix(METRIC_CACHE_HITS), INT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 15,
+	TupleDescInitEntry(tupdesc, (AttrNumber) 14,
 					   metric_suffix(METRIC_CACHE_MISSES), INT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 16,
+	TupleDescInitEntry(tupdesc, (AttrNumber) 15,
 					   metric_suffix(METRIC_LOCAL_CACHE_HITS), INT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 17,
+	TupleDescInitEntry(tupdesc, (AttrNumber) 16,
 					   metric_suffix(METRIC_LOCAL_CACHE_MISSES), INT8OID, -1,
 					   0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 18,
+	TupleDescInitEntry(tupdesc, (AttrNumber) 17,
 					   metric_suffix(METRIC_SPILL_FILE_READS), INT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 19,
+	TupleDescInitEntry(tupdesc, (AttrNumber) 18,
 					   metric_suffix(METRIC_SPILL_FILE_WRITES), INT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 20,
+	TupleDescInitEntry(tupdesc, (AttrNumber) 19,
 					   metric_suffix(METRIC_ROWS_FILTERED_BY_JOINS), FLOAT8OID,
 					   -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 21,
+	TupleDescInitEntry(tupdesc, (AttrNumber) 20,
 					   metric_suffix(METRIC_ROWS_FILTERED_BY_EXPRESSIONS),
 					   FLOAT8OID, -1, 0);
 
@@ -127,21 +125,20 @@ pwh_fill_v1_status_tuple(Datum *values, bool *nulls,
 	values[3] = Int32GetDatum(node->node_id);
 	values[4] = Int32GetDatum(node->parent_node_id);
 	values[5] = CStringGetTextDatum(pwh_node_tag_to_string(node->tag));
-	values[6] = Float8GetDatum(node->execution.tuples_returned);
-	values[7] = Float8GetDatum(node->execution.startup_time_us);
-	values[8] = Float8GetDatum(node->execution.total_time_us);
-	values[9] = Float8GetDatum(node->execution.loops_executed);
-	values[10] = Float8GetDatum(node->execution.tuples_returned);
-	values[11] = Float8GetDatum(node_time_seconds);
-	values[12] = Float8GetDatum(node_percent);
-	values[13] = Int64GetDatum(node->buffer_usage.cache_hits);
-	values[14] = Int64GetDatum(node->buffer_usage.cache_misses);
-	values[15] = Int64GetDatum(node->buffer_usage.local_cache_hits);
-	values[16] = Int64GetDatum(node->buffer_usage.local_cache_misses);
-	values[17] = Int64GetDatum(node->buffer_usage.spill_file_reads);
-	values[18] = Int64GetDatum(node->buffer_usage.spill_file_writes);
-	values[19] = Float8GetDatum(node->execution.rows_filtered_by_joins);
-	values[20] = Float8GetDatum(node->execution.rows_filtered_by_expressions);
+	values[6] = Float8GetDatum(node->execution.startup_time_us);
+	values[7] = Float8GetDatum(node->execution.total_time_us);
+	values[8] = Float8GetDatum(node->execution.loops_executed);
+	values[9] = Float8GetDatum(node->execution.tuples_returned);
+	values[10] = Float8GetDatum(node_time_seconds);
+	values[11] = Float8GetDatum(node_percent);
+	values[12] = Int64GetDatum(node->buffer_usage.cache_hits);
+	values[13] = Int64GetDatum(node->buffer_usage.cache_misses);
+	values[14] = Int64GetDatum(node->buffer_usage.local_cache_hits);
+	values[15] = Int64GetDatum(node->buffer_usage.local_cache_misses);
+	values[16] = Int64GetDatum(node->buffer_usage.spill_file_reads);
+	values[17] = Int64GetDatum(node->buffer_usage.spill_file_writes);
+	values[18] = Float8GetDatum(node->execution.rows_filtered_by_joins);
+	values[19] = Float8GetDatum(node->execution.rows_filtered_by_expressions);
 }
 
 static void
