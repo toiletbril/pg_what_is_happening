@@ -20,7 +20,9 @@ CREATE FUNCTION what_is_happening.v1_status_f(
 	OUT local_cache_hits int8,
 	OUT local_cache_misses int8,
 	OUT spill_file_reads int8,
-	OUT spill_file_writes int8
+	OUT spill_file_writes int8,
+	OUT rows_filtered_by_joins float8,
+	OUT rows_filtered_by_expressions float8
 )
 RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'v1_status_f'

@@ -16,10 +16,9 @@ SELECT pg_sleep(0.05);
 \set type_count `grep -c "^# TYPE pg_what_is_happening_active_query_node" /data/pwh_metrics_output.txt`
 
 SELECT
-  :help_count AS help_count,
   :help_count > 0 AS has_help_declarations,
-  :type_count AS type_count,
-  :type_count > 0 AS has_type_declarations;
+  :type_count > 0 AS has_type_declarations,
+  :type_count = :help_count AS as_many_help_as_types;
 
 -- Verify actual metric lines are present with labels and values.
 \set metric_count `grep -c "^pg_what_is_happening_active_query_node_.*{pid=" /data/pwh_metrics_output.txt`

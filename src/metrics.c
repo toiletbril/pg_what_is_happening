@@ -96,6 +96,12 @@ pwh_create_v1_status_tupdesc(void)
 					   metric_suffix(METRIC_SPILL_FILE_READS), INT8OID, -1, 0);
 	TupleDescInitEntry(tupdesc, (AttrNumber) 19,
 					   metric_suffix(METRIC_SPILL_FILE_WRITES), INT8OID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 20,
+					   metric_suffix(METRIC_ROWS_FILTERED_BY_JOINS), FLOAT8OID,
+					   -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 21,
+					   metric_suffix(METRIC_ROWS_FILTERED_BY_EXPRESSIONS),
+					   FLOAT8OID, -1, 0);
 
 	return tupdesc;
 }
@@ -134,6 +140,8 @@ pwh_fill_v1_status_tuple(Datum *values, bool *nulls,
 	values[16] = Int64GetDatum(node->buffer_usage.local_cache_misses);
 	values[17] = Int64GetDatum(node->buffer_usage.spill_file_reads);
 	values[18] = Int64GetDatum(node->buffer_usage.spill_file_writes);
+	values[19] = Float8GetDatum(node->execution.rows_filtered_by_joins);
+	values[20] = Float8GetDatum(node->execution.rows_filtered_by_expressions);
 }
 
 static void
@@ -162,6 +170,10 @@ append_all_node_metrics(Formatter *fmt, PwhNodeMetrics *node,
 				  (long) node->buffer_usage.spill_file_reads);
 	append_metric(fmt, node, METRIC_SPILL_FILE_WRITES, "%ld",
 				  (long) node->buffer_usage.spill_file_writes);
+	append_metric(fmt, node, METRIC_ROWS_FILTERED_BY_JOINS, "%.0f",
+				  node->execution.rows_filtered_by_joins);
+	append_metric(fmt, node, METRIC_ROWS_FILTERED_BY_EXPRESSIONS, "%.0f",
+				  node->execution.rows_filtered_by_expressions);
 }
 
 

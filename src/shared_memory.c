@@ -274,4 +274,3 @@ signal_process(u32 pid, int sig)
 {
 	return kill((pid_t) pid, sig) == 0;
 }
-

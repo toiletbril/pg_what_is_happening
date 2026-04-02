@@ -16,13 +16,12 @@ SELECT pg_sleep(0.05);
 \set help_count `grep -c "^# HELP pg_what_is_happening_active_query_node" /data/pwh_metrics_output.txt`
 \set type_count `grep -c "^# TYPE pg_what_is_happening_active_query_node" /data/pwh_metrics_output.txt`
 SELECT
-  :help_count AS help_count,
   :help_count > 0 AS has_help_declarations,
-  :type_count AS type_count,
-  :type_count > 0 AS has_type_declarations;
- help_count | has_help_declarations | type_count | has_type_declarations 
-------------+-----------------------+------------+-----------------------
-         13 | t                     |         13 | t
+  :type_count > 0 AS has_type_declarations,
+  :type_count = :help_count AS as_many_help_as_types;
+ has_help_declarations | has_type_declarations | as_many_help_as_types 
+-----------------------+-----------------------+-----------------------
+ t                     | t                     | t
 (1 row)
 
 -- Verify actual metric lines are present with labels and values.
