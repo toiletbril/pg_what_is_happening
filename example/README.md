@@ -20,31 +20,12 @@ Metrics use labels for `pid`, `query_id`, `node_id`, and `node_tag`.
 
 Configuration:
 
-The extension serves metrics on `localhost:9187` by default. Change via
-`what_is_happening.listen_address` GUC in `postgresql.conf` or at runtime:
-```
-ALTER SYSTEM SET what_is_happening.listen_address = '0.0.0.0:9187';
-SELECT pg_reload_conf();
-```
+The extension serves metrics on `localhost:9187` by default. Update
+`prometheus/prometheus.yml` if the endpoint changes. Scrape interval is 1
+second, adjust in `prometheus.yml` if needed.
 
-Keep it on localhost unless remote access is needed and firewalled. Update
-`prometheus/prometheus.yml` if the endpoint changes.
-
-Scrape interval is 1 second. Adjust in `prometheus.yml` if needed.
-
-Available metrics:
-
-All prefixed with `pg_what_is_happening_active_query_node_`.
-
-- `rows` - tuples produced by node
-- `time_seconds` - execution time
-- `time_percent` - percentage of total query time
-- `cache_hits` - shared buffer hits
-- `cache_misses` - shared buffer misses
-- `local_cache_hits` - local buffer hits
-- `local_cache_misses` - local buffer misses
-- `spill_file_reads` - blocks read from spill files
-- `spill_file_writes` - blocks written to spill files
+See the [main README](../README.md) for available metrics and configuration
+options.
 
 Find nodes spilling to disk:
 
