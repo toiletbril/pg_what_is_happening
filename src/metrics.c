@@ -75,8 +75,8 @@ pwh_create_v1_status_tupdesc(void)
 					   metric_suffix(METRIC_TOTAL_TIME_US), FLOAT8OID, -1, 0);
 	TupleDescInitEntry(tupdesc, (AttrNumber) 9,
 					   metric_suffix(METRIC_LOOPS_EXECUTED), FLOAT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 10, metric_suffix(METRIC_ROWS),
-					   FLOAT8OID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 10,
+					   metric_suffix(METRIC_TUPLES_RETURNED), FLOAT8OID, -1, 0);
 	TupleDescInitEntry(tupdesc, (AttrNumber) 11,
 					   metric_suffix(METRIC_TIME_SECONDS), FLOAT8OID, -1, 0);
 	TupleDescInitEntry(tupdesc, (AttrNumber) 12,
@@ -151,7 +151,7 @@ append_all_node_metrics(Formatter *fmt, PwhNodeMetrics *node,
 			? (node->execution.total_time_us / total_query_time) * 100.0
 			: 0.0;
 
-	append_metric(fmt, node, METRIC_ROWS, "%.0f",
+	append_metric(fmt, node, METRIC_TUPLES_RETURNED, "%.0f",
 				  node->execution.tuples_returned);
 	append_metric(fmt, node, METRIC_TIME_SECONDS, "%.6f", node_time_seconds);
 	append_metric(fmt, node, METRIC_TIME_PERCENT, "%.2f", node_percent);

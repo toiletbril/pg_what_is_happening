@@ -34,7 +34,6 @@ typedef enum
 	METRIC_STARTUP_TIME_US,
 	METRIC_TOTAL_TIME_US,
 	METRIC_LOOPS_EXECUTED,
-	METRIC_ROWS,
 	METRIC_TIME_SECONDS,
 	METRIC_TIME_PERCENT,
 	METRIC_CACHE_HITS,
@@ -61,8 +60,6 @@ metric_suffix(MetricType type)
 			return "total_time_us";
 		case METRIC_LOOPS_EXECUTED:
 			return "loops_executed";
-		case METRIC_ROWS:
-			return "rows";
 		case METRIC_TIME_SECONDS:
 			return "time_seconds";
 		case METRIC_TIME_PERCENT:
@@ -103,8 +100,6 @@ metric_help(MetricType type)
 			return "Total execution time in microseconds";
 		case METRIC_LOOPS_EXECUTED:
 			return "Number of times plan node was executed";
-		case METRIC_ROWS:
-			return "Rows produced by active query plan node";
 		case METRIC_TIME_SECONDS:
 			return "Execution time for active query plan node in seconds";
 		case METRIC_TIME_PERCENT:

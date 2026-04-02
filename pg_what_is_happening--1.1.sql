@@ -11,7 +11,7 @@ CREATE FUNCTION what_is_happening.v1_status_f(
 	OUT startup_time_us float8,
 	OUT total_time_us float8,
 	OUT loops_executed float8,
-	OUT rows float8,
+	OUT tuples_returned float8,
 	OUT time_seconds float8,
 	OUT time_percent float8,
 	OUT cache_hits int8,
