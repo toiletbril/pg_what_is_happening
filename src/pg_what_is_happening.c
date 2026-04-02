@@ -64,6 +64,7 @@ void _PG_fini(void);
 static void query_start_hook(QueryDesc *queryDesc, i32 eflags);
 static void query_end_hook(QueryDesc *queryDesc);
 static void query_cleanup_callback(XactEvent event, void *arg);
+static void backend_exit_callback(int code, Datum arg);
 static u64	get_query_id(const QueryDesc *qd);
 static bool check_positive_guc(int *newval, void **extra, GucSource source);
 
@@ -250,17 +251,43 @@ query_cleanup_callback(XactEvent event, void *arg)
 		return;
 
 	/* Get our backend entry and mark query as inactive. */
-	PwhSharedMemoryBackendEntry *shmem_be_entry = pwh_get_my_backend_entry();
-	if (shmem_be_entry != NULL && shmem_be_entry->backend_pid != 0)
+	PwhSharedMemoryBackendEntry *shmem_be_entry =
+		pwh_get_or_create_my_backend_entry();
+
+	if (likely(shmem_be_entry != NULL && shmem_be_entry->backend_pid != 0))
 	{
-		PWH_MEMORY_BARRIER();
+		shmem_be_entry->backend_pid = 0;
 		shmem_be_entry->poll_generation++;
+
+		PWH_MEMORY_BARRIER();
 
 		ereport(DEBUG1,
 				(errmsg("PWH: Cleaned up query state on abort for PID %d",
 						MyProcPid),
 				 errdetail("Generation: %lu",
 						   (unsigned long) shmem_be_entry->poll_generation)));
+	}
+}
+
+static void
+backend_exit_callback(int code, Datum arg)
+{
+	unused(code);
+	unused(arg);
+
+	for (u64 i = 0; i < (u64) PWH_MAX_TRACKED_QUERIES_GUC; i++)
+	{
+		PwhSharedMemoryBackendEntry *be = pwh_get_backend_entry(i);
+
+		if (be != NULL && be->backend_pid == MyProcPid)
+		{
+			MemSet(be, 0, pwh_get_backend_entry_stride());
+			PWH_MEMORY_BARRIER();
+			ereport(DEBUG2,
+					(errmsg("PWH: Released backend entry %lu for PID %u", i,
+							MyProcPid)));
+			return;
+		}
 	}
 }
 
@@ -271,6 +298,7 @@ initialize_state_once_per_backend(void)
 {
 	/* Query backend state on error. */
 	RegisterXactCallback(query_cleanup_callback, NULL);
+	before_shmem_exit(backend_exit_callback, (Datum) 0);
 	/* Report metrics when signaled. */
 	pwh_install_signal_handler();
 	/* Communicate with BG worker. */
@@ -315,7 +343,7 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 	{
 		/* Get our backend entry. */
 		PwhSharedMemoryBackendEntry *shmem_be_entry =
-			pwh_get_my_backend_entry();
+			pwh_get_or_create_my_backend_entry();
 		if (unlikely(shmem_be_entry == NULL))
 		{
 			ereport(LOG, (errmsg("PWH: Could not allocate backend entry"),
@@ -401,7 +429,7 @@ query_end_hook(QueryDesc *queryDesc)
 		{
 			/* Get our backend entry. */
 			PwhSharedMemoryBackendEntry *shmem_be_entry =
-				pwh_get_my_backend_entry();
+				pwh_get_or_create_my_backend_entry();
 			if (likely(shmem_be_entry != NULL &&
 					   shmem_be_entry->backend_pid != 0))
 			{
@@ -472,14 +500,19 @@ v1_status_f(PG_FUNCTION_ARGS)
 		PWH_TUPLE_DESC_FINALIZE(td);
 		funcctx->tuple_desc = BlessTupleDesc(td);
 
-		/* Send SIGUSR2 to all active backends to refresh metrics. */
-		u32 n_signaled = pwh_request_backend_metrics();
+		/* Lock the shared memory until we are done reading. */
+		PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_SHARED);
 
-		ereport(DEBUG1, (errmsg("PWH: v1_status() called"),
-						 errdetail("Signaled %u backends", n_signaled)));
+		/* Send SIGUSR2 to all active backends to refresh metrics. */
+		u32 n_signaled = pwh_request_backend_metrics_unlocked();
 
 		/* Wait for backends to refresh metrics. */
 		pg_usleep(PWH_SIGNAL_TIMEOUT_MS_GUC * 1000L);
+
+		PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+
+		ereport(DEBUG1, (errmsg("PWH: v1_status() called"),
+						 errdetail("Signaled %u backends", n_signaled)));
 
 		/* XXX do it via static u64? */
 		u32 *state = (u32 *) palloc(2 * sizeof(u32));

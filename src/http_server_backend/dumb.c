@@ -219,9 +219,13 @@ handle_connection(DumbHttpServer *impl, i32 client_fd)
 
 	/* Call handler. */
 	if (impl->handler)
+	{
 		impl->handler(&req, &resp, impl->user_data);
+	}
 	else
-		pwh_http_response_text(&resp, 404, "Not Found");
+	{
+		pwh_http_response_set_text(&resp, 404, "Not Found");
+	}
 
 	/* Build response. */
 	response_len = snprintf(response_buffer, sizeof(response_buffer),

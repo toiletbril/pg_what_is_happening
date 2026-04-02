@@ -79,7 +79,6 @@ pwh_sigusr2_handler(SIGNAL_ARGS)
 		goto chain;
 	}
 
-	/* Get our slot. It's unsafe to call pwh_get_my_backend_entry() here. */
 	if (PWH_SHMEM == NULL)
 	{
 		SIGNAL_HANDLER_SHMEM_NULL++;
@@ -90,6 +89,7 @@ pwh_sigusr2_handler(SIGNAL_ARGS)
 	for (u64 i = 0; i < (u64) PWH_MAX_TRACKED_QUERIES_GUC; i++)
 	{
 		PwhSharedMemoryBackendEntry *be = PWH_GET_BACKEND_ENTRY_UNSAFE(i);
+
 		if (be->backend_pid == MyProcPid)
 		{
 			shmem_be_entry = be;
@@ -109,8 +109,9 @@ pwh_sigusr2_handler(SIGNAL_ARGS)
 								  PWH_MAX_NODES_PER_QUERY_GUC);
 
 	/* Increment generation counter to signal completion. */
-	PWH_MEMORY_BARRIER();
 	shmem_be_entry->poll_generation++;
+	PWH_MEMORY_BARRIER();
+
 	SIGNAL_HANDLER_SUCCESS_COUNT++;
 
 chain:
@@ -122,6 +123,7 @@ chain:
 		(*PREV_SIGUSR2_HANDLER)(postgres_signal_arg);
 		return;
 	}
+
 	errno = save_errno;
 }
 

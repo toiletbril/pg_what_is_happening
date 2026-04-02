@@ -74,9 +74,8 @@ extern void		   pwh_http_server_set_handler(HttpServer		 *server,
 extern i32		   pwh_http_server_run(HttpServer *server);
 extern void		   pwh_http_server_stop(HttpServer *server);
 
-extern void pwh_http_response_text(HttpResponse *resp, u32 status_code,
-								   char *body);
-
-extern void pwh_http_response_free_contents(HttpResponse *resp);
+extern void pwh_http_response_set_text(HttpResponse *resp, u32 status_code,
+									   char *body);
+extern void pwh_http_response_destroy_body(HttpResponse *resp);
 
 #endif /* PWH_HTTP_SERVER_H */
