@@ -56,6 +56,8 @@ static u64	get_query_id(const QueryDesc *qd);
 
 PWH_SHMEM_REQUEST_HOOK_DECL;
 
+static volatile bool WAS_BACKEND_INITIALIZED = false;
+
 void
 _PG_init(void)
 {
@@ -166,9 +168,11 @@ backend_exit_callback(int code, Datum arg)
 	unused(code);
 	unused(arg);
 
+	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_EXCLUSIVE);
+
 	for (u64 i = 0; i < (u64) PWH_GUC_MAX_TRACKED_QUERIES; i++)
 	{
-		PwhSharedMemoryBackendEntry *be = pwh_get_backend_entry(i);
+		PwhSharedMemoryBackendEntry *be = PWH_GET_BACKEND_ENTRY_UNSAFE(i);
 
 		if (be != NULL && be->backend_pid == MyProcPid)
 		{
@@ -177,12 +181,14 @@ backend_exit_callback(int code, Datum arg)
 			ereport(DEBUG2,
 					(errmsg("PWH: Released backend entry %lu for PID %u", i,
 							MyProcPid)));
-			return;
+			break;
 		}
 	}
-}
 
-volatile bool WAS_BACKEND_INITIALIZED = false;
+	PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+
+	WAS_BACKEND_INITIALIZED = false;
+}
 
 static void
 initialize_state_once_per_backend(void)
@@ -201,11 +207,6 @@ initialize_state_once_per_backend(void)
 static void
 query_start_hook(QueryDesc *queryDesc, i32 eflags)
 {
-	if (!WAS_BACKEND_INITIALIZED)
-	{
-		initialize_state_once_per_backend();
-	}
-
 	ereport(DEBUG2,
 			(errmsg("PWH: ExecutorStart hook called"),
 			 errdetail("PID=%d enabled=%d", MyProcPid, PWH_GUC_IS_ENABLED)));
@@ -226,6 +227,20 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 	{
 		ereport(DEBUG2, (errmsg("PWH: ExecutorStart disabled, returning")));
 		return;
+	}
+
+	/* Does this query satisfy the minimum cost constraint? */
+	if (queryDesc->plannedstmt->planTree->total_cost <
+		PWH_GUC_MIN_COST_TO_TRACK)
+	{
+		return;
+	}
+
+	/* Okay, we're tracking this query. */
+
+	if (!WAS_BACKEND_INITIALIZED)
+	{
+		initialize_state_once_per_backend();
 	}
 
 	MemoryContext old_context = CurrentMemoryContext;
@@ -286,14 +301,15 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 
 		/* Clear our state to avoid dangling references. */
 		pwh_set_current_query_desc(NULL);
+		backend_exit_callback(-1, 0);
 
 		/* Log the error but don't propagate to user query. */
 		EmitErrorReport();
 		FlushErrorState();
 
-		ereport(LOG, (errmsg("PWH: Metric collection failed in ExecutorStart"),
-					  errdetail("PID %d - query will continue without metrics",
-								MyProcPid)));
+		ereport(LOG,
+				(errmsg("PWH: Metric collection failed for PID %d", MyProcPid),
+				 errdetail("Query will continue without metrics")));
 	}
 	PG_END_TRY();
 }
@@ -312,7 +328,7 @@ query_end_hook(QueryDesc *queryDesc)
 			 (unsigned long) pwh_get_signal_handler_shmem_null(),
 			 (unsigned long) pwh_get_signal_handler_no_slot())));
 
-	if (likely(PWH_GUC_IS_ENABLED))
+	if (likely(PWH_GUC_IS_ENABLED && WAS_BACKEND_INITIALIZED))
 	{
 		MemoryContext old_context = CurrentMemoryContext;
 

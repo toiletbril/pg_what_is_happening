@@ -32,13 +32,14 @@ SELECT * FROM what_is_happening.v1_status;
 
 | Column                         | Type     | Description                                                  |
 |--------------------------------|----------|--------------------------------------------------------------|
+|  Identification                |          |                                                              |
 | `backend_pid`                  | `int4`   | Process ID of the backend executing the query.               |
 | `query_id`                     | `int8`   | Unique identifier for the query.                             |
 | `query_text`                   | `text`   | The SQL query text (truncated to `query_text_len`).          |
 | `node_id`                      | `int4`   | Sequential ID of this plan node in the tree.                 |
 | `parent_node_id`               | `int4`   | ID of the parent node in the plan tree.                      |
 | `node_tag`                     | `text`   | PostgreSQL plan node type (e.g., `SeqScan`, `HashJoin`).     |
-|                                |          |                                                              |
+|  Execution metrics             |          |                                                              |
 | `startup_time_us`              | `float8` | Time to produce the first tuple in microseconds.             |
 | `total_time_us`                | `float8` | Total execution time in microseconds.                        |
 | `loops_executed`               | `float8` | Number of times this plan node was executed.                 |
@@ -47,7 +48,7 @@ SELECT * FROM what_is_happening.v1_status;
 | `time_percent`                 | `float8` | Percentage of total query time spent in this node.           |
 | `rows_filtered_by_joins`       | `float8` | Rows removed by scan or join conditions.                     |
 | `rows_filtered_by_expressions` | `float8` | Rows removed by other filter expressions.                    |
-|                                |          |                                                              |
+| Buffer metrics                 |          |                                                              |
 | `cache_hits`                   | `int8`   | Shared buffer cache hits.                                    |
 | `cache_misses`                 | `int8`   | Shared buffer cache misses (blocks read from disk).          |
 | `local_cache_hits`             | `int8`   | Local buffer cache hits.                                     |
@@ -58,7 +59,7 @@ SELECT * FROM what_is_happening.v1_status;
 ### HTTP metrics endpoint
 
 When compiled with `WITH_BGWORKER=yes` (the default), the extension starts a
-background worker that listens on `127.0.0.1:9187` by default. Hit `/metrics`
+background worker that listens on `` by default. Hit `/metrics`
 for [OpenMetrics](https://openmetrics.io/) formatted output compatible with
 Prometheus, VictoriaMetrics, or et cetera.
 
@@ -70,11 +71,6 @@ The HTTP endpoint exposes the same execution and buffer usage metrics from the
 SQL view (excluding identification columns), prefixed with
 `pg_what_is_happening_active_query_node_`. Each metric includes labels for
 `pid`, `query_id`, `node_id`, and `node_tag`.
-
-Available metrics: `tuples_returned`, `time_seconds`, `time_percent`,
-`cache_hits`, `cache_misses`, `local_cache_hits`, `local_cache_misses`,
-`spill_file_reads`, `spill_file_writes`, `rows_filtered_by_joins`,
-`rows_filtered_by_expressions`.
 
 Example PromQL queries for your dashboards:
 
@@ -96,14 +92,15 @@ sum by (node_tag) (
 
 ## Settings
 
-| Setting                                 | Default          | Range   | Reload   | Description                                                                                         |
-|-----------------------------------------|------------------|---------|----------|-----------------------------------------------------------------------------------------------------|
-| `what_is_happening.enabled`             | `true`           | —       | `SIGHUP` | Enable or disable the extension without unloading it.                                               |
-| `what_is_happening.signal_timeout_ms`   | `10`             | 1–1000  | `SIGHUP` | How long to wait for each backend to respond to metrics requests before giving up (milliseconds).   |
-| `what_is_happening.listen_address`      | `127.0.0.1:9187` | —       | Restart  | Address and port for the `/metrics` HTTP endpoint. Only available if compiled with `WITH_BGWORKER`. |
-| `what_is_happening.max_tracked_queries` | `128`            | 1–65536 | Restart  | Number of concurrent query slots allocated in shared memory. Each slot holds one backend's metrics. |
-| `what_is_happening.max_nodes_per_query` | `128`            | 16–1024 | Restart  | Maximum plan nodes tracked per query. Plans with more nodes get truncated.                          |
-| `what_is_happening.query_text_len`      | `1024`           | 64–8192 | Restart  | Maximum bytes of query text stored. Longer queries get truncated.                                   |
+| Setting                                    | Default          | Range   | Reload   | Description                                                                                         |
+|--------------------------------------------|------------------|---------|----------|-----------------------------------------------------------------------------------------------------|
+| `what_is_happening.is_enabled`             | `true`           | —       | `SIGHUP` | Enable or disable the extension without unloading it.                                               |
+| `what_is_happening.metrics_listen_address` | `127.0.0.1:9187` | —       | Restart  | Address and port for the `/metrics` HTTP endpoint. Only available if compiled with `WITH_BGWORKER`. |
+| `what_is_happening.max_tracked_queries`    | `64`             | 1–65536 | Restart  | Number of concurrent query slots allocated in shared memory. Each slot holds one backend's metrics. |
+| `what_is_happening.max_nodes_per_query`    | `128`            | 16–1024 | Restart  | Maximum plan nodes tracked per query. Plans with more nodes get truncated.                          |
+| `what_is_happening.max_query_text_length`  | `1024`           | 64–8192 | Restart  | Maximum bytes of query text stored. Longer queries get truncated.                                   |
+| `what_is_happening.signal_timeout_ms`      | `10`             | 1–1000  | `SIGHUP` | How long to wait for each backend to respond to metrics requests before giving up (milliseconds).   |
+| `what_is_happening.min_cost_to_track`      | `50000`          | -       | `SIGHUP` | Minimum total cost of a query to get tracked by the extension.                                      |
 
 ## Performance
 
