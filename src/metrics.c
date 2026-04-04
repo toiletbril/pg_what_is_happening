@@ -42,17 +42,20 @@ typedef struct
 typedef struct
 {
 	FormatterBuffer *buffer;
-	u32				 pid;
 	u64				 query_id;
 } Formatter;
 
 static void buffer_init(FormatterBuffer *buf);
 static void buffer_ensure_capacity(FormatterBuffer *buf, u64 needed);
 static void buffer_append(FormatterBuffer *buf, const char *fmt, ...);
-static void formatter_init(Formatter *fmt, FormatterBuffer *buf, u32 pid,
-						   u64 query_id);
+static void formatter_init(Formatter *fmt, FormatterBuffer *buf, u64 query_id);
 static void append_metric(Formatter *fmt, PwhNodeMetrics *node, MetricType type,
 						  const char *value_fmt, ...);
+static void append_all_node_metrics(Formatter *fmt, PwhNodeMetrics *node,
+									double total_query_time);
+static void append_buffer_escaped(FormatterBuffer *buf, const char *str);
+static void append_query_info(FormatterBuffer			  *buf,
+							  PwhSharedMemoryBackendEntry *entry);
 
 TupleDesc
 pwh_create_v1_status_tupdesc(void)
@@ -210,10 +213,9 @@ buffer_append(FormatterBuffer *buf, const char *fmt, ...)
 }
 
 static void
-formatter_init(Formatter *fmt, FormatterBuffer *buf, u32 pid, u64 query_id)
+formatter_init(Formatter *fmt, FormatterBuffer *buf, u64 query_id)
 {
 	fmt->buffer = buf;
-	fmt->pid = pid;
 	fmt->query_id = query_id;
 }
 
@@ -231,10 +233,9 @@ append_metric(Formatter *fmt, PwhNodeMetrics *node, MetricType type,
 	va_end(args);
 
 	buffer_append(fmt->buffer,
-				  "pg_what_is_happening_active_query_node_%s{pid=\"%d\","
+				  "pg_what_is_happening_active_query_node_%s{"
 				  "query_id=\"%lu\",node_id=\"%lu\",node_tag=\"%s\"} %s\n",
-				  suffix, fmt->pid, fmt->query_id, node->node_id, tag_str,
-				  value_buf);
+				  suffix, fmt->query_id, node->node_id, tag_str, value_buf);
 }
 
 char *
@@ -243,7 +244,13 @@ pwh_format_openmetrics(void)
 	FormatterBuffer buf;
 	buffer_init(&buf);
 
-	/* Initialize help. */
+	/* Add query_info metric help and type. */
+	buffer_append(&buf,
+				  "# HELP pg_what_is_happening_query_info "
+				  "Query metadata for active queries\n"
+				  "# TYPE pg_what_is_happening_query_info gauge\n");
+
+	/* Initialize help for node metrics. */
 	for (u32 i = METRIC_START; i < METRIC_COUNT; i++)
 	{
 		const char *suffix = metric_suffix((MetricType) i);
@@ -269,11 +276,13 @@ pwh_format_openmetrics(void)
 								   (unsigned long) shmem_be_entry->query_id,
 								   shmem_be_entry->num_nodes)));
 
+		/* _info pseudo-metric. */
+		append_query_info(&buf, shmem_be_entry);
+
 		PwhNodeMetrics *metrics = pwh_get_backend_entry_metrics(shmem_be_entry);
 
 		Formatter fmt;
-		formatter_init(&fmt, &buf, shmem_be_entry->backend_pid,
-					   shmem_be_entry->query_id);
+		formatter_init(&fmt, &buf, shmem_be_entry->query_id);
 
 		double total_query_time = 0.0;
 		for (u32 j = 0; j < shmem_be_entry->num_nodes; j++)
@@ -292,4 +301,43 @@ pwh_format_openmetrics(void)
 	}
 
 	return buf.data;
+}
+
+static void
+append_buffer_escaped(FormatterBuffer *buf, const char *str)
+{
+	const char *p = str;
+
+	while (*p != '\0')
+	{
+		switch (*p)
+		{
+			case '"':
+				buffer_append(buf, "\\\"");
+				break;
+			case '\\':
+				buffer_append(buf, "\\\\");
+				break;
+			case '\n':
+				buffer_append(buf, "\\n");
+				break;
+			default:
+				buffer_ensure_capacity(buf, 1);
+				buf->data[buf->offset++] = *p;
+				break;
+		}
+		p++;
+	}
+}
+
+static void
+append_query_info(FormatterBuffer *buf, PwhSharedMemoryBackendEntry *entry)
+{
+	buffer_append(buf,
+				  "pg_what_is_happening_query_info{query_id=\"%lu\","
+				  "pid=\"%d\",query_text=\"",
+				  entry->query_id, entry->backend_pid);
+	const char *query_text = pwh_get_backend_entry_query_text(entry);
+	append_buffer_escaped(buf, query_text);
+	buffer_append(buf, "\"} 1\n");
 }

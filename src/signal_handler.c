@@ -22,6 +22,7 @@
 
 #include "common.h"
 #include "executor/execdesc.h"
+#include "gucs.h"
 #include "miscadmin.h"
 #include "plan_tree_walker.h"
 #include "shared_memory.h"
@@ -83,7 +84,7 @@ pwh_sigusr2_handler(SIGNAL_ARGS)
 	}
 
 	PwhSharedMemoryBackendEntry *shmem_be_entry = NULL;
-	for (u64 i = 0; i < (u64) PWH_MAX_TRACKED_QUERIES_GUC; i++)
+	for (u64 i = 0; i < (u64) PWH_GUC_MAX_TRACKED_QUERIES; i++)
 	{
 		PwhSharedMemoryBackendEntry *be = PWH_GET_BACKEND_ENTRY_UNSAFE(i);
 
@@ -103,7 +104,7 @@ pwh_sigusr2_handler(SIGNAL_ARGS)
 	/* Refresh instrumentation data. */
 	PwhNodeMetrics *metrics = pwh_get_backend_entry_metrics(shmem_be_entry);
 	pwh_walk_plan_instrumentation(queryDesc->planstate, metrics,
-								  PWH_MAX_NODES_PER_QUERY_GUC);
+								  PWH_GUC_MAX_NODES_PER_QUERY);
 
 	/* Increment generation counter to signal completion. */
 	shmem_be_entry->poll_generation++;

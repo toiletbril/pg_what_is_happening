@@ -112,11 +112,13 @@ get_query_id(const QueryDesc *qd)
 {
 	u64 id = PWH_GET_QUERY_ID(qd->plannedstmt);
 
-	/* Fallback to hash if queryId is 0 (not populated without
-	 * pg_stat_statements). */
+	/*
+	 * Fallback to hash if queryId is 0 (not populated without
+	 * pg_stat_statements).
+	 */
 	if (id == 0)
 	{
-		id = pwh_compute_query_id(qd->sourceText);
+		id = pwh_compute_query_id(qd);
 	}
 
 	return id;
