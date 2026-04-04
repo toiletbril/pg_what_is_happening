@@ -124,19 +124,17 @@ chain:
 	errno = save_errno;
 }
 
+static volatile bool WAS_SIGNAL_HANDLER_INSTALLED = false;
+
 void
 pwh_install_signal_handler(void)
 {
-	PREV_SIGUSR2_HANDLER = pwh_install_pqsignal(SIGUSR2, pwh_sigusr2_handler);
-	if (PREV_SIGUSR2_HANDLER != NULL)
+	if (!WAS_SIGNAL_HANDLER_INSTALLED)
 	{
-		ereport(DEBUG1,
-				(errmsg("PWH: SIGUSR2 handler installed"),
-				 errdetail("Previous handler at %p", PREV_SIGUSR2_HANDLER)));
-	}
-	else
-	{
+		PREV_SIGUSR2_HANDLER =
+			pwh_install_pqsignal(SIGUSR2, pwh_sigusr2_handler);
 		ereport(DEBUG1, (errmsg("PWH: SIGUSR2 handler installed")));
+		WAS_SIGNAL_HANDLER_INSTALLED = true;
 	}
 }
 

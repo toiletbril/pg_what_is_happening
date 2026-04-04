@@ -5,10 +5,12 @@ bool PWH_GUC_IS_ENABLED = true;
 char *PWH_GUC_METRICS_LISTEN_ADDRESS = NULL;
 #endif
 
-i32 PWH_GUC_MAX_TRACKED_QUERIES = 128;
+i32 PWH_GUC_MAX_TRACKED_QUERIES = 32;
 i32 PWH_GUC_MAX_NODES_PER_QUERY = 128;
 i32 PWH_GUC_MAX_QUERY_TEXT_LEN = 1024;
 i32 PWH_GUC_SIGNAL_TIMEOUT_MS = 10;
+
+double PWH_GUC_MIN_COST_TO_TRACK = 50000;
 
 static bool check_positive_guc(int *newval, void **extra, GucSource source);
 #ifdef WITH_BGWORKER
@@ -32,7 +34,7 @@ pwh_define_gucs(void)
 
 	DefineCustomIntVariable(PWH_GUC_MAX_TRACKED_QUERIES_NAME,
 							"Maximum number of concurrent queries to track",
-							NULL, &PWH_GUC_MAX_TRACKED_QUERIES, 128, 1, 65536,
+							NULL, &PWH_GUC_MAX_TRACKED_QUERIES, 32, 1, 65536,
 							PGC_POSTMASTER, 0, check_positive_guc, NULL, NULL);
 
 	DefineCustomIntVariable(PWH_GUC_MAX_NODES_PER_QUERY_NAME,
@@ -49,6 +51,11 @@ pwh_define_gucs(void)
 							"Timeout waiting for signal handler response", NULL,
 							&PWH_GUC_SIGNAL_TIMEOUT_MS, 10, 1, 1000, PGC_SIGHUP,
 							0, NULL, NULL, NULL);
+
+	DefineCustomRealVariable(PWH_GUC_MIN_COST_TO_TRACK_NAME,
+							 "Timeout waiting for signal handler response",
+							 NULL, &PWH_GUC_MIN_COST_TO_TRACK, 50000, 1, 1000,
+							 PGC_SIGHUP, 0, NULL, NULL, NULL);
 }
 
 static bool
