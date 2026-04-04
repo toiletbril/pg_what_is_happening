@@ -1,7 +1,7 @@
 -- Test graceful handling when all backend slots are exhausted.
 
 -- Get the max_tracked_queries GUC value.
-SELECT current_setting('pg_what_is_happening.max_tracked_queries')::int AS max_tracked_queries
+SELECT current_setting('what_is_happening.max_tracked_queries')::int AS max_tracked_queries
 \gset
 
 -- Launch more queries than the limit to test overflow handling.

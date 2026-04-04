@@ -53,7 +53,7 @@ static void append_metric(Formatter *fmt, PwhNodeMetrics *node, MetricType type,
 						  const char *value_fmt, ...);
 static void append_all_node_metrics(Formatter *fmt, PwhNodeMetrics *node,
 									double total_query_time);
-static void append_buffer_escaped(FormatterBuffer *buf, const char *str);
+static void buffer_append_escaped(FormatterBuffer *buf, const char *str);
 static void append_query_info(FormatterBuffer			  *buf,
 							  PwhSharedMemoryBackendEntry *entry);
 
@@ -156,6 +156,12 @@ append_all_node_metrics(Formatter *fmt, PwhNodeMetrics *node,
 
 	append_metric(fmt, node, METRIC_TUPLES_RETURNED, "%.0f",
 				  node->execution.tuples_returned);
+	append_metric(fmt, node, METRIC_STARTUP_TIME_US, "%.0f",
+				  node->execution.startup_time_us);
+	append_metric(fmt, node, METRIC_TOTAL_TIME_US, "%.0f",
+				  node->execution.total_time_us);
+	append_metric(fmt, node, METRIC_LOOPS_EXECUTED, "%.0f",
+				  node->execution.loops_executed);
 	append_metric(fmt, node, METRIC_TIME_SECONDS, "%.6f", node_time_seconds);
 	append_metric(fmt, node, METRIC_TIME_PERCENT, "%.2f", node_percent);
 	append_metric(fmt, node, METRIC_CACHE_HITS, "%ld",
@@ -304,7 +310,7 @@ pwh_format_openmetrics(void)
 }
 
 static void
-append_buffer_escaped(FormatterBuffer *buf, const char *str)
+buffer_append_escaped(FormatterBuffer *buf, const char *str)
 {
 	const char *p = str;
 
@@ -338,6 +344,6 @@ append_query_info(FormatterBuffer *buf, PwhSharedMemoryBackendEntry *entry)
 				  "pid=\"%d\",query_text=\"",
 				  entry->query_id, entry->backend_pid);
 	const char *query_text = pwh_get_backend_entry_query_text(entry);
-	append_buffer_escaped(buf, query_text);
+	buffer_append_escaped(buf, query_text);
 	buffer_append(buf, "\"} 1\n");
 }

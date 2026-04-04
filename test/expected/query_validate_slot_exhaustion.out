@@ -1,6 +1,6 @@
 -- Test graceful handling when all backend slots are exhausted.
 -- Get the max_tracked_queries GUC value.
-SELECT current_setting('pg_what_is_happening.max_tracked_queries')::int AS max_tracked_queries
+SELECT current_setting('what_is_happening.max_tracked_queries')::int AS max_tracked_queries
 \gset
 -- Launch more queries than the limit to test overflow handling.
 \! for i in $(seq 1 130); do psql -d contrib_regression -c "SELECT pg_sleep(5), COUNT(*) FROM orders LIMIT 1;" > /dev/null 2>&1 & done

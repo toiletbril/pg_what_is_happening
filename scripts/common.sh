@@ -46,6 +46,7 @@ max_connections = 50
 what_is_happening.max_tracked_queries = 16
 what_is_happening.max_nodes_per_query = 64
 what_is_happening.max_query_text_length = 512
+what_is_happening.min_cost_to_track = 0
 shared_buffers = 256MB
 EOF
 }
