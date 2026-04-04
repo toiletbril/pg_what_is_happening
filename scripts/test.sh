@@ -6,10 +6,14 @@
 
 set -xeu
 
+cd '/pg_what_is_happening'
+. "scripts/common.sh"
+init_env
+
 build_postgresql_if_not_built
 
 echo "Installing extension from ./pg_what_is_happening.so..."
-make install "$(nproc)"
+make install -j"$(nproc)"
 
 ulimit -c unlimited
 

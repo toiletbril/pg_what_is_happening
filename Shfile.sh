@@ -38,8 +38,8 @@ make_sure_postgres_source_is_available() {
 C="${1:-}"
 
 docker_run() {
-docker run --pull=never --rm --network=host -v '$PWD:/pg_what_is_happening' \
-           -v '$POSTGRES_SOURCE:/postgres' "$@"
+docker run --pull=never --rm --network=host -v "$PWD:/pg_what_is_happening" \
+           -v "$POSTGRES_SOURCE:/postgres" "$@"
 }
 
 case $C in
@@ -61,7 +61,7 @@ case $C in
 "dev")
   make_sure_postgres_source_is_available
   DEVELOPMENT_CMD=$(cat "$(dirname "$0")/scripts/development.sh")
-  docker_run "$IMG" sh -c "$DEVELOPMENT_CMD"
+  docker_run -it "$IMG" sh -c "$DEVELOPMENT_CMD"
   ;;
 "reset")
   echo "Cleaning extension build artifacts..."

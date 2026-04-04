@@ -6,7 +6,9 @@
 
 set -xeu
 
-. "$(realpath "$0")/common.sh"
+cd '/pg_what_is_happening'
+. "scripts/common.sh"
+init_env
 
 build_postgresql_if_not_built
 
@@ -22,4 +24,4 @@ start_postgresql
 
 env | grep 'PG_'
 
-exec bash
+exec bash -i
