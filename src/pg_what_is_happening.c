@@ -19,12 +19,12 @@
 #include "postgres.h"
 
 #include "access/xact.h"
-#include "catalog/pg_type.h"
 #include "common.h"
 #include "compatibility.h"
 #include "executor/executor.h"
 #include "fmgr.h"
 #include "funcapi.h"
+#include "gucs.h"
 #include "metrics.h"
 #include "miscadmin.h"
 #include "plan_tree_walker.h"
@@ -32,26 +32,13 @@
 #include "signal_handler.h"
 #include "storage/ipc.h"
 #include "storage/lwlock.h"
-#include "storage/shmem.h"
-#include "utils/builtins.h"
-#include "utils/guc.h"
 #include "utils/timestamp.h"
+
 #ifdef WITH_BGWORKER
 #include "bg_worker.h"
 #endif
 
 PG_MODULE_MAGIC;
-
-/* GUC variables. */
-static bool PWH_IS_ENABLED_GUC = true;
-#ifdef WITH_BGWORKER
-static char *PWH_LISTEN_ADDRESS_GUC = NULL;
-#endif
-
-i32 PWH_MAX_TRACKED_QUERIES_GUC = 128;
-i32 PWH_MAX_NODES_PER_QUERY_GUC = 128;
-i32 PWH_QUERY_TEXT_LEN_GUC = 1024;
-i32 PWH_SIGNAL_TIMEOUT_MS_GUC = 10;
 
 /* Previous hooks. */
 static ExecutorStart_hook_type PREV_QUERY_START_HOOK = NULL;
@@ -66,11 +53,6 @@ static void query_end_hook(QueryDesc *queryDesc);
 static void query_cleanup_callback(XactEvent event, void *arg);
 static void backend_exit_callback(int code, Datum arg);
 static u64	get_query_id(const QueryDesc *qd);
-static bool check_positive_guc(int *newval, void **extra, GucSource source);
-
-#ifdef WITH_BGWORKER
-static bool check_listen_address(char **newval, void **extra, GucSource source);
-#endif
 
 PWH_SHMEM_REQUEST_HOOK_DECL;
 
@@ -89,37 +71,7 @@ _PG_init(void)
 	PWH_SHMEM = NULL;
 
 	/* Define GUC variables. */
-	DefineCustomBoolVariable(
-		"pg_what_is_happening.enabled", "Enable pg_what_is_happening extension",
-		NULL, &PWH_IS_ENABLED_GUC, true, PGC_SIGHUP, 0, NULL, NULL, NULL);
-
-#ifdef WITH_BGWORKER
-	DefineCustomStringVariable(
-		"pg_what_is_happening.listen_address",
-		"Listen address for metrics endpoint (host:port)", NULL,
-		&PWH_LISTEN_ADDRESS_GUC, "127.0.0.1:9187", PGC_POSTMASTER, 0,
-		check_listen_address, NULL, NULL);
-#endif
-
-	DefineCustomIntVariable("pg_what_is_happening.max_tracked_queries",
-							"Maximum number of concurrent queries to track",
-							NULL, &PWH_MAX_TRACKED_QUERIES_GUC, 128, 1, 65536,
-							PGC_POSTMASTER, 0, check_positive_guc, NULL, NULL);
-
-	DefineCustomIntVariable("pg_what_is_happening.max_nodes_per_query",
-							"Maximum plan nodes tracked per query", NULL,
-							&PWH_MAX_NODES_PER_QUERY_GUC, 128, 16, 1024,
-							PGC_POSTMASTER, 0, check_positive_guc, NULL, NULL);
-
-	DefineCustomIntVariable("pg_what_is_happening.query_text_len",
-							"Maximum query text length to store", NULL,
-							&PWH_QUERY_TEXT_LEN_GUC, 1024, 64, 8192,
-							PGC_POSTMASTER, 0, check_positive_guc, NULL, NULL);
-
-	DefineCustomIntVariable("pg_what_is_happening.signal_timeout_ms",
-							"Timeout waiting for signal handler response", NULL,
-							&PWH_SIGNAL_TIMEOUT_MS_GUC, 10, 1, 1000, PGC_SIGHUP,
-							0, NULL, NULL, NULL);
+	pwh_define_gucs();
 
 	/* Install hooks. */
 	PWH_INSTALL_SHMEM_REQUEST_HOOK();
@@ -134,6 +86,7 @@ _PG_init(void)
 	ExecutorEnd_hook = query_end_hook;
 
 	pwh_install_signal_handler();
+
 #ifdef WITH_BGWORKER
 	pwh_register_openmetrics_exporter_as_bg_worker();
 #endif
@@ -151,68 +104,6 @@ _PG_fini(void)
 
 	ereport(LOG, (errmsg("PWH: Extension unloaded")));
 }
-
-static bool
-check_positive_guc(int *newval, void **extra, GucSource source)
-{
-	if (*newval <= 0)
-	{
-		GUC_check_errdetail("Value must be positive");
-		return false;
-	}
-	return true;
-}
-
-#ifdef WITH_BGWORKER
-static bool
-check_listen_address(char **newval, void **extra, GucSource source)
-{
-	char *value = *newval;
-
-	if (value == NULL || *value == '\0')
-	{
-		GUC_check_errdetail("Listen address cannot be empty");
-		return false;
-	}
-
-	char *colon = strchr(value, ':');
-	if (colon == NULL)
-	{
-		GUC_check_errdetail("Listen address must be in format host:port");
-		return false;
-	}
-
-	u64 host_len = colon - value;
-	if (host_len == 0)
-	{
-		GUC_check_errdetail("Host part cannot be empty");
-		return false;
-	}
-
-	if (host_len > 255)
-	{
-		GUC_check_errdetail("Host part too long (max 255 characters)");
-		return false;
-	}
-
-	char *endptr;
-	long  port = strtol(colon + 1, &endptr, 10);
-
-	if (*endptr != '\0' || endptr == colon + 1)
-	{
-		GUC_check_errdetail("Port must be a numeric value");
-		return false;
-	}
-
-	if (port < 1 || port > 65535)
-	{
-		GUC_check_errdetail("Port must be between 1 and 65535");
-		return false;
-	}
-
-	return true;
-}
-#endif
 
 static u64
 get_query_id(const QueryDesc *qd)
@@ -247,7 +138,7 @@ query_cleanup_callback(XactEvent event, void *arg)
 	/* Clear QueryDesc pointer to prevent dangling reference. */
 	pwh_set_current_query_desc(NULL);
 
-	if (!PWH_IS_ENABLED_GUC)
+	if (!PWH_GUC_IS_ENABLED)
 		return;
 
 	/* Get our backend entry and mark query as inactive. */
@@ -275,7 +166,7 @@ backend_exit_callback(int code, Datum arg)
 	unused(code);
 	unused(arg);
 
-	for (u64 i = 0; i < (u64) PWH_MAX_TRACKED_QUERIES_GUC; i++)
+	for (u64 i = 0; i < (u64) PWH_GUC_MAX_TRACKED_QUERIES; i++)
 	{
 		PwhSharedMemoryBackendEntry *be = pwh_get_backend_entry(i);
 
@@ -317,7 +208,7 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 
 	ereport(DEBUG2,
 			(errmsg("PWH: ExecutorStart hook called"),
-			 errdetail("PID=%d enabled=%d", MyProcPid, PWH_IS_ENABLED_GUC)));
+			 errdetail("PID=%d enabled=%d", MyProcPid, PWH_GUC_IS_ENABLED)));
 
 	/* Force instrumentation on all nodes. */
 	queryDesc->instrument_options |= INSTRUMENT_ALL;
@@ -331,7 +222,7 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 		standard_ExecutorStart(queryDesc, eflags);
 	}
 
-	if (unlikely(!PWH_IS_ENABLED_GUC))
+	if (unlikely(!PWH_GUC_IS_ENABLED))
 	{
 		ereport(DEBUG2, (errmsg("PWH: ExecutorStart disabled, returning")));
 		return;
@@ -357,7 +248,7 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 
 			/* Set initial backend state and prepare for metric collection. */
 			u64 num_nodes = pwh_walk_plan_topology(
-				queryDesc->planstate, metrics, PWH_MAX_NODES_PER_QUERY_GUC, -1);
+				queryDesc->planstate, metrics, PWH_GUC_MAX_NODES_PER_QUERY, -1);
 
 			ereport(DEBUG1, (errmsg("PWH: Tracking query with %lu nodes",
 									(unsigned long) num_nodes),
@@ -370,7 +261,7 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 			/* Copy query text. */
 			if (queryDesc->sourceText != NULL)
 			{
-				snprintf(query_text, PWH_QUERY_TEXT_LEN_GUC, "%s",
+				snprintf(query_text, PWH_GUC_MAX_QUERY_TEXT_LEN, "%s",
 						 queryDesc->sourceText);
 			}
 			else
@@ -421,7 +312,7 @@ query_end_hook(QueryDesc *queryDesc)
 			 (unsigned long) pwh_get_signal_handler_shmem_null(),
 			 (unsigned long) pwh_get_signal_handler_no_slot())));
 
-	if (likely(PWH_IS_ENABLED_GUC))
+	if (likely(PWH_GUC_IS_ENABLED))
 	{
 		MemoryContext old_context = CurrentMemoryContext;
 
@@ -438,7 +329,7 @@ query_end_hook(QueryDesc *queryDesc)
 
 				/* Capture final instrumentation. */
 				pwh_walk_plan_instrumentation(queryDesc->planstate, metrics,
-											  PWH_MAX_NODES_PER_QUERY_GUC);
+											  PWH_GUC_MAX_NODES_PER_QUERY);
 
 				ereport(DEBUG1,
 						(errmsg("PWH: Completed query tracking for PID %d",
@@ -507,7 +398,7 @@ v1_status_f(PG_FUNCTION_ARGS)
 		u32 n_signaled = pwh_request_backend_metrics_unlocked();
 
 		/* Wait for backends to refresh metrics. */
-		pg_usleep(PWH_SIGNAL_TIMEOUT_MS_GUC * 1000L);
+		pg_usleep(PWH_GUC_SIGNAL_TIMEOUT_MS * 1000L);
 
 		PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
 

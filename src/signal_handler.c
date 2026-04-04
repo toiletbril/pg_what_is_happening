@@ -22,12 +22,9 @@
 
 #include "common.h"
 #include "executor/execdesc.h"
-#include "executor/executor.h"
 #include "miscadmin.h"
 #include "plan_tree_walker.h"
 #include "shared_memory.h"
-#include "storage/ipc.h"
-#include "storage/spin.h"
 
 /* Static storage for current QueryDesc pointer. */
 static volatile QueryDesc *CURRENT_QUERY_DESC = NULL;

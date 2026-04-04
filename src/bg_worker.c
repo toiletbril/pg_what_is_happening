@@ -26,14 +26,12 @@
 
 #include "common.h"
 #include "compatibility.h"
+#include "gucs.h"
 #include "http_server.h"
 #include "metrics.h"
 #include "postmaster/bgworker.h"
 #include "shared_memory.h"
 #include "storage/ipc.h"
-#include "storage/shmem.h"
-#include "utils/guc.h"
-#include "utils/memutils.h"
 
 static void metrics_handler(const HttpRequest *req, HttpResponse *resp,
 							void *user_data);
@@ -42,19 +40,21 @@ static void handle_sigterm(SIGNAL_ARGS);
 
 static HttpServer *HTTP_SERVER_INSTANCE = NULL;
 
+#define BG_WORKER_PROCESS_NAME "pg_what_is_happening openmetrics exporter"
+#define BG_WORKER_ENTRY_FUNCTION "pwh_bgworker_main"
+
 void
 pwh_register_openmetrics_exporter_as_bg_worker(void)
 {
 	BackgroundWorker w;
 
 	memset(&w, 0, sizeof(BackgroundWorker));
-	snprintf(w.bgw_name, BGW_MAXLEN,
-			 "pg_what_is_happening openmetrics exporter");
+	snprintf(w.bgw_name, BGW_MAXLEN, BG_WORKER_PROCESS_NAME);
 	w.bgw_flags = BGWORKER_SHMEM_ACCESS | PWH_BGWORKER_BYPASS_ALLOWCONN;
 	w.bgw_start_time = BgWorkerStart_PostmasterStart;
 	w.bgw_restart_time = 2;
 	snprintf(w.bgw_library_name, BGW_MAXLEN, "pg_what_is_happening");
-	snprintf(w.bgw_function_name, BGW_MAXLEN, "pwh_bgworker_main");
+	snprintf(w.bgw_function_name, BGW_MAXLEN, BG_WORKER_ENTRY_FUNCTION);
 	w.bgw_main_arg = (Datum) 0;
 	w.bgw_notify_pid = 0;
 
@@ -72,8 +72,7 @@ pwh_bgworker_main(Datum main_arg)
 	PWH_SHMEM = pwh_get_shared_memory_ptr();
 	ereport(LOG, (errmsg("PWH: Background worker attached to shared memory")));
 
-	const char *listen_addr =
-		PWH_GET_GUC("pg_what_is_happening.listen_address");
+	const char *listen_addr = PWH_GET_GUC(PWH_GUC_METRICS_LISTEN_ADDRESS_NAME);
 
 	Assert(listen_addr != NULL);
 
@@ -133,7 +132,7 @@ metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 	ereport(DEBUG2,
 			(errmsg("PWH: Sent SIGUSR2 to %u active backends", n_signaled)));
 
-	usleep((useconds_t) (PWH_SIGNAL_TIMEOUT_MS_GUC * 1000));
+	usleep((useconds_t) (PWH_GUC_SIGNAL_TIMEOUT_MS * 1000));
 
 	char *metrics = pwh_format_openmetrics();
 

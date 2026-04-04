@@ -1,52 +1,25 @@
 #!/bin/bash
 
+#
+# See Shfile.sh.
+#
+
 set -xeu
 
-sudo chown -R postgres:postgres /postgres /pg_what_is_happening
+. "$(realpath "$0")/common.sh"
 
-cd /pg_what_is_happening
-
-if ! test -f /postgres/config.status; then
-  echo "Configuring PostgreSQL..."
-  cd /postgres
-  ./configure --prefix=/postgres-bin --enable-debug --enable-cassert CFLAGS="-std=gnu11 -g3 -O0 -Wno-error=incompatible-pointer-types" >/dev/null
-  cd -
-fi
-
-echo "Building PostgreSQL from source..."
-make -C /postgres -s -j$(nproc) install
-export PATH=/postgres-bin/bin:$PATH
+build_postgresql_if_not_built
 
 echo "Installing extension from ./pg_what_is_happening.so..."
-make -C /pg_what_is_happening install
+make install -j"$(nproc)"
 
+# Allow core files.
 ulimit -c unlimited
 
-echo "Initializing database..."
-initdb -D /data
+init_postgresql_data_dir
+edit_postgresql_conf '/data/postgresql.conf'
+start_postgresql
 
-echo "Configuring postgresql.conf..."
-cat >> /data/postgresql.conf <<EOF
-shared_preload_libraries = 'pg_what_is_happening'
-log_min_messages = debug1
-max_connections = 50
-pg_what_is_happening.max_tracked_queries = 16
-pg_what_is_happening.max_nodes = 64
-pg_what_is_happening.query_text_length = 512
-shared_buffers = 256MB
-EOF
-
-echo "Starting PostgreSQL..."
-if ! pg_ctl -D /data -l /tmp/postgres.log start; then
-  echo "ERROR: PostgreSQL failed to start"
-  cat /tmp/postgres.log
-  exit 1
-fi
-
-echo "PostgreSQL is running. Entering interactive shell..."
-echo "  - Database data dir: /data"
-echo "  - Log file: /tmp/postgres.log"
-echo "  - To stop: pg_ctl -D /data stop"
-echo ""
+env | grep 'PG_'
 
 exec bash
