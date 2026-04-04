@@ -6,8 +6,8 @@ SELECT pg_sleep(0.1);
 (1 row)
 
 \! curl -s http://localhost:9187/metrics > /data/pwh_endpoint_metrics.txt
-\! grep "^pg_what_is_happening_active_query_node_time_percent{" /data/pwh_endpoint_metrics.txt | head -1 | sed 's/.*pid="\([^"]*\)".*/\1/' > /data/pwh_pid.txt
-\! test -s /data/pwh_pid.txt && grep "pid=\"$(cat /data/pwh_pid.txt)\"" /data/pwh_endpoint_metrics.txt | grep "time_percent{" | awk '{print $NF}' | awk '{s+=$1} END {print s}' > /data/pwh_time_sum.txt || echo "0" > /data/pwh_time_sum.txt
+\! grep "^pg_what_is_happening_active_query_node_time_percent{" /data/pwh_endpoint_metrics.txt | head -1 | sed 's/.*query_id="\([^"]*\)".*/\1/' > /data/pwh_query_id.txt
+\! test -s /data/pwh_query_id.txt && grep "query_id=\"$(cat /data/pwh_query_id.txt)\"" /data/pwh_endpoint_metrics.txt | grep "time_percent{" | awk '{print $NF}' | awk '{s+=$1} END {print s}' > /data/pwh_time_sum.txt || echo "0" > /data/pwh_time_sum.txt
 SELECT
   (SELECT pg_read_file('pwh_time_sum.txt')::text::float8) BETWEEN 95 AND 105 AS time_percent_sums_to_100_per_query;
  time_percent_sums_to_100_per_query 

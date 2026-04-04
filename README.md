@@ -147,7 +147,7 @@ visibility the Postgres executor can provide.
 | `what_is_happening.max_nodes_per_query`    | `128`            | 16–256           | Restart  | Maximum plan nodes tracked per query. Plans with more nodes get truncated.                          |
 | `what_is_happening.max_query_text_length`  | `1024`           | 64–8192          | Restart  | Maximum bytes of query text stored. Longer queries get truncated.                                   |
 | `what_is_happening.signal_timeout_ms`      | `32`             | 8–10000          | `SIGHUP` | How long to wait for each backend to respond to metrics requests before giving up (milliseconds).   |
-| `what_is_happening.min_cost_to_track`      | `50000`          | 0-inf            | `SIGHUP` | Minimum total cost of a query to get tracked by the extension.                                      |
+| `what_is_happening.min_cost_to_track`      | `50000.0`        | 0.0-inf          | `SIGHUP` | Minimum total cost of a query to get tracked by the extension.                                      |
 
 ## Performance
 
