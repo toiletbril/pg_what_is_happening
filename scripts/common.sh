@@ -10,7 +10,13 @@ export PG_DATA_DIR='/data'
 export PG_BIN_DIR='/postgres-bin'
 export PG_LOG_FILE='/tmp/postgresql.log'
 
-export PATH=/postgres-bin/bin:$PATH
+export PGDATA="$PG_DATA_DIR"
+export PATH="$PATH:$PG_BIN_DIR/bin"
+
+init_env()
+{
+  sudo chown -R postgres:postgres $PWH_PERMIT_DIRS
+}
 
 build_postgresql_if_not_built() {
   if ! test -f "$PG_SOURCE/config.status"; then

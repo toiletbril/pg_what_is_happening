@@ -34,11 +34,9 @@ RUN apk add \
 
 RUN adduser -D -u 1000 "postgres" && \
     echo "postgres ALL=(ALL) NOPASSWD: ALL" >> "/etc/sudoers"
-RUN mkdir -p "/postgres-bin" "/data" && \
-    chown -R postgres:postgres "/data" "/postgres-bin" "/postgres" \
-                               "/pg_what_is_happening"
 
-ENV PATH="/postgres-bin/bin:$PATH"
+ENV PWH_PERMIT_DIRS="/postgres /postgres-bin /data /pg_what_is_happening"
+RUN mkdir -p $PWH_PERMIT_DIRS # Permissions will be set at runtime.
 
 USER postgres
 WORKDIR "/pg_what_is_happening"
