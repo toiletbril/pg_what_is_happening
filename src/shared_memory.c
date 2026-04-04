@@ -24,6 +24,7 @@
 #include <signal.h>
 
 #include "compatibility.h"
+#include "gucs.h"
 #include "miscadmin.h"
 #include "storage/ipc.h"
 #include "storage/lwlock.h"
@@ -44,9 +45,9 @@ Size
 pwh_get_backend_entry_stride(void)
 {
 	Size size = sizeof(PwhSharedMemoryBackendEntry);
-	size = add_size(size, PWH_QUERY_TEXT_LEN_GUC);
+	size = add_size(size, PWH_GUC_MAX_QUERY_TEXT_LEN);
 	size = add_size(
-		size, mul_size(PWH_MAX_NODES_PER_QUERY_GUC, sizeof(PwhNodeMetrics)));
+		size, mul_size(PWH_GUC_MAX_NODES_PER_QUERY, sizeof(PwhNodeMetrics)));
 	return size;
 }
 
@@ -56,7 +57,7 @@ pwh_get_shared_memory_size(void)
 	Size size = 0;
 
 	size = add_size(size, sizeof(PwhSharedMemoryHeader));
-	size = add_size(size, mul_size(PWH_MAX_TRACKED_QUERIES_GUC,
+	size = add_size(size, mul_size(PWH_GUC_MAX_TRACKED_QUERIES,
 								   pwh_get_backend_entry_stride()));
 
 	return size;
@@ -90,9 +91,9 @@ pwh_shared_memory_startup_hook(void)
 		ereport(LOG, (errmsg("PWH: Initializing shared memory"),
 					  errdetail("%zu bytes for %d backend entries",
 								pwh_get_shared_memory_size(),
-								PWH_MAX_TRACKED_QUERIES_GUC)));
+								PWH_GUC_MAX_TRACKED_QUERIES)));
 
-		for (u64 i = 0; i < (u64) PWH_MAX_TRACKED_QUERIES_GUC; i++)
+		for (u64 i = 0; i < (u64) PWH_GUC_MAX_TRACKED_QUERIES; i++)
 		{
 			PwhSharedMemoryBackendEntry *shmem_be_entry =
 				PWH_GET_BACKEND_ENTRY_UNSAFE(i);
@@ -113,7 +114,7 @@ pwh_get_or_create_my_backend_entry(void)
 
 	u64 free_slot_idx = -1U;
 
-	for (u64 i = 0; i < (u64) PWH_MAX_TRACKED_QUERIES_GUC; i++)
+	for (u64 i = 0; i < (u64) PWH_GUC_MAX_TRACKED_QUERIES; i++)
 	{
 		PwhSharedMemoryBackendEntry *be = PWH_GET_BACKEND_ENTRY_UNSAFE(i);
 
@@ -147,7 +148,7 @@ pwh_get_or_create_my_backend_entry(void)
 	ereport(DEBUG1,
 			(errmsg("PWH: All backend entries exhausted"),
 			 errdetail("All %d slots are in use, PID %d cannot be tracked",
-					   PWH_MAX_TRACKED_QUERIES_GUC, MyProcPid)));
+					   PWH_GUC_MAX_TRACKED_QUERIES, MyProcPid)));
 
 	return NULL;
 }
@@ -158,7 +159,7 @@ pwh_get_or_create_my_backend_entry(void)
 u64
 pwh_get_backend_entry_count(void)
 {
-	return (u64) PWH_MAX_TRACKED_QUERIES_GUC;
+	return (u64) PWH_GUC_MAX_TRACKED_QUERIES;
 }
 
 /*
@@ -167,7 +168,7 @@ pwh_get_backend_entry_count(void)
 PwhSharedMemoryBackendEntry *
 pwh_get_backend_entry(u64 index)
 {
-	if (index >= (u64) PWH_MAX_TRACKED_QUERIES_GUC)
+	if (index >= (u64) PWH_GUC_MAX_TRACKED_QUERIES)
 		return NULL;
 
 	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_SHARED);
@@ -196,7 +197,7 @@ pwh_get_backend_entry_metrics(PwhSharedMemoryBackendEntry *entry)
 {
 	return (PwhNodeMetrics *) ((char *) entry +
 							   sizeof(PwhSharedMemoryBackendEntry) +
-							   PWH_QUERY_TEXT_LEN_GUC);
+							   PWH_GUC_MAX_QUERY_TEXT_LEN);
 }
 
 /*
@@ -208,7 +209,7 @@ pwh_request_backend_metrics_unlocked(void)
 {
 	u32 n_signaled = 0;
 
-	for (u64 i = 0; i < (u64) PWH_MAX_TRACKED_QUERIES_GUC; i++)
+	for (u64 i = 0; i < (u64) PWH_GUC_MAX_TRACKED_QUERIES; i++)
 	{
 		PwhSharedMemoryBackendEntry *shmem_be_entry =
 			PWH_GET_BACKEND_ENTRY_UNSAFE(i);
@@ -240,7 +241,7 @@ pwh_cleanup_orphaned_slots(void)
 {
 	u32 n_cleaned = 0;
 
-	for (u64 i = 0; i < (u64) PWH_MAX_TRACKED_QUERIES_GUC; i++)
+	for (u64 i = 0; i < (u64) PWH_GUC_MAX_TRACKED_QUERIES; i++)
 	{
 		PwhSharedMemoryBackendEntry *be = pwh_get_backend_entry(i);
 

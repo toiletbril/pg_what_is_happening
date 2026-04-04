@@ -20,8 +20,10 @@
 
 #include "compatibility.h"
 
+#include "miscadmin.h"
 #include "nodes/execnodes.h"
 #include "nodes/nodes.h"
+#include "utils/timestamp.h"
 
 const char *
 pwh_node_tag_to_string(NodeTag tag)
@@ -37,13 +39,19 @@ pwh_walk_planstate_children(PlanState *planstate, PwhNodeVisitorFn visitor,
 }
 
 u64
-pwh_compute_query_id(const char *query_text)
+pwh_compute_query_id(const QueryDesc *qd)
 {
-	if (query_text == NULL)
+	u64 hash = 5381;
+	if (qd->sourceText != NULL && *qd->sourceText != '\0')
 	{
-		return 0;
+		hash = pwh_hash_djb2(hash, (const u8 *) qd->sourceText,
+							 strlen(qd->sourceText));
 	}
-	return pwh_hash_djb2(5381, (const u8 *) query_text, strlen(query_text));
+
+	hash ^= GetCurrentIntegerTimestamp() >> 32;
+	hash ^= MyProcPid;
+
+	return hash;
 }
 
 pqsigfunc

@@ -22,6 +22,7 @@
 #include "postgres.h"
 
 #include "common.h"
+#include "executor/execdesc.h"
 #include "nodes/nodes.h"
 #include "storage/lwlock.h"
 
@@ -83,7 +84,7 @@ typedef struct
 #endif
 
 /* Query ID computation fallback, used when queryId is 0. */
-extern u64 pwh_compute_query_id(const char *query_text);
+extern u64 pwh_compute_query_id(const QueryDesc *qd);
 
 extern const char *pwh_node_tag_to_string(NodeTag tag);
 

@@ -8,11 +8,14 @@ char *PWH_GUC_METRICS_LISTEN_ADDRESS = NULL;
 i32 PWH_GUC_MAX_TRACKED_QUERIES = 32;
 i32 PWH_GUC_MAX_NODES_PER_QUERY = 128;
 i32 PWH_GUC_MAX_QUERY_TEXT_LEN = 1024;
-i32 PWH_GUC_SIGNAL_TIMEOUT_MS = 10;
+i32 PWH_GUC_SIGNAL_TIMEOUT_MS = 32;
 
 double PWH_GUC_MIN_COST_TO_TRACK = 50000;
 
-static bool check_positive_guc(int *newval, void **extra, GucSource source);
+static bool check_positive_guc(int *value, void **extra, GucSource source);
+static bool check_positive_real_guc(double *value, void **extra,
+									GucSource source);
+
 #ifdef WITH_BGWORKER
 static bool check_listen_address(char **newval, void **extra, GucSource source);
 #endif
@@ -34,12 +37,12 @@ pwh_define_gucs(void)
 
 	DefineCustomIntVariable(PWH_GUC_MAX_TRACKED_QUERIES_NAME,
 							"Maximum number of concurrent queries to track",
-							NULL, &PWH_GUC_MAX_TRACKED_QUERIES, 32, 1, 65536,
+							NULL, &PWH_GUC_MAX_TRACKED_QUERIES, 32, 2, 256,
 							PGC_POSTMASTER, 0, check_positive_guc, NULL, NULL);
 
 	DefineCustomIntVariable(PWH_GUC_MAX_NODES_PER_QUERY_NAME,
 							"Maximum plan nodes tracked per query", NULL,
-							&PWH_GUC_MAX_NODES_PER_QUERY, 128, 16, 1024,
+							&PWH_GUC_MAX_NODES_PER_QUERY, 128, 16, 256,
 							PGC_POSTMASTER, 0, check_positive_guc, NULL, NULL);
 
 	DefineCustomIntVariable(PWH_GUC_MAX_QUERY_TEXT_LEN_NAME,
@@ -49,24 +52,44 @@ pwh_define_gucs(void)
 
 	DefineCustomIntVariable(PWH_GUC_SIGNAL_TIMEOUT_MS_NAME,
 							"Timeout waiting for signal handler response", NULL,
-							&PWH_GUC_SIGNAL_TIMEOUT_MS, 10, 1, 1000, PGC_SIGHUP,
-							0, NULL, NULL, NULL);
+							&PWH_GUC_SIGNAL_TIMEOUT_MS, 32, 1, 10000,
+							PGC_SIGHUP, 0, NULL, NULL, NULL);
 
 	DefineCustomRealVariable(PWH_GUC_MIN_COST_TO_TRACK_NAME,
 							 "Timeout waiting for signal handler response",
-							 NULL, &PWH_GUC_MIN_COST_TO_TRACK, 50000, 1, 1000,
-							 PGC_SIGHUP, 0, NULL, NULL, NULL);
+							 NULL, &PWH_GUC_MIN_COST_TO_TRACK, 50000, 0,
+							 DBL_MAX, PGC_SIGHUP, 0, check_positive_real_guc,
+							 NULL, NULL);
 }
 
 static bool
-check_positive_guc(int *newval, void **extra, GucSource source)
+check_positive_guc(int *value, void **extra, GucSource source)
 {
-	if (*newval <= 0)
+	unused(extra);
+	unused(source);
+
+	if (*value > 0)
 	{
-		GUC_check_errdetail("Value must be positive");
-		return false;
+		return true;
 	}
-	return true;
+
+	GUC_check_errdetail("Value must be positive");
+	return false;
+}
+
+static bool
+check_positive_real_guc(double *value, void **extra, GucSource source)
+{
+	unused(extra);
+	unused(source);
+
+	if (*value > 0)
+	{
+		return true;
+	}
+
+	GUC_check_errdetail("Value must be positive");
+	return false;
 }
 
 #ifdef WITH_BGWORKER

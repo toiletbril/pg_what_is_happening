@@ -37,11 +37,6 @@
 
 #define PWH_NODE_MAGIC 0xDEADBEEF
 
-extern i32 PWH_MAX_TRACKED_QUERIES_GUC;
-extern i32 PWH_MAX_NODES_PER_QUERY_GUC;
-extern i32 PWH_QUERY_TEXT_LEN_GUC;
-extern i32 PWH_SIGNAL_TIMEOUT_MS_GUC;
-
 typedef struct
 {
 	NodeTag tag;
