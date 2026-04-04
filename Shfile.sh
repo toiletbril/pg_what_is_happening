@@ -9,8 +9,7 @@ set -eu
 # Usage:
 #   POSTGRES_SOURCE='<path/to/postgres/source>' Shfile.sh <make-image/build/test/dev/reset>
 #
-# The flow is:
-#   - Make an image via make-image.
+# Before everything else, make an image via 'make-image', then either:
 #   - Run 'build' to produce static binaries.
 #   - Run 'dev' to fall into interactive container for development.
 #   - Run 'test' to invoke 'make installcheck' using provided postgres source
@@ -38,6 +37,10 @@ make_sure_postgres_source_is_available() {
 
 C="${1:-}"
 
+docker_run() {
+docker run --pull=never --rm --network=host -v '$PWD:/pg_what_is_happening' \
+           -v '$POSTGRES_SOURCE:/postgres' "$@"
+}
 
 case $C in
 "make-image")
@@ -48,32 +51,17 @@ case $C in
 "build")
   make_sure_postgres_source_is_available
   BUILD_CMD=$(cat "$(dirname "$0")/scripts/build.sh")
-  docker run --pull=never --rm --network=host \
-             -e MODE="${MODE:-rel}" \
-             -e WITH_BGWORKER="${WITH_BGWORKER:-yes}" \
-             -v "$PWD":/pg_what_is_happening \
-             -v "$POSTGRES_SOURCE":/postgres \
-             "$IMG" sh -c "$BUILD_CMD"
+  docker_run "$IMG" sh -c "$BUILD_CMD"
   ;;
 "test")
   make_sure_postgres_source_is_available
   TEST_CMD=$(cat "$(dirname "$0")/scripts/test.sh")
-  docker run --pull=never --rm --network=host \
-             -e MODE="${MODE:-rel}" \
-             -e WITH_BGWORKER="${WITH_BGWORKER:-yes}" \
-             -v "$PWD":/pg_what_is_happening \
-             -v "$POSTGRES_SOURCE":/postgres \
-             "$IMG" sh -c "$TEST_CMD"
+  docker_run "$IMG" sh -c "$TEST_CMD"
   ;;
 "dev")
   make_sure_postgres_source_is_available
   DEVELOPMENT_CMD=$(cat "$(dirname "$0")/scripts/development.sh")
-  docker run --pull=never --rm --network=host -it \
-             -e MODE="${MODE:-dbg}" \
-             -e WITH_BGWORKER="${WITH_BGWORKER:-yes}" \
-             -v "$PWD":/pg_what_is_happening \
-             -v "$POSTGRES_SOURCE":/postgres \
-             "$IMG" sh -c "$DEVELOPMENT_CMD"
+  docker_run "$IMG" sh -c "$DEVELOPMENT_CMD"
   ;;
 "reset")
   echo "Cleaning extension build artifacts..."

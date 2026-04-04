@@ -4,6 +4,7 @@ SOURCES = \
 	src/plan_tree_walker.c \
 	src/signal_handler.c \
 	src/compatibility.c \
+	src/gucs.c \
 	src/metrics.c
 
 ENVCFLAGS := $(CFLAGS)

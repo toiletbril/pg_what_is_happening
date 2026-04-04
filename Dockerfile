@@ -1,4 +1,6 @@
+#
 # Docker image for pg_what_is_happening tests.
+#
 
 FROM docker.io/library/alpine:latest
 
@@ -33,10 +35,10 @@ RUN apk add \
 RUN adduser -D -u 1000 "postgres" && \
     echo "postgres ALL=(ALL) NOPASSWD: ALL" >> "/etc/sudoers"
 RUN mkdir -p "/postgres-bin" "/data" && \
-    chown postgres:postgres "/data" "/postgres-bin"
+    chown -R postgres:postgres "/data" "/postgres-bin" "/postgres" \
+                               "/pg_what_is_happening"
 
 ENV PATH="/postgres-bin/bin:$PATH"
 
 USER postgres
-
 WORKDIR "/pg_what_is_happening"

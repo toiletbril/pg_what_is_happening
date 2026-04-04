@@ -1,3 +1,5 @@
+\echo Use "CREATE EXTENSION pg_what_is_happening" to load this file. \quit
+
 DROP VIEW IF EXISTS what_is_happening.v1_status;
 DROP FUNCTION IF EXISTS what_is_happening.v1_status_f();
 CREATE FUNCTION what_is_happening.v1_status_f(
