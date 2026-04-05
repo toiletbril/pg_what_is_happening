@@ -55,6 +55,6 @@ reset:
 dev-reset:
 	$(MAKE) reset
 	$(MAKE) install -j$(shell nproc)
-	pg_ctl -D /data -l /tmp/postgres.log restart
+	pg_ctl -D /data -l /tmp/postgresql.log restart
 
 .PHONY: fmt tidy reset relaunch dirs

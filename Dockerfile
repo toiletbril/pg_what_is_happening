@@ -30,7 +30,8 @@ RUN apk add \
     sudo \
     icu-dev \
     diffutils \
-    tmux
+    tmux \
+    ncurses
 
 RUN adduser -D -u 1000 "postgres" && \
     echo "postgres ALL=(ALL) NOPASSWD: ALL" >> "/etc/sudoers"

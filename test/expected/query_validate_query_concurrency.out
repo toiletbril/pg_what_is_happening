@@ -1,5 +1,17 @@
-\! psql -d contrib_regression -c "SELECT o.order_id, u.username FROM orders o JOIN users u ON o.user_id = u.user_id ORDER BY o.order_id;" > /dev/null 2>&1 &
-\! psql -d contrib_regression -c "SELECT p.product_id, r.rating FROM products p JOIN reviews r ON p.product_id = r.product_id ORDER BY p.product_id;" > /dev/null 2>&1 &
+SELECT pg_advisory_lock(12349);
+ pg_advisory_lock 
+------------------
+ 
+(1 row)
+
+SELECT pg_advisory_lock(12350);
+ pg_advisory_lock 
+------------------
+ 
+(1 row)
+
+\! psql -d contrib_regression -c "SELECT pg_advisory_lock(12349), o.order_id, u.username FROM orders o JOIN users u ON o.user_id = u.user_id ORDER BY o.order_id; SELECT pg_advisory_unlock(12349);" > /dev/null 2>&1 &
+\! psql -d contrib_regression -c "SELECT pg_advisory_lock(12350), p.product_id, r.rating FROM products p JOIN reviews r ON p.product_id = r.product_id ORDER BY p.product_id; SELECT pg_advisory_unlock(12350);" > /dev/null 2>&1 &
 SELECT pg_sleep(0.2);
  pg_sleep 
 ----------
@@ -38,5 +50,23 @@ WHERE query_text LIKE '%JOIN%';
  orders_backend_has_no_products_metrics | products_backend_has_no_orders_metrics 
 ----------------------------------------+----------------------------------------
  f                                      | f
+(1 row)
+
+SELECT pg_advisory_unlock(12349);
+ pg_advisory_unlock 
+--------------------
+ t
+(1 row)
+
+SELECT pg_advisory_unlock(12350);
+ pg_advisory_unlock 
+--------------------
+ t
+(1 row)
+
+SELECT pg_sleep(0.5);
+ pg_sleep 
+----------
+ 
 (1 row)
 

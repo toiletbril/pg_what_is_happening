@@ -1,5 +1,8 @@
-\! psql -d contrib_regression -c "SELECT o.order_id, u.username FROM orders o JOIN users u ON o.user_id = u.user_id ORDER BY o.order_id;" > /dev/null 2>&1 &
-\! psql -d contrib_regression -c "SELECT p.product_id, r.rating FROM products p JOIN reviews r ON p.product_id = r.product_id ORDER BY p.product_id;" > /dev/null 2>&1 &
+SELECT pg_advisory_lock(12349);
+SELECT pg_advisory_lock(12350);
+
+\! psql -d contrib_regression -c "SELECT pg_advisory_lock(12349), o.order_id, u.username FROM orders o JOIN users u ON o.user_id = u.user_id ORDER BY o.order_id; SELECT pg_advisory_unlock(12349);" > /dev/null 2>&1 &
+\! psql -d contrib_regression -c "SELECT pg_advisory_lock(12350), p.product_id, r.rating FROM products p JOIN reviews r ON p.product_id = r.product_id ORDER BY p.product_id; SELECT pg_advisory_unlock(12350);" > /dev/null 2>&1 &
 
 SELECT pg_sleep(0.2);
 
@@ -24,3 +27,7 @@ SELECT
   COUNT(*) FILTER (WHERE backend_pid IN (SELECT backend_pid FROM products_query) AND query_text LIKE '%orders%') = 0 AS products_backend_has_no_orders_metrics
 FROM what_is_happening.v1_status
 WHERE query_text LIKE '%JOIN%';
+
+SELECT pg_advisory_unlock(12349);
+SELECT pg_advisory_unlock(12350);
+SELECT pg_sleep(0.5);

@@ -1,6 +1,8 @@
-\! psql -d contrib_regression -c "SELECT pg_sleep(0.01), COUNT(*) FROM orders o JOIN users u ON o.user_id = u.user_id LIMIT 10;" > /dev/null 2>&1 &
+SELECT pg_advisory_lock(12351);
 
-SELECT pg_sleep(0.01);
+\! psql -d contrib_regression -c "SELECT pg_advisory_lock(12351), COUNT(*) FROM orders o JOIN users u ON o.user_id = u.user_id LIMIT 10; SELECT pg_advisory_unlock(12351);" > /dev/null 2>&1 &
+
+SELECT pg_sleep(0.2);
 
 \! curl -s http://localhost:9187/metrics > /data/pwh_openmetrics.txt
 
@@ -24,5 +26,8 @@ SELECT
 
 \! grep -c "^[a-zA-Z_:][a-zA-Z0-9_:]*{.*}" /data/pwh_openmetrics.txt > /data/pwh_metric_lines.txt
 SELECT (SELECT pg_read_file('pwh_metric_lines.txt')::text::int) > 0 AS has_metric_value_lines;
+
+SELECT pg_advisory_unlock(12351);
+SELECT pg_sleep(0.5);
 
 \! rm -f /data/pwh_*.txt

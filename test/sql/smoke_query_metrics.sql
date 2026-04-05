@@ -1,9 +1,14 @@
 -- Test status view with async complex query running in background.
 -- This test launches a slow query in another connection and queries metrics.
 
-\! psql -d contrib_regression -c "SELECT u.region, p.category, COUNT(DISTINCT o.order_id) as order_count, SUM(pay.amount) as total_revenue, AVG(r.rating) as avg_rating, ROW_NUMBER() OVER (PARTITION BY u.region ORDER BY COUNT(*) DESC) as region_rank FROM orders o JOIN users u ON o.user_id = u.user_id JOIN products p ON o.product_id = p.product_id JOIN payments pay ON o.order_id = pay.order_id LEFT JOIN reviews r ON p.product_id = r.product_id AND o.user_id = r.user_id JOIN shipping s ON o.order_id = s.order_id JOIN warehouses w ON s.warehouse_id = w.warehouse_id WHERE u.region IN ('US', 'EU', 'APAC') AND p.price > 10 AND pay.amount > 0 GROUP BY u.region, p.category HAVING COUNT(*) > 10 ORDER BY total_revenue DESC;" > /dev/null 2>&1 &
+-- Acquire advisory lock to control query execution.
+SELECT pg_advisory_lock(12345);
 
-SELECT pg_sleep(0.05);
+-- Launch background query that will block when trying to acquire the same lock.
+\! psql -d contrib_regression -c "SELECT pg_advisory_lock(12345), u.region, p.category, COUNT(DISTINCT o.order_id) as order_count, SUM(pay.amount) as total_revenue, AVG(r.rating) as avg_rating, ROW_NUMBER() OVER (PARTITION BY u.region ORDER BY COUNT(*) DESC) as region_rank FROM orders o JOIN users u ON o.user_id = u.user_id JOIN products p ON o.product_id = p.product_id JOIN payments pay ON o.order_id = pay.order_id LEFT JOIN reviews r ON p.product_id = r.product_id AND o.user_id = r.user_id JOIN shipping s ON o.order_id = s.order_id JOIN warehouses w ON s.warehouse_id = w.warehouse_id WHERE u.region IN ('US', 'EU', 'APAC') AND p.price > 10 AND pay.amount > 0 GROUP BY u.region, p.category HAVING COUNT(*) > 10 ORDER BY total_revenue DESC; SELECT pg_advisory_unlock(12345);" > /dev/null 2>&1 &
+
+-- Wait for background query to start and reach the lock.
+SELECT pg_sleep(0.2);
 
 -- Query the status view to capture metrics from the running query.
 -- We should see node-level execution metrics for the complex query.
@@ -40,4 +45,8 @@ SELECT
 FROM what_is_happening.v1_status
 WHERE query_text LIKE '%region_rank%';
 
-SELECT pg_sleep(2);
+-- Release lock to allow background query to complete.
+SELECT pg_advisory_unlock(12345);
+
+-- Wait for background query to finish.
+SELECT pg_sleep(0.5);
