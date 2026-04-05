@@ -87,8 +87,6 @@ _PG_init(void)
 	PREV_QUERY_FINISH_HOOK = ExecutorEnd_hook;
 	ExecutorEnd_hook = query_end_hook;
 
-	pwh_install_signal_handler();
-
 #ifdef WITH_BGWORKER
 	pwh_register_openmetrics_exporter_as_bg_worker();
 #endif
@@ -211,10 +209,16 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 {
 	ereport(DEBUG2,
 			(errmsg("PWH: ExecutorStart hook called"),
-			 errdetail("PID=%d enabled=%d", MyProcPid, PWH_GUC_IS_ENABLED)));
+			 errdetail("PID=%d enabled=%d instrument_options=%d eflags=%d",
+					   MyProcPid, PWH_GUC_IS_ENABLED,
+					   queryDesc->instrument_options, eflags)));
 
 	/* Force instrumentation on all nodes. */
 	queryDesc->instrument_options |= INSTRUMENT_ALL;
+
+	ereport(DEBUG2,
+			(errmsg("PWH: Set instrument_options to INSTRUMENT_ALL"),
+			 errdetail("instrument_options=%d", queryDesc->instrument_options)));
 
 	if (PREV_QUERY_START_HOOK)
 	{
@@ -224,6 +228,14 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 	{
 		standard_ExecutorStart(queryDesc, eflags);
 	}
+
+	ereport(DEBUG1,
+			(errmsg("PWH: After ExecutorStart, checking instrumentation"),
+			 errdetail("planstate=%p planstate->instrument=%p",
+					   (void *) queryDesc->planstate,
+					   queryDesc->planstate
+						   ? (void *) queryDesc->planstate->instrument
+						   : NULL)));
 
 	if (unlikely(!PWH_GUC_IS_ENABLED))
 	{
@@ -415,12 +427,17 @@ v1_status_f(PG_FUNCTION_ARGS)
 		/* Send SIGUSR2 to all active backends to refresh metrics. */
 		u32 n_signaled = pwh_request_backend_metrics_unlocked();
 
+		ereport(DEBUG1,
+				(errmsg("PWH: v1_status() signaled backends"),
+				 errdetail("Signaled %u backends, waiting %dms", n_signaled,
+						   PWH_GUC_SIGNAL_TIMEOUT_MS)));
+
 		/* Wait for backends to refresh metrics. */
 		pg_usleep(PWH_GUC_SIGNAL_TIMEOUT_MS * 1000L);
 
 		PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
 
-		ereport(DEBUG1, (errmsg("PWH: v1_status() called"),
+		ereport(DEBUG1, (errmsg("PWH: v1_status() starting to read metrics"),
 						 errdetail("Signaled %u backends", n_signaled)));
 
 		/* XXX do it via static u64? */
@@ -450,11 +467,30 @@ v1_status_f(PG_FUNCTION_ARGS)
 				pwh_get_backend_entry_metrics(shmem_be_entry);
 			PwhNodeMetrics *node = &metrics[node_idx];
 
+			if (node_idx == 0)
+			{
+				ereport(DEBUG2,
+						(errmsg("PWH: v1_status() reading backend slot %u",
+								slot_idx),
+						 errdetail("pid=%d query_id=%lu num_nodes=%u",
+								   shmem_be_entry->backend_pid,
+								   (unsigned long) shmem_be_entry->query_id,
+								   shmem_be_entry->num_nodes)));
+			}
+
 			double total_query_time = 0.0;
 			for (u32 j = 0; j < shmem_be_entry->num_nodes; j++)
 			{
 				total_query_time += metrics[j].execution.total_time_us;
 			}
+
+			ereport(DEBUG2,
+					(errmsg("PWH: v1_status() reading node %u", node_idx),
+					 errdetail(
+						 "total_time_us=%.0f tuples_returned=%.0f cache_hits=%ld",
+						 node->execution.total_time_us,
+						 node->execution.tuples_returned,
+						 node->buffer_usage.cache_hits)));
 
 			Datum values[PWH_V1_STATUS_TUPLE_COUNT];
 			bool  nulls[PWH_V1_STATUS_TUPLE_COUNT];

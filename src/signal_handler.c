@@ -26,6 +26,7 @@
 #include "miscadmin.h"
 #include "plan_tree_walker.h"
 #include "shared_memory.h"
+#include "postmaster/bgworker.h"
 
 /* Static storage for current QueryDesc pointer. */
 static volatile QueryDesc *CURRENT_QUERY_DESC = NULL;
@@ -71,9 +72,17 @@ pwh_sigusr2_handler(SIGNAL_ARGS)
 	/* Check if we have an active query. */
 	QueryDesc *queryDesc = (QueryDesc *) CURRENT_QUERY_DESC;
 
+	ereport(DEBUG2,
+			(errmsg("PWH: SIGUSR2 handler called"),
+			 errdetail("queryDesc=%p calls=%d", (void *) queryDesc,
+					   (int) SIGNAL_HANDLER_CALL_COUNT)));
+
 	if (queryDesc == NULL || queryDesc->planstate == NULL)
 	{
 		SIGNAL_HANDLER_NO_QUERYDESC++;
+		ereport(DEBUG2,
+				(errmsg("PWH: No QueryDesc in signal handler"),
+				 errdetail("queryDesc=%p", (void *) queryDesc)));
 		goto chain;
 	}
 
@@ -103,6 +112,13 @@ pwh_sigusr2_handler(SIGNAL_ARGS)
 
 	/* Refresh instrumentation data. */
 	PwhNodeMetrics *metrics = pwh_get_backend_entry_metrics(shmem_be_entry);
+
+	ereport(DEBUG2,
+			(errmsg("PWH: Refreshing instrumentation in signal handler"),
+			 errdetail("shmem_be_entry=%p metrics=%p num_nodes=%u",
+					   (void *) shmem_be_entry, (void *) metrics,
+					   shmem_be_entry->num_nodes)));
+
 	pwh_walk_plan_instrumentation(queryDesc->planstate, metrics,
 								  PWH_GUC_MAX_NODES_PER_QUERY);
 
@@ -111,6 +127,11 @@ pwh_sigusr2_handler(SIGNAL_ARGS)
 	PWH_MEMORY_BARRIER();
 
 	SIGNAL_HANDLER_SUCCESS_COUNT++;
+
+	ereport(DEBUG2, (errmsg("PWH: Signal handler completed successfully"),
+					 errdetail("generation=%lu success_count=%d",
+							   (unsigned long) shmem_be_entry->poll_generation,
+							   (int) SIGNAL_HANDLER_SUCCESS_COUNT)));
 
 chain:
 	/* Chain to previous handler if it's a valid function pointer. */
@@ -130,6 +151,9 @@ static volatile bool WAS_SIGNAL_HANDLER_INSTALLED = false;
 void
 pwh_install_signal_handler(void)
 {
+	/* Signal handler should only be installed in regular backends. */
+	Assert(IsUnderPostmaster);
+
 	if (!WAS_SIGNAL_HANDLER_INSTALLED)
 	{
 		PREV_SIGUSR2_HANDLER =

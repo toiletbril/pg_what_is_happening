@@ -265,6 +265,13 @@ instrumentation_visitor(PlanState *planstate, void *context)
 
 	if (likely(instr != NULL))
 	{
+		ereport(DEBUG2,
+				(errmsg("PWH: Reading instrumentation for node %lu", current_id),
+				 errdetail(
+					 "ntuples=%.0f nloops=%.0f total_time=%.6f cache_hits=%ld",
+					 instr->ntuples, instr->nloops,
+					 PWH_INSTR_TIME_MAYBE_GET_DOUBLE(instr->total),
+					 instr->bufusage.shared_blks_hit)));
 		ctx->metrics[current_id].execution.tuples_returned =
 			instr->ntuples + instr->tuplecount;
 		ctx->metrics[current_id].execution.loops_executed =
@@ -283,6 +290,12 @@ instrumentation_visitor(PlanState *planstate, void *context)
 			instr->nfiltered2;
 
 		PWH_COPY_BUFUSAGE(ctx->metrics, instr, current_id);
+	}
+	else
+	{
+		ereport(DEBUG1,
+				(errmsg("PWH: Node %lu has NULL instrumentation", current_id),
+				 errdetail("planstate=%p", (void *) planstate)));
 	}
 
 	return true;
