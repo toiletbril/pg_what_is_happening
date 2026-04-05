@@ -13,33 +13,61 @@ export PG_LOG_FILE='/tmp/postgresql.log'
 export PGDATA="$PG_DATA_DIR"
 export PATH="$PATH:$PG_BIN_DIR/bin"
 
+_log_date()
+{
+  date "+%Y-%m-%d at %X"
+}
+
+_log_red()
+{
+  echo "$(tput setaf 1)$*$(tput sgr0)"
+}
+
+_log_bold()
+{
+  echo "$(tput bold)$*$(tput sgr0)"
+}
+
+log()
+{
+  _log_bold "$(printf "$(_log_date) [LOG] %s\n" "$@")" >&2
+}
+
+log_err_and_die()
+{
+  _log_red "$(printf """$(_log_date) [ERR] %s\n" "$@")" >&2
+  exit 1
+}
+
 init_env()
 {
+  log "initializing env"
   sudo chown -R postgres:postgres $PWH_PERMIT_DIRS
 }
 
-build_postgresql_if_not_built() {
+build_postgresql_if_not_built()
+{
   if ! test -f "$PG_SOURCE/config.status"; then
-    echo "Configuring PostgreSQL..."
+    log "configuring PostgreSQL..."
     cd "$PG_SOURCE" || return
     PG_CFLAGS="-std=gnu11 -g3 -O0 -Wno-error=incompatible-pointer-types"
-    ./configure --prefix="$PG_SOURCE" --enable-debug --enable-cassert CFLAGS="$PG_CFLAGS" >/dev/null
+    ./configure --prefix="$PG_BIN_DIR" --enable-debug --enable-cassert CFLAGS="$PG_CFLAGS" >/dev/null
     cd - || return
   fi
-  echo "Building PostgreSQL from source..."
+  log "building PostgreSQL from source..."
   make -C /postgres -s -j"$(nproc)" install
 }
 
 init_postgresql_data_dir()
 {
-  echo "Initializing database..."
+  log "initializing database..."
   initdb -D "$PG_DATA_DIR"
 }
 
 edit_postgresql_conf()
 {
-  echo "Editing postgresql.conf..."
-  cat >> "$1" <<EOF
+  log "editing postgresql.conf..."
+  cat >> "$PG_DATA_DIR/postgresql.conf" <<EOF
 shared_preload_libraries = 'pg_what_is_happening'
 log_min_messages = debug1
 max_connections = 50
@@ -53,10 +81,9 @@ EOF
 
 start_postgresql()
 {
-  echo "Starting PostgreSQL..."
-  if ! pg_ctl -D "$PG_DATA_DIR" -l "$PG_LOG_FILE" start; then
-    echo "ERROR: PostgreSQL failed to start"
+  log "starting PostgreSQL..."
+  if ! pg_ctl -D "$PG_DATA_DIR" -l "$PG_LOG_FILE" -w start; then
     cat -n "$PG_LOG_FILE"
-    exit 1
+    log_err_and_die "PostgreSQL failed to start"
   fi
 }

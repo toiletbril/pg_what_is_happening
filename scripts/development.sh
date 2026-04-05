@@ -19,7 +19,7 @@ make install -j"$(nproc)"
 ulimit -c unlimited
 
 init_postgresql_data_dir
-edit_postgresql_conf '/data/postgresql.conf'
+edit_postgresql_conf
 start_postgresql
 
 env | grep 'PG_'

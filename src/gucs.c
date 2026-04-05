@@ -52,9 +52,9 @@ pwh_define_gucs(void)
 							PGC_SIGHUP, 0, NULL, NULL, NULL);
 
 	DefineCustomRealVariable(PWH_GUC_MIN_COST_TO_TRACK_NAME,
-							 "Minimum total cost of a query to track",
-							 NULL, &PWH_GUC_MIN_COST_TO_TRACK, 50000, 0,
-							 DBL_MAX, PGC_SIGHUP, 0, NULL, NULL, NULL);
+							 "Minimum total cost of a query to track", NULL,
+							 &PWH_GUC_MIN_COST_TO_TRACK, 50000, 0, DBL_MAX,
+							 PGC_SIGHUP, 0, NULL, NULL, NULL);
 }
 
 #ifdef WITH_BGWORKER
