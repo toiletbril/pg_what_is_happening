@@ -48,7 +48,7 @@ pwh_compute_query_id(const QueryDesc *qd)
 							 strlen(qd->sourceText));
 	}
 
-	hash ^= GetCurrentIntegerTimestamp() >> 32;
+	hash ^= (u64) GetCurrentTimestamp() >> 32;
 	hash ^= MyProcPid;
 
 	return hash;

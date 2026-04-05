@@ -23,8 +23,11 @@
 
 #include "common.h"
 #include "executor/execdesc.h"
+#include "float.h"
 #include "nodes/nodes.h"
 #include "storage/lwlock.h"
+#include "storage/shmem.h"
+#include "utils/timestamp.h"
 
 /* Greenplum detection. */
 #ifdef GP_VERSION_NUM
