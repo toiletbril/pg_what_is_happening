@@ -216,10 +216,6 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 	/* Force instrumentation on all nodes. */
 	queryDesc->instrument_options |= INSTRUMENT_ALL;
 
-	ereport(DEBUG2,
-			(errmsg("PWH: Set instrument_options to INSTRUMENT_ALL"),
-			 errdetail("instrument_options=%d", queryDesc->instrument_options)));
-
 	if (PREV_QUERY_START_HOOK)
 	{
 		PREV_QUERY_START_HOOK(queryDesc, eflags);
@@ -239,7 +235,6 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 
 	if (unlikely(!PWH_GUC_IS_ENABLED))
 	{
-		ereport(DEBUG2, (errmsg("PWH: ExecutorStart disabled, returning")));
 		return;
 	}
 
@@ -426,11 +421,6 @@ v1_status_f(PG_FUNCTION_ARGS)
 
 		/* Send SIGUSR2 to all active backends to refresh metrics. */
 		u32 n_signaled = pwh_request_backend_metrics_unlocked();
-
-		ereport(DEBUG1,
-				(errmsg("PWH: v1_status() signaled backends"),
-				 errdetail("Signaled %u backends, waiting %dms", n_signaled,
-						   PWH_GUC_SIGNAL_TIMEOUT_MS)));
 
 		/* Wait for backends to refresh metrics. */
 		pg_usleep(PWH_GUC_SIGNAL_TIMEOUT_MS * 1000L);

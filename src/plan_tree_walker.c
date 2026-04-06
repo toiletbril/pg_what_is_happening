@@ -293,7 +293,7 @@ instrumentation_visitor(PlanState *planstate, void *context)
 	}
 	else
 	{
-		ereport(DEBUG1,
+		ereport(LOG,
 				(errmsg("PWH: Node %lu has NULL instrumentation", current_id),
 				 errdetail("planstate=%p", (void *) planstate)));
 	}

@@ -145,7 +145,7 @@ pwh_get_or_create_my_backend_entry(void)
 
 	PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
 
-	ereport(DEBUG1,
+	ereport(LOG,
 			(errmsg("PWH: All backend entries exhausted"),
 			 errdetail("All %d slots are in use, PID %d cannot be tracked",
 					   PWH_GUC_MAX_TRACKED_QUERIES, MyProcPid)));

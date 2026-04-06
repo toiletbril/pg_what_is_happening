@@ -72,7 +72,7 @@ pwh_bgworker_main(Datum main_arg)
 	PWH_SHMEM = pwh_get_shared_memory_ptr();
 	ereport(LOG, (errmsg("PWH: Background worker attached to shared memory")));
 
-	const char *listen_addr = PWH_GET_GUC(PWH_GUC_METRICS_LISTEN_ADDRESS_NAME);
+	const char *listen_addr = PWH_GUC_METRICS_LISTEN_ADDRESS;
 
 	Assert(listen_addr != NULL);
 
@@ -93,9 +93,6 @@ pwh_bgworker_main(Datum main_arg)
 				 errmsg("PWH: No HTTP backend compiled in"),
 				 errdetail("Recompile with HTTP_BACKEND=mongoose or similar")));
 	}
-
-	ereport(LOG,
-			(errmsg("PWH: Metrics endpoint listening on %s", listen_addr)));
 
 	pwh_http_server_set_handler(HTTP_SERVER_INSTANCE, metrics_handler, NULL);
 	pwh_http_server_run(HTTP_SERVER_INSTANCE); /* Blocking. */
