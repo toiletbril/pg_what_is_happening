@@ -269,8 +269,10 @@ pwh_cleanup_orphaned_slots(void)
 						 errdetail("Backend PID %u no longer exists",
 								   be->backend_pid)));
 
-				MemSet(be, 0, pwh_get_backend_entry_stride());
+				/* No one should be reading that memory anyway. */
+				pwh_release_backend_entry_unlocked(be);
 				PWH_MEMORY_BARRIER();
+
 				n_cleaned++;
 			}
 		}

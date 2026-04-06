@@ -108,8 +108,6 @@ extern pqsigfunc pwh_install_pqsignal(int signo, pqsigfunc func);
 	} while (0)
 #endif
 
-/* Transaction event compatibility (XACT_EVENT_PARALLEL_ABORT introduced in
- * PG 9.6). */
 #ifdef XACT_EVENT_PARALLEL_ABORT
 #define PWH_IS_ABORT_EVENT(event) \
 	((event) == XACT_EVENT_ABORT || (event) == XACT_EVENT_PARALLEL_ABORT)

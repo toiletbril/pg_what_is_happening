@@ -12,6 +12,7 @@ export PG_LOG_FILE='/tmp/postgresql.log'
 
 export PGDATA="$PG_DATA_DIR"
 export PATH="$PATH:$PG_BIN_DIR/bin"
+export TERM="xterm" # for GitHub Actions
 
 _log_date()
 {

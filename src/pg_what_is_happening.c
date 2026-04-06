@@ -21,7 +21,6 @@
 #include "access/xact.h"
 #include "common.h"
 #include "compatibility.h"
-#include "compatibility/12.h"
 #include "executor/executor.h"
 #include "fmgr.h"
 #include "funcapi.h"
