@@ -7,8 +7,8 @@ friends with the most granular per-node visibility the executor can provide.
 There are tests, but if you currently use this in production you're braver than
 I am.
 
-PostgreSQL versions from 9.4 through 18+ are supported with varying levels of
-jank in the compatibility layer.
+PostgreSQL versions from 9.4 through 18+ are supported. No stable ABI for `.so`
+is guaranteed until stated otherwise.
 
 See [`example/`](./example/) for a Prometheus/Grafana setup.
 
@@ -116,8 +116,8 @@ complete.
 Cardinality is bounded by:
 
 $$
-\text{max\_tracked\_queries} \times \text{max\_nodes\_per\_query}
-\times \text{metric\_count}
+\text{max_tracked_queries} \times \text{max_nodes_per_query}
+\times \text{metric_count}
 $$
 
 With defaults:
@@ -154,15 +154,15 @@ visibility the Postgres executor can provide.
 Shared memory consumption is
 
 $$
-\text{header} + (\text{max\_tracked\_queries}
-\times \text{backend\_entry\_stride})
+\text{header} + (\text{max_tracked_queries}
+\times \text{backend_entry_stride})
 $$
 
 where the backend entry stride is
 
 $$
-\approx 40 + \text{query\_text\_len}
-+ (\text{max\_nodes\_per\_query} \times 120)
+\approx 40 + \text{query_text_len}
++ (\text{max_nodes_per_query} \times 120)
 $$
 
 With default settings (`max_tracked_queries=32`,
