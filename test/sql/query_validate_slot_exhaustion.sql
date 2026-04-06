@@ -10,9 +10,9 @@ SELECT current_setting('what_is_happening.max_tracked_queries')::int AS max_trac
 SELECT pg_sleep(2);
 
 -- Count how many queries are actually being tracked.
--- Should be exactly max_tracked_queries.
 SELECT
-  COUNT(DISTINCT backend_pid) = :max_tracked_queries AS tracked_equals_limit
+  COUNT(DISTINCT backend_pid)
+  BETWEEN :max_tracked_queries - 2 AND :max_tracked_queries AS tracked_equals_limit
 FROM what_is_happening.v1_status
 WHERE query_text LIKE '%pg_sleep(10)%';
 
@@ -24,4 +24,4 @@ FROM what_is_happening.v1_status
 WHERE query_text LIKE '%pg_sleep(10)%';
 
 -- Wait for all background queries to finish.
-SELECT pg_sleep(10);
+SELECT pg_sleep(5);

@@ -25,8 +25,8 @@
 #include "gucs.h"
 #include "miscadmin.h"
 #include "plan_tree_walker.h"
-#include "shared_memory.h"
 #include "postmaster/bgworker.h"
+#include "shared_memory.h"
 
 /* Static storage for current QueryDesc pointer. */
 static volatile QueryDesc *CURRENT_QUERY_DESC = NULL;
@@ -72,17 +72,15 @@ pwh_sigusr2_handler(SIGNAL_ARGS)
 	/* Check if we have an active query. */
 	QueryDesc *queryDesc = (QueryDesc *) CURRENT_QUERY_DESC;
 
-	ereport(DEBUG2,
-			(errmsg("PWH: SIGUSR2 handler called"),
-			 errdetail("queryDesc=%p calls=%d", (void *) queryDesc,
-					   (int) SIGNAL_HANDLER_CALL_COUNT)));
+	ereport(DEBUG2, (errmsg("PWH: SIGUSR2 handler called"),
+					 errdetail("queryDesc=%p calls=%d", (void *) queryDesc,
+							   (int) SIGNAL_HANDLER_CALL_COUNT)));
 
 	if (queryDesc == NULL || queryDesc->planstate == NULL)
 	{
 		SIGNAL_HANDLER_NO_QUERYDESC++;
-		ereport(DEBUG2,
-				(errmsg("PWH: No QueryDesc in signal handler"),
-				 errdetail("queryDesc=%p", (void *) queryDesc)));
+		ereport(DEBUG2, (errmsg("PWH: No QueryDesc in signal handler"),
+						 errdetail("queryDesc=%p", (void *) queryDesc)));
 		goto chain;
 	}
 
@@ -117,9 +115,9 @@ pwh_sigusr2_handler(SIGNAL_ARGS)
 			(errmsg("PWH: Refreshing instrumentation in signal handler"),
 			 errdetail("shmem_be_entry=%p metrics=%p num_nodes=%u",
 					   (void *) shmem_be_entry, (void *) metrics,
-					   shmem_be_entry->num_nodes)));
+					   shmem_be_entry->count_of_metrics)));
 
-	pwh_walk_plan_instrumentation(queryDesc->planstate, metrics,
+	pwh_collect_planstate_metrics(queryDesc->planstate, metrics,
 								  PWH_GUC_MAX_NODES_PER_QUERY);
 
 	/* Increment generation counter to signal completion. */
@@ -134,16 +132,14 @@ pwh_sigusr2_handler(SIGNAL_ARGS)
 							   (int) SIGNAL_HANDLER_SUCCESS_COUNT)));
 
 chain:
+	errno = save_errno;
+
 	/* Chain to previous handler if it's a valid function pointer. */
 	if (PREV_SIGUSR2_HANDLER && PREV_SIGUSR2_HANDLER != SIG_IGN &&
 		PREV_SIGUSR2_HANDLER != SIG_DFL)
 	{
-		errno = save_errno;
 		(*PREV_SIGUSR2_HANDLER)(postgres_signal_arg);
-		return;
 	}
-
-	errno = save_errno;
 }
 
 static volatile bool WAS_SIGNAL_HANDLER_INSTALLED = false;

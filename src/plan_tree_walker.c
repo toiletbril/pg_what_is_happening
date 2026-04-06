@@ -49,9 +49,6 @@ typedef struct
 
 typedef bool (*PwhNodeVisitorFn)(PlanState *planstate, void *context);
 
-bool pwh_walk_planstate_recursive(PlanState		  *planstate,
-								  PwhNodeVisitorFn visitor, void *context);
-
 static bool topology_visitor(PlanState *planstate, void *context);
 static void walk_topology_with_parent(PlanState *planstate, i32 parent_id,
 									  TopologyContext *ctx);
@@ -125,8 +122,9 @@ pwh_walk_planstate_recursive(PlanState *planstate, PwhNodeVisitorFn visitor,
  * Returns total number of nodes found.
  */
 u64
-pwh_walk_plan_topology(PlanState *planstate, PwhNodeMetrics *metrics,
-					   u64 max_nodes, i32 parent_id)
+pwh_remember_planstate_tree_as_metric_structure(PlanState	   *planstate,
+												PwhNodeMetrics *metrics,
+												u64 max_nodes, i32 parent_id)
 {
 	u64 node_counter = 0;
 
@@ -226,7 +224,7 @@ walk_topology_with_parent(PlanState *planstate, i32 parent_id,
  * Must match the same traversal order as topology walk
  */
 void
-pwh_walk_plan_instrumentation(PlanState *planstate, PwhNodeMetrics *metrics,
+pwh_collect_planstate_metrics(PlanState *planstate, PwhNodeMetrics *metrics,
 							  u64 max_nodes)
 {
 	u64 node_counter = 0;
@@ -265,13 +263,15 @@ instrumentation_visitor(PlanState *planstate, void *context)
 
 	if (likely(instr != NULL))
 	{
-		ereport(DEBUG2,
-				(errmsg("PWH: Reading instrumentation for node %lu", current_id),
-				 errdetail(
-					 "ntuples=%.0f nloops=%.0f total_time=%.6f cache_hits=%ld",
-					 instr->ntuples, instr->nloops,
-					 PWH_INSTR_TIME_MAYBE_GET_DOUBLE(instr->total),
-					 instr->bufusage.shared_blks_hit)));
+		ereport(
+			DEBUG2,
+			(errmsg("PWH: Reading instrumentation for node %lu", current_id),
+			 errdetail(
+				 "ntuples=%.0f nloops=%.0f total_time=%.6f cache_hits=%ld",
+				 instr->ntuples, instr->nloops,
+				 PWH_INSTR_TIME_MAYBE_GET_DOUBLE(instr->total),
+				 instr->bufusage.shared_blks_hit)));
+
 		ctx->metrics[current_id].execution.tuples_returned =
 			instr->ntuples + instr->tuplecount;
 		ctx->metrics[current_id].execution.loops_executed =

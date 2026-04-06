@@ -21,6 +21,7 @@
 #include "access/xact.h"
 #include "common.h"
 #include "compatibility.h"
+#include "compatibility/12.h"
 #include "executor/executor.h"
 #include "fmgr.h"
 #include "funcapi.h"
@@ -132,7 +133,8 @@ query_cleanup_callback(XactEvent event, void *arg)
 {
 	unused(arg);
 
-	/* Only clean up on abort - commit path goes through ExecutorEnd normally.
+	/*
+	 * Only clean up on abort - commit path goes through ExecutorEnd normally.
 	 */
 	if (!PWH_IS_ABORT_EVENT(event))
 		return;
@@ -143,23 +145,10 @@ query_cleanup_callback(XactEvent event, void *arg)
 	if (!PWH_GUC_IS_ENABLED)
 		return;
 
-	/* Get our backend entry and mark query as inactive. */
-	PwhSharedMemoryBackendEntry *shmem_be_entry =
-		pwh_get_or_create_my_backend_entry();
+	pwh_release_my_backend_entry();
 
-	if (likely(shmem_be_entry != NULL && shmem_be_entry->backend_pid != 0))
-	{
-		shmem_be_entry->backend_pid = 0;
-		shmem_be_entry->poll_generation++;
-
-		PWH_MEMORY_BARRIER();
-
-		ereport(DEBUG1,
-				(errmsg("PWH: Cleaned up query state on abort for PID %d",
-						MyProcPid),
-				 errdetail("Generation: %lu",
-						   (unsigned long) shmem_be_entry->poll_generation)));
-	}
+	ereport(DEBUG1, (errmsg("PWH: Cleaned up query state on abort for PID %d",
+							MyProcPid)));
 }
 
 static void
@@ -173,10 +162,11 @@ backend_exit_callback(int code, Datum arg)
 	for (u64 i = 0; i < (u64) PWH_GUC_MAX_TRACKED_QUERIES; i++)
 	{
 		PwhSharedMemoryBackendEntry *be = PWH_GET_BACKEND_ENTRY_UNSAFE(i);
+		Assert(be != NULL);
 
-		if (be != NULL && be->backend_pid == MyProcPid)
+		if (be->backend_pid == MyProcPid)
 		{
-			MemSet(be, 0, pwh_get_backend_entry_stride());
+			pwh_release_backend_entry_unlocked(be);
 			PWH_MEMORY_BARRIER();
 			ereport(DEBUG2,
 					(errmsg("PWH: Released backend entry %lu for PID %u", i,
@@ -256,31 +246,29 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 
 	PG_TRY();
 	{
-		/* Get our backend entry. */
-		PwhSharedMemoryBackendEntry *shmem_be_entry =
-			pwh_get_or_create_my_backend_entry();
-		if (unlikely(shmem_be_entry == NULL))
+		PwhSharedMemoryBackendEntry *be = pwh_get_or_create_my_backend_entry();
+
+		if (unlikely(be == NULL))
 		{
 			ereport(LOG, (errmsg("PWH: Could not allocate backend entry"),
 						  errdetail("PID %d exhausted all slots", MyProcPid)));
 		}
 		else
 		{
-			PwhNodeMetrics *metrics =
-				pwh_get_backend_entry_metrics(shmem_be_entry);
-			char *query_text = pwh_get_backend_entry_query_text(shmem_be_entry);
+			PwhNodeMetrics *metrics = pwh_get_backend_entry_metrics(be);
+			char		   *query_text = pwh_get_backend_entry_query_text(be);
 
 			/* Set initial backend state and prepare for metric collection. */
-			u64 num_nodes = pwh_walk_plan_topology(
+			u64 num_nodes = pwh_remember_planstate_tree_as_metric_structure(
 				queryDesc->planstate, metrics, PWH_GUC_MAX_NODES_PER_QUERY, -1);
 
 			ereport(DEBUG1, (errmsg("PWH: Tracking query with %lu nodes",
 									(unsigned long) num_nodes),
 							 errdetail("PID %d", MyProcPid)));
 
-			shmem_be_entry->num_nodes = (u32) num_nodes;
-			shmem_be_entry->query_start_time = GetCurrentTimestamp();
-			shmem_be_entry->query_id = get_query_id(queryDesc);
+			be->count_of_metrics = (u32) num_nodes;
+			be->query_start_time = GetCurrentTimestamp();
+			be->query_id = get_query_id(queryDesc);
 
 			/* Copy query text. */
 			if (queryDesc->sourceText != NULL)
@@ -297,7 +285,7 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 				DEBUG1,
 				(errmsg("PWH: ExecutorStart complete"),
 				 errdetail("PID=%d query_id=%lu num_nodes=%lu query='%.100s'",
-						   MyProcPid, (unsigned long) shmem_be_entry->query_id,
+						   MyProcPid, (unsigned long) be->query_id,
 						   (unsigned long) num_nodes, query_text)));
 
 			/* We're set. Store QueryDesc for signal handler. */
@@ -344,32 +332,35 @@ query_end_hook(QueryDesc *queryDesc)
 		PG_TRY();
 		{
 			/* Get our backend entry. */
-			PwhSharedMemoryBackendEntry *shmem_be_entry =
-				pwh_get_or_create_my_backend_entry();
-			if (likely(shmem_be_entry != NULL &&
-					   shmem_be_entry->backend_pid != 0))
+			PwhSharedMemoryBackendEntry *be = pwh_get_my_backend_entry();
+
+			if (be != NULL)
 			{
-				PwhNodeMetrics *metrics =
-					pwh_get_backend_entry_metrics(shmem_be_entry);
+				PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_EXCLUSIVE);
 
-				/* Capture final instrumentation. */
-				pwh_walk_plan_instrumentation(queryDesc->planstate, metrics,
-											  PWH_GUC_MAX_NODES_PER_QUERY);
+				if (likely(pwh_is_backend_entry_active(be)))
+				{
+					PwhNodeMetrics *metrics = pwh_get_backend_entry_metrics(be);
 
-				ereport(DEBUG1,
-						(errmsg("PWH: Completed query tracking for PID %d",
-								MyProcPid),
-						 errdetail(
-							 "Generation: %lu",
-							 (unsigned long) shmem_be_entry->poll_generation)));
+					/* Capture final instrumentation. */
+					pwh_collect_planstate_metrics(queryDesc->planstate, metrics,
+												  PWH_GUC_MAX_NODES_PER_QUERY);
 
-				/* Clear entire slot to prevent cross-contamination. */
-				MemSet(shmem_be_entry, 0, pwh_get_backend_entry_stride());
-				PWH_MEMORY_BARRIER();
+					ereport(DEBUG1,
+							(errmsg("PWH: Completed query tracking for PID %d",
+									MyProcPid),
+							 errdetail("Generation: %lu",
+									   (unsigned long) be->poll_generation)));
+
+					pwh_release_backend_entry_unlocked(be);
+				}
+
+				PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+
+
+				/* Clear QueryDesc pointer. */
+				pwh_set_current_query_desc(NULL);
 			}
-
-			/* Clear QueryDesc pointer. */
-			pwh_set_current_query_desc(NULL);
 		}
 		PG_CATCH();
 		{
@@ -381,6 +372,8 @@ query_end_hook(QueryDesc *queryDesc)
 			/* Log the error but don't propagate to user query. */
 			EmitErrorReport();
 			FlushErrorState();
+
+			PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
 
 			ereport(LOG,
 					(errmsg("PWH: Metric collection failed in ExecutorEnd"),
@@ -446,47 +439,45 @@ v1_status_f(PG_FUNCTION_ARGS)
 	u32	 node_idx = state[1];
 
 	/* Find next valid backend entry+node combination. */
-	while (slot_idx < (u32) pwh_get_backend_entry_count())
+	while (slot_idx < (u32) PWH_GUC_MAX_TRACKED_QUERIES)
 	{
-		PwhSharedMemoryBackendEntry *shmem_be_entry =
-			pwh_get_backend_entry(slot_idx);
-		if (shmem_be_entry != NULL && shmem_be_entry->backend_pid != 0 &&
-			node_idx < shmem_be_entry->num_nodes)
+		PwhSharedMemoryBackendEntry *be = pwh_get_backend_entry(slot_idx);
+
+		if (pwh_is_backend_entry_active(be) && node_idx < be->count_of_metrics)
 		{
-			PwhNodeMetrics *metrics =
-				pwh_get_backend_entry_metrics(shmem_be_entry);
+			PwhNodeMetrics *metrics = pwh_get_backend_entry_metrics(be);
 			PwhNodeMetrics *node = &metrics[node_idx];
 
 			if (node_idx == 0)
 			{
-				ereport(DEBUG2,
-						(errmsg("PWH: v1_status() reading backend slot %u",
-								slot_idx),
-						 errdetail("pid=%d query_id=%lu num_nodes=%u",
-								   shmem_be_entry->backend_pid,
-								   (unsigned long) shmem_be_entry->query_id,
-								   shmem_be_entry->num_nodes)));
+				ereport(
+					DEBUG2,
+					(errmsg("PWH: v1_status() reading backend slot %u",
+							slot_idx),
+					 errdetail("pid=%d query_id=%lu num_nodes=%u",
+							   be->backend_pid, (unsigned long) be->query_id,
+							   be->count_of_metrics)));
 			}
 
 			double total_query_time = 0.0;
-			for (u32 j = 0; j < shmem_be_entry->num_nodes; j++)
+			for (u32 j = 0; j < be->count_of_metrics; j++)
 			{
 				total_query_time += metrics[j].execution.total_time_us;
 			}
 
-			ereport(DEBUG2,
-					(errmsg("PWH: v1_status() reading node %u", node_idx),
-					 errdetail(
-						 "total_time_us=%.0f tuples_returned=%.0f cache_hits=%ld",
-						 node->execution.total_time_us,
-						 node->execution.tuples_returned,
-						 node->buffer_usage.cache_hits)));
+			ereport(
+				DEBUG2,
+				(errmsg("PWH: v1_status() reading node %u", node_idx),
+				 errdetail(
+					 "total_time_us=%.0f tuples_returned=%.0f cache_hits=%ld",
+					 node->execution.total_time_us,
+					 node->execution.tuples_returned,
+					 node->buffer_usage.cache_hits)));
 
 			Datum values[PWH_V1_STATUS_TUPLE_COUNT];
 			bool  nulls[PWH_V1_STATUS_TUPLE_COUNT];
 
-			pwh_fill_v1_status_tuple(values, nulls, shmem_be_entry, node,
-									 total_query_time);
+			pwh_fill_v1_status_tuple(values, nulls, be, node, total_query_time);
 
 			HeapTuple tuple =
 				heap_form_tuple(funcctx->tuple_desc, values, nulls);

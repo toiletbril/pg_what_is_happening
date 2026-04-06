@@ -72,7 +72,7 @@ typedef struct
 	u64					  query_id;
 	u32					  poll_generation;
 	TimestampTz			  query_start_time;
-	u32					  num_nodes;
+	u32					  count_of_metrics;
 	/* Query text and metrics follow after. */
 } PwhSharedMemoryBackendEntry;
 
@@ -86,14 +86,51 @@ Size pwh_get_backend_entry_stride(void);
 									  ((idx) *                        \
 									   pwh_get_backend_entry_stride())))
 
-void							   *pwh_get_shared_memory_ptr(void);
-extern Size							pwh_get_shared_memory_size(void);
-extern void							pwh_shared_memory_startup_hook(void);
-extern PwhSharedMemoryBackendEntry *pwh_get_or_create_my_backend_entry(void);
-extern u64							pwh_get_backend_entry_count(void);
+/* Can return NULL. */
+extern PwhSharedMemoryBackendEntry *pwh_get_or_create_my_backend_entry_impl(
+	bool should_create);
+
+forceinline bool
+pwh_is_backend_entry_active(const PwhSharedMemoryBackendEntry *be)
+{
+	Assert(be != NULL);
+	return be->backend_pid != 0;
+}
+
+forceinline void
+pwh_release_backend_entry_unlocked(PwhSharedMemoryBackendEntry *be)
+{
+	Assert(pwh_is_backend_entry_active(be));
+	be->backend_pid = 0;
+	be->poll_generation++;
+	PWH_MEMORY_BARRIER();
+}
+
+/* Can return NULL. */
+forceinline PwhSharedMemoryBackendEntry *
+pwh_get_or_create_my_backend_entry(void)
+{
+	return pwh_get_or_create_my_backend_entry_impl(true);
+}
+
+/* Can return NULL. */
+forceinline PwhSharedMemoryBackendEntry *
+pwh_get_my_backend_entry(void)
+{
+	return pwh_get_or_create_my_backend_entry_impl(false);
+}
+
+extern void pwh_release_my_backend_entry(void);
+
+/* Cannot return NULL. */
+void	   *pwh_get_shared_memory_ptr(void);
+extern Size pwh_get_shared_memory_size(void);
+extern void pwh_shared_memory_startup_hook(void);
+/* Cannot return NULL. */
 extern PwhSharedMemoryBackendEntry *pwh_get_backend_entry(u64 index);
 extern char						   *pwh_get_backend_entry_query_text(
 						   PwhSharedMemoryBackendEntry *entry);
+/* Cannot return NULL. */
 extern PwhNodeMetrics *pwh_get_backend_entry_metrics(
 	PwhSharedMemoryBackendEntry *entry);
 extern u32	pwh_request_backend_metrics_unlocked(void);

@@ -27,6 +27,7 @@
 #include "common.h"
 #include "compatibility.h"
 #include "funcapi.h"
+#include "gucs.h"
 #include "shared_memory.h"
 #include "utils/builtins.h"
 
@@ -48,63 +49,56 @@ typedef struct
 static void buffer_init(FormatterBuffer *buf);
 static void buffer_ensure_capacity(FormatterBuffer *buf, u64 needed);
 static void buffer_append(FormatterBuffer *buf, const char *fmt, ...);
-static void formatter_init(Formatter *fmt, FormatterBuffer *buf, u64 query_id);
-static void append_metric(Formatter *fmt, PwhNodeMetrics *node, MetricType type,
-						  const char *value_fmt, ...);
-static void append_all_node_metrics(Formatter *fmt, PwhNodeMetrics *node,
-									double total_query_time);
 static void buffer_append_escaped(FormatterBuffer *buf, const char *str);
-static void append_query_info(FormatterBuffer			  *buf,
-							  PwhSharedMemoryBackendEntry *entry);
+static void formatter_init(Formatter *fmt, FormatterBuffer *buf, u64 query_id);
+static void formatter_append_metric(Formatter *fmt, PwhNodeMetrics *node,
+									MetricType type, const char *value_fmt,
+									...);
+static void formatter_append_all_node_metrics(Formatter		 *fmt,
+											  PwhNodeMetrics *node,
+											  double		  total_query_time);
+static void formatter_append_query_info(FormatterBuffer				*buf,
+										PwhSharedMemoryBackendEntry *entry);
+
+#define TupleDescInitEntryMetric(desc, att_num, metric_enum, type) \
+	TupleDescInitEntry(desc, att_num, metric_suffix(metric_enum), type, -1, 0);
+
 
 TupleDesc
 pwh_create_v1_status_tupdesc(void)
 {
-	TupleDesc tupdesc = PWH_CREATE_TUPLE_DESC(PWH_V1_STATUS_TUPLE_COUNT);
+	AttrNumber n = 1;
+	TupleDesc  d = PWH_CREATE_TUPLE_DESC(PWH_V1_STATUS_TUPLE_COUNT);
 
 	/* Utility columns. */
-	TupleDescInitEntry(tupdesc, (AttrNumber) 1, "backend_pid", INT4OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 2, "query_id", INT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 3, "query_text", TEXTOID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 4, "node_id", INT4OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 5, "parent_node_id", INT4OID, -1,
-					   0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 6, "node_tag", TEXTOID, -1, 0);
+	TupleDescInitEntry(d, n++, "backend_pid", INT4OID, -1, 0);
+	TupleDescInitEntry(d, n++, "query_id", INT8OID, -1, 0);
+	TupleDescInitEntry(d, n++, "query_text", TEXTOID, -1, 0);
+	TupleDescInitEntry(d, n++, "node_id", INT4OID, -1, 0);
+	TupleDescInitEntry(d, n++, "parent_node_id", INT4OID, -1, 0);
+	TupleDescInitEntry(d, n++, "node_tag", TEXTOID, -1, 0);
 
 	/* Metrics. */
-	TupleDescInitEntry(tupdesc, (AttrNumber) 7,
-					   metric_suffix(METRIC_STARTUP_TIME_US), FLOAT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 8,
-					   metric_suffix(METRIC_TOTAL_TIME_US), FLOAT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 9,
-					   metric_suffix(METRIC_LOOPS_EXECUTED), FLOAT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 10,
-					   metric_suffix(METRIC_TUPLES_RETURNED), FLOAT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 11,
-					   metric_suffix(METRIC_TIME_SECONDS), FLOAT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 12,
-					   metric_suffix(METRIC_TIME_PERCENT), FLOAT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 13,
-					   metric_suffix(METRIC_CACHE_HITS), INT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 14,
-					   metric_suffix(METRIC_CACHE_MISSES), INT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 15,
-					   metric_suffix(METRIC_LOCAL_CACHE_HITS), INT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 16,
-					   metric_suffix(METRIC_LOCAL_CACHE_MISSES), INT8OID, -1,
-					   0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 17,
-					   metric_suffix(METRIC_SPILL_FILE_READS), INT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 18,
-					   metric_suffix(METRIC_SPILL_FILE_WRITES), INT8OID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 19,
-					   metric_suffix(METRIC_ROWS_FILTERED_BY_JOINS), FLOAT8OID,
-					   -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 20,
-					   metric_suffix(METRIC_ROWS_FILTERED_BY_EXPRESSIONS),
-					   FLOAT8OID, -1, 0);
+	TupleDescInitEntryMetric(d, n++, METRIC_STARTUP_TIME_US, FLOAT8OID);
+	TupleDescInitEntryMetric(d, n++, METRIC_TOTAL_TIME_US, FLOAT8OID);
+	TupleDescInitEntryMetric(d, n++, METRIC_LOOPS_EXECUTED, FLOAT8OID);
+	TupleDescInitEntryMetric(d, n++, METRIC_TUPLES_RETURNED, FLOAT8OID);
+	TupleDescInitEntryMetric(d, n++, METRIC_TIME_SECONDS, FLOAT8OID);
+	TupleDescInitEntryMetric(d, n++, METRIC_TIME_PERCENT, FLOAT8OID);
+	TupleDescInitEntryMetric(d, n++, METRIC_CACHE_HITS, INT8OID);
+	TupleDescInitEntryMetric(d, n++, METRIC_CACHE_MISSES, INT8OID);
+	TupleDescInitEntryMetric(d, n++, METRIC_LOCAL_CACHE_HITS, INT8OID);
+	TupleDescInitEntryMetric(d, n++, METRIC_LOCAL_CACHE_MISSES, INT8OID);
+	TupleDescInitEntryMetric(d, n++, METRIC_SPILL_FILE_READS, INT8OID);
+	TupleDescInitEntryMetric(d, n++, METRIC_SPILL_FILE_WRITES, INT8OID);
+	TupleDescInitEntryMetric(d, n++, METRIC_ROWS_FILTERED_BY_JOINS, FLOAT8OID);
+	TupleDescInitEntryMetric(d, n++, METRIC_ROWS_FILTERED_BY_EXPRESSIONS,
+							 FLOAT8OID);
 
-	return tupdesc;
+	/* Column indexing starts from one. */
+	Assert(n == PWH_V1_STATUS_TUPLE_COUNT + 1);
+
+	return d;
 }
 
 void
@@ -118,35 +112,37 @@ pwh_fill_v1_status_tuple(Datum *values, bool *nulls,
 			? (node->execution.total_time_us / total_query_time) * 100.0
 			: 0.0;
 
+	u64 n = 0;
 
 	MemSet(nulls, 0, PWH_V1_STATUS_TUPLE_COUNT * sizeof(bool));
 
-	values[0] = Int32GetDatum(entry->backend_pid);
-	values[1] = Int64GetDatum(entry->query_id);
-	values[2] = CStringGetTextDatum(pwh_get_backend_entry_query_text(entry));
+	values[n++] = Int32GetDatum(entry->backend_pid);
+	values[n++] = Int64GetDatum(entry->query_id);
+	values[n++] = CStringGetTextDatum(pwh_get_backend_entry_query_text(entry));
+	values[n++] = Int32GetDatum(node->node_id);
+	values[n++] = Int32GetDatum(node->parent_node_id);
+	values[n++] = CStringGetTextDatum(pwh_node_tag_to_string(node->tag));
+	values[n++] = Float8GetDatum(node->execution.startup_time_us);
+	values[n++] = Float8GetDatum(node->execution.total_time_us);
+	values[n++] = Float8GetDatum(node->execution.loops_executed);
+	values[n++] = Float8GetDatum(node->execution.tuples_returned);
+	values[n++] = Float8GetDatum(node_time_seconds);
+	values[n++] = Float8GetDatum(node_percent);
+	values[n++] = Int64GetDatum(node->buffer_usage.cache_hits);
+	values[n++] = Int64GetDatum(node->buffer_usage.cache_misses);
+	values[n++] = Int64GetDatum(node->buffer_usage.local_cache_hits);
+	values[n++] = Int64GetDatum(node->buffer_usage.local_cache_misses);
+	values[n++] = Int64GetDatum(node->buffer_usage.spill_file_reads);
+	values[n++] = Int64GetDatum(node->buffer_usage.spill_file_writes);
+	values[n++] = Float8GetDatum(node->execution.rows_filtered_by_joins);
+	values[n++] = Float8GetDatum(node->execution.rows_filtered_by_expressions);
 
-	values[3] = Int32GetDatum(node->node_id);
-	values[4] = Int32GetDatum(node->parent_node_id);
-	values[5] = CStringGetTextDatum(pwh_node_tag_to_string(node->tag));
-	values[6] = Float8GetDatum(node->execution.startup_time_us);
-	values[7] = Float8GetDatum(node->execution.total_time_us);
-	values[8] = Float8GetDatum(node->execution.loops_executed);
-	values[9] = Float8GetDatum(node->execution.tuples_returned);
-	values[10] = Float8GetDatum(node_time_seconds);
-	values[11] = Float8GetDatum(node_percent);
-	values[12] = Int64GetDatum(node->buffer_usage.cache_hits);
-	values[13] = Int64GetDatum(node->buffer_usage.cache_misses);
-	values[14] = Int64GetDatum(node->buffer_usage.local_cache_hits);
-	values[15] = Int64GetDatum(node->buffer_usage.local_cache_misses);
-	values[16] = Int64GetDatum(node->buffer_usage.spill_file_reads);
-	values[17] = Int64GetDatum(node->buffer_usage.spill_file_writes);
-	values[18] = Float8GetDatum(node->execution.rows_filtered_by_joins);
-	values[19] = Float8GetDatum(node->execution.rows_filtered_by_expressions);
+	Assert(n == PWH_V1_STATUS_TUPLE_COUNT);
 }
 
 static void
-append_all_node_metrics(Formatter *fmt, PwhNodeMetrics *node,
-						double total_query_time)
+formatter_append_all_node_metrics(Formatter *fmt, PwhNodeMetrics *node,
+								  double total_query_time)
 {
 	double node_time_seconds = node->execution.total_time_us / 1000000.0;
 	double node_percent =
@@ -154,32 +150,35 @@ append_all_node_metrics(Formatter *fmt, PwhNodeMetrics *node,
 			? (node->execution.total_time_us / total_query_time) * 100.0
 			: 0.0;
 
-	append_metric(fmt, node, METRIC_TUPLES_RETURNED, "%.0f",
-				  node->execution.tuples_returned);
-	append_metric(fmt, node, METRIC_STARTUP_TIME_US, "%.0f",
-				  node->execution.startup_time_us);
-	append_metric(fmt, node, METRIC_TOTAL_TIME_US, "%.0f",
-				  node->execution.total_time_us);
-	append_metric(fmt, node, METRIC_LOOPS_EXECUTED, "%.0f",
-				  node->execution.loops_executed);
-	append_metric(fmt, node, METRIC_TIME_SECONDS, "%.6f", node_time_seconds);
-	append_metric(fmt, node, METRIC_TIME_PERCENT, "%.2f", node_percent);
-	append_metric(fmt, node, METRIC_CACHE_HITS, "%ld",
-				  (long) node->buffer_usage.cache_hits);
-	append_metric(fmt, node, METRIC_CACHE_MISSES, "%ld",
-				  (long) node->buffer_usage.cache_misses);
-	append_metric(fmt, node, METRIC_LOCAL_CACHE_HITS, "%ld",
-				  (long) node->buffer_usage.local_cache_hits);
-	append_metric(fmt, node, METRIC_LOCAL_CACHE_MISSES, "%ld",
-				  (long) node->buffer_usage.local_cache_misses);
-	append_metric(fmt, node, METRIC_SPILL_FILE_READS, "%ld",
-				  (long) node->buffer_usage.spill_file_reads);
-	append_metric(fmt, node, METRIC_SPILL_FILE_WRITES, "%ld",
-				  (long) node->buffer_usage.spill_file_writes);
-	append_metric(fmt, node, METRIC_ROWS_FILTERED_BY_JOINS, "%.0f",
-				  node->execution.rows_filtered_by_joins);
-	append_metric(fmt, node, METRIC_ROWS_FILTERED_BY_EXPRESSIONS, "%.0f",
-				  node->execution.rows_filtered_by_expressions);
+	formatter_append_metric(fmt, node, METRIC_TUPLES_RETURNED, "%.0f",
+							node->execution.tuples_returned);
+	formatter_append_metric(fmt, node, METRIC_STARTUP_TIME_US, "%.0f",
+							node->execution.startup_time_us);
+	formatter_append_metric(fmt, node, METRIC_TOTAL_TIME_US, "%.0f",
+							node->execution.total_time_us);
+	formatter_append_metric(fmt, node, METRIC_LOOPS_EXECUTED, "%.0f",
+							node->execution.loops_executed);
+	formatter_append_metric(fmt, node, METRIC_TIME_SECONDS, "%.6f",
+							node_time_seconds);
+	formatter_append_metric(fmt, node, METRIC_TIME_PERCENT, "%.2f",
+							node_percent);
+	formatter_append_metric(fmt, node, METRIC_CACHE_HITS, "%ld",
+							(long) node->buffer_usage.cache_hits);
+	formatter_append_metric(fmt, node, METRIC_CACHE_MISSES, "%ld",
+							(long) node->buffer_usage.cache_misses);
+	formatter_append_metric(fmt, node, METRIC_LOCAL_CACHE_HITS, "%ld",
+							(long) node->buffer_usage.local_cache_hits);
+	formatter_append_metric(fmt, node, METRIC_LOCAL_CACHE_MISSES, "%ld",
+							(long) node->buffer_usage.local_cache_misses);
+	formatter_append_metric(fmt, node, METRIC_SPILL_FILE_READS, "%ld",
+							(long) node->buffer_usage.spill_file_reads);
+	formatter_append_metric(fmt, node, METRIC_SPILL_FILE_WRITES, "%ld",
+							(long) node->buffer_usage.spill_file_writes);
+	formatter_append_metric(fmt, node, METRIC_ROWS_FILTERED_BY_JOINS, "%.0f",
+							node->execution.rows_filtered_by_joins);
+	formatter_append_metric(fmt, node, METRIC_ROWS_FILTERED_BY_EXPRESSIONS,
+							"%.0f",
+							node->execution.rows_filtered_by_expressions);
 }
 
 
@@ -215,7 +214,9 @@ buffer_append(FormatterBuffer *buf, const char *fmt, ...)
 	va_end(args);
 
 	if (written > 0)
+	{
 		buf->offset += written;
+	}
 }
 
 static void
@@ -226,8 +227,8 @@ formatter_init(Formatter *fmt, FormatterBuffer *buf, u64 query_id)
 }
 
 static void
-append_metric(Formatter *fmt, PwhNodeMetrics *node, MetricType type,
-			  const char *value_fmt, ...)
+formatter_append_metric(Formatter *fmt, PwhNodeMetrics *node, MetricType type,
+						const char *value_fmt, ...)
 {
 	va_list		args;
 	const char *suffix = metric_suffix(type);
@@ -269,40 +270,41 @@ pwh_format_openmetrics(void)
 			suffix, help, suffix);
 	}
 
-	for (u64 i = 0; i < pwh_get_backend_entry_count(); i++)
+	for (u64 i = 0; i < (u64) PWH_GUC_MAX_TRACKED_QUERIES; i++)
 	{
 		PwhSharedMemoryBackendEntry *shmem_be_entry = pwh_get_backend_entry(i);
 
-		if (shmem_be_entry == NULL || shmem_be_entry->backend_pid == 0)
+		if (!pwh_is_backend_entry_active(shmem_be_entry))
 			continue;
 
 		ereport(DEBUG2, (errmsg("PWH: Formatting backend entry %lu", i),
 						 errdetail("PID=%d query_id=%lu num_nodes=%d",
 								   shmem_be_entry->backend_pid,
 								   (unsigned long) shmem_be_entry->query_id,
-								   shmem_be_entry->num_nodes)));
+								   shmem_be_entry->count_of_metrics)));
 
 		/* _info pseudo-metric. */
-		append_query_info(&buf, shmem_be_entry);
-
-		PwhNodeMetrics *metrics = pwh_get_backend_entry_metrics(shmem_be_entry);
+		formatter_append_query_info(&buf, shmem_be_entry);
 
 		Formatter fmt;
 		formatter_init(&fmt, &buf, shmem_be_entry->query_id);
 
+		PwhNodeMetrics *metrics = pwh_get_backend_entry_metrics(shmem_be_entry);
+
 		double total_query_time = 0.0;
-		for (u32 j = 0; j < shmem_be_entry->num_nodes; j++)
+		for (u32 j = 0; j < shmem_be_entry->count_of_metrics; j++)
 		{
 			total_query_time += metrics[j].execution.total_time_us;
 		}
 
-		for (u32 j = 0; j < shmem_be_entry->num_nodes; j++)
+		for (u32 j = 0; j < shmem_be_entry->count_of_metrics; j++)
 		{
 			/* Validate node magic before reading. */
 			if (!pwh_validate_node_magic(&metrics[j], j))
 				continue;
 
-			append_all_node_metrics(&fmt, &metrics[j], total_query_time);
+			formatter_append_all_node_metrics(&fmt, &metrics[j],
+											  total_query_time);
 		}
 	}
 
@@ -337,7 +339,8 @@ buffer_append_escaped(FormatterBuffer *buf, const char *str)
 }
 
 static void
-append_query_info(FormatterBuffer *buf, PwhSharedMemoryBackendEntry *entry)
+formatter_append_query_info(FormatterBuffer				*buf,
+							PwhSharedMemoryBackendEntry *entry)
 {
 	buffer_append(buf,
 				  "pg_what_is_happening_query_info{query_id=\"%lu\","
