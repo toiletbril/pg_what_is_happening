@@ -115,11 +115,18 @@ complete.
 
 Cardinality is bounded by:
 
-$$ \text{max_tracked_queries} \times \text{max_nodes_per_query} \times \text{metric_count} $$
+$$
+\text{max\\_tracked\\_queries} \times
+\text{max\\_nodes\\_per\\_query} \times
+\text{metric\\_count}
+$$
 
 With defaults:
 
-$$ 32 \times 128 \times 14 \approx 57000 \text{ active_series_maximum} $$
+$$
+32 \times 128 \times 14
+\approx 57000 \text{ maximum active series}
+$$
 
 Actual cardinality is typically much lower as most queries have fewer nodes.
 
@@ -149,18 +156,22 @@ visibility the Postgres executor can provide.
 Shared memory consumption is
 
 $$
-\text{header} + (\text{max_tracked_queries}
-\times \text{backend_entry_stride})
+\text{header} + (\text{max\\_tracked\\_queries}
+\times \text{backend\\_entry\\_stride})
 $$
 
 where the backend entry stride is
 
-$$ \approx 40 + \text{query_text_len} + (\text{max_nodes_per_query} \times 120) $$
+$$
+\approx 40 + \text{query\\_text\\_len} + (\text{max\\_nodes\\_per\\_query} \times \sim 120)
+$$
 
 With default settings (`max_tracked_queries=32`,
 `max_nodes_per_query=128`, `max_query_text_length=1024`):
 
-$$ 16 + (32 \times (40 + 1024 + 15360)) = 525584 \text{ bytes} \approx 513 \text{ KB} $$
+$$
+16 + (32 \times (40 + 1024 + 15360)) = 525584 \text{ bytes} \approx 513 \text{ KB}
+$$
 
 Higher settings scale linearly:
 `queries=256`, `nodes=256`, `text=2048` is around 8 MB.
