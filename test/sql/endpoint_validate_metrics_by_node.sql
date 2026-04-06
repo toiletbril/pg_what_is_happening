@@ -2,7 +2,7 @@ SELECT pg_advisory_lock(12348);
 
 \! psql -d contrib_regression -c "SELECT pg_advisory_lock(12348), o.order_id, u.username, p.product_name, SUM(o.quantity * p.price) as total FROM orders o JOIN users u ON o.user_id = u.user_id JOIN products p ON o.product_id = p.product_id GROUP BY o.order_id, u.username, p.product_name ORDER BY total DESC; SELECT pg_advisory_unlock(12348);" > /dev/null 2>&1 &
 
-SELECT pg_sleep(0.2);
+SELECT pg_sleep(0.4);
 
 \! curl -s http://localhost:9187/metrics > /data/pwh_endpoint_metrics.txt
 
