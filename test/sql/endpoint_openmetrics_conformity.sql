@@ -28,6 +28,6 @@ SELECT
 SELECT (SELECT pg_read_file('pwh_metric_lines.txt')::text::int) > 0 AS has_metric_value_lines;
 
 SELECT pg_advisory_unlock(12351);
-SELECT pg_sleep(0.5);
+SELECT pg_sleep(2);
 
 \! rm -f /data/pwh_*.txt
