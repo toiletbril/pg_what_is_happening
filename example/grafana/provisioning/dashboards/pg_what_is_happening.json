@@ -17,6 +17,107 @@
       "fieldConfig": {
         "defaults": {
           "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "query_text"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 600
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": ["sum"],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_query_info",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Active Queries",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "__name__": true,
+              "Time": true,
+              "job": true,
+              "instance": true,
+              "Value": true
+            },
+            "indexByName": {
+              "query_id": 0,
+              "pid": 1,
+              "query_text": 2
+            },
+            "renameByName": {
+              "query_id": "Query ID",
+              "pid": "PID",
+              "query_text": "Query Text"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
             "mode": "palette-classic"
           },
           "custom": {
@@ -59,26 +160,26 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "µs"
         }
       },
       "gridPos": {
         "h": 8,
-        "w": 6,
+        "w": 12,
         "x": 0,
-        "y": 0
+        "y": 8
       },
-      "id": 1,
+      "id": 2,
       "options": {
         "legend": {
-          "calcs": ["last", "max"],
+          "calcs": ["mean", "max"],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
           "mode": "multi",
-          "sort": "none"
+          "sort": "desc"
         }
       },
       "pluginVersion": "10.0.0",
@@ -88,12 +189,12 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count(count by (query_id) (pg_what_is_happening_active_query_node_rows))",
-          "legendFormat": "Active Queries",
+          "expr": "rate(pg_what_is_happening_active_query_node_total_time_us{query_id=~\"$query_id\"}[1m]) * on(query_id) group_left(query_text, pid) pg_what_is_happening_query_info",
+          "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
           "refId": "A"
         }
       ],
-      "title": "Active Queries",
+      "title": "Query Node Execution Time",
       "type": "timeseries"
     },
     {
@@ -146,16 +247,16 @@
               }
             ]
           },
-          "unit": "s"
+          "unit": "short"
         }
       },
       "gridPos": {
         "h": 8,
-        "w": 18,
-        "x": 6,
-        "y": 0
+        "w": 12,
+        "x": 12,
+        "y": 8
       },
-      "id": 2,
+      "id": 5,
       "options": {
         "legend": {
           "calcs": ["mean", "max"],
@@ -165,6 +266,158 @@
         },
         "tooltip": {
           "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\"}",
+          "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Rows Produced by Node",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_expressions{query_id=~\"$query_id\"}",
+          "legendFormat": "By expressions: {{node_tag}} q={{query_id}} n={{node_id}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_joins{query_id=~\"$query_id\"}",
+          "legendFormat": "By joins: {{node_tag}} q={{query_id}} n={{node_id}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Rows Filtered",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            }
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": ["value"]
+        },
+        "pieType": "donut",
+        "tooltip": {
+          "mode": "single",
           "sort": "none"
         }
       },
@@ -175,13 +428,13 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_time_seconds",
-          "legendFormat": "{{node_tag}} (query={{query_id}}, node={{node_id}})",
+          "expr": "count by (node_tag) (pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\"})",
+          "legendFormat": "{{node_tag}}",
           "refId": "A"
         }
       ],
-      "title": "Query Node Execution Time",
-      "type": "timeseries"
+      "title": "Executor Node Types Distribution",
+      "type": "piechart"
     },
     {
       "datasource": {
@@ -272,7 +525,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 8
+        "y": 24
       },
       "id": 3,
       "options": {
@@ -294,7 +547,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(pg_what_is_happening_active_query_node_cache_hits[5m]))",
+          "expr": "sum(rate(pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\"}[5m]))",
           "legendFormat": "Cache Hits",
           "refId": "A"
         },
@@ -303,7 +556,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(pg_what_is_happening_active_query_node_cache_misses[5m]))",
+          "expr": "sum(rate(pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\"}[5m]))",
           "legendFormat": "Cache Misses",
           "refId": "B"
         }
@@ -370,7 +623,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 8
+        "y": 24
       },
       "id": 4,
       "options": {
@@ -392,186 +645,12 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 * sum(pg_what_is_happening_active_query_node_cache_hits) / (sum(pg_what_is_happening_active_query_node_cache_hits) + sum(pg_what_is_happening_active_query_node_cache_misses))",
+          "expr": "100 * sum(pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\"}) / (sum(pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\"}) + sum(pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\"}))",
           "legendFormat": "Cache Hit Ratio",
           "refId": "A"
         }
       ],
       "title": "Cache Hit Ratio",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 16
-      },
-      "id": 5,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "pg_what_is_happening_active_query_node_rows",
-          "legendFormat": "{{node_tag}} (query={{query_id}}, node={{node_id}})",
-          "refId": "A"
-        }
-      ],
-      "title": "Rows Produced by Node",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "bars",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 16
-      },
-      "id": 6,
-      "options": {
-        "legend": {
-          "calcs": ["sum"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "count(pg_what_is_happening_active_query_node_rows) by (node_tag)",
-          "legendFormat": "{{node_tag}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Executor Node Types Distribution",
       "type": "timeseries"
     },
     {
@@ -649,7 +728,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 24
+        "y": 32
       },
       "id": 7,
       "options": {
@@ -675,7 +754,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_time_seconds",
+          "expr": "pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\"}",
           "format": "table",
           "instant": true,
           "refId": "A"
@@ -711,11 +790,38 @@
   "style": "dark",
   "tags": [
     "postgresql",
-    "pg_what_is_happening",
-    "query-performance"
+    "pg_what_is_happening"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(pg_what_is_happening_query_info, query_id)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Query ID",
+        "multi": true,
+        "name": "query_id",
+        "options": [],
+        "query": {
+          "query": "label_values(pg_what_is_happening_query_info, query_id)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
   },
   "time": {
     "from": "now-15m",
@@ -723,7 +829,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "PostgreSQL Query Performance - pg_what_is_happening",
+  "title": "pg_what_is_happening",
   "uid": "pg_what_is_happening",
   "version": 0,
   "weekStart": ""
