@@ -10,7 +10,9 @@ I am.
 PostgreSQL versions from 9.4 through 18+ are supported. No stable ABI for `.so`
 is guaranteed until stated otherwise.
 
-See [`example/`](./example/) for a Prometheus/Grafana setup.
+See [`example/`](./example/) for the following Prometheus/Grafana setup:
+
+![](./assets/grafana_example.png)
 
 ## Usage
 
