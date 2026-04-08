@@ -29,7 +29,7 @@
 		if (PREV_SHMEM_REQUEST_HOOK)                                 \
 			PREV_SHMEM_REQUEST_HOOK();                               \
 		RequestNamedLWLockTranche("pg_what_is_happening", 1);        \
-		RequestAddinShmemSpace(pwh_get_shared_memory_size());        \
+		RequestAddinShmemSpace(PWH_SHMEM_SIZE);                      \
 	}
 
 #define PWH_INSTALL_SHMEM_REQUEST_HOOK()                  \

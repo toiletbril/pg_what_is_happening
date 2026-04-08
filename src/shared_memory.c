@@ -33,6 +33,9 @@
 /* Global shared memory state pointer. */
 PwhSharedMemoryHeader *PWH_SHMEM = NULL;
 
+Size PWH_SHMEM_SIZE = 0;
+Size PWH_BACKEND_ENTRY_STRIDE = 0;
+
 /* Previous shmem startup hook. */
 shmem_startup_hook_type PREV_SHMEM_STARTUP_HOOK = NULL;
 
@@ -41,8 +44,8 @@ PWH_LWLOCK_TRANCHE_ID_DECL;
 static bool check_if_process_exists(u32 pid);
 static bool signal_process(u32 pid, int sig);
 
-Size
-pwh_get_backend_entry_stride(void)
+static u64
+calc_backend_entry_stride(void)
 {
 	Size size = sizeof(PwhSharedMemoryBackendEntry);
 	size = add_size(size, PWH_GUC_MAX_QUERY_TEXT_LEN);
@@ -51,14 +54,14 @@ pwh_get_backend_entry_stride(void)
 	return size;
 }
 
-Size
-pwh_get_shared_memory_size(void)
+static u64
+calc_shared_memory_size(void)
 {
 	Size size = 0;
 
 	size = add_size(size, sizeof(PwhSharedMemoryHeader));
 	size = add_size(size, mul_size(PWH_GUC_MAX_TRACKED_QUERIES,
-								   pwh_get_backend_entry_stride()));
+								   calc_backend_entry_stride()));
 
 	return size;
 }
@@ -67,8 +70,8 @@ void *
 pwh_get_shared_memory_ptr(void)
 {
 	bool  was_found;
-	void *p = ShmemInitStruct("pg_what_is_happening",
-							  pwh_get_shared_memory_size(), &was_found);
+	void *p = ShmemInitStruct("pg_what_is_happening", calc_shared_memory_size(),
+							  &was_found);
 	Assert(was_found);
 	return p;
 }
@@ -81,16 +84,19 @@ pwh_shared_memory_startup_hook(void)
 
 	PWH_SHMEM_REQUEST_IN_STARTUP_HOOK();
 
+	PWH_SHMEM_SIZE = calc_shared_memory_size();
+	PWH_BACKEND_ENTRY_STRIDE = calc_backend_entry_stride();
+
 	bool was_found;
 	PWH_SHMEM = ShmemInitStruct("pg_what_is_happening",
-								pwh_get_shared_memory_size(), &was_found);
+								calc_shared_memory_size(), &was_found);
 	Assert(PWH_SHMEM != NULL);
 
 	if (unlikely(!was_found))
 	{
 		ereport(LOG, (errmsg("PWH: Initializing shared memory"),
 					  errdetail("%zu bytes for %d backend entries",
-								pwh_get_shared_memory_size(),
+								calc_shared_memory_size(),
 								PWH_GUC_MAX_TRACKED_QUERIES)));
 
 		/* No lock -- we're the first to access this memory. */
@@ -99,7 +105,13 @@ pwh_shared_memory_startup_hook(void)
 		{
 			PwhSharedMemoryBackendEntry *be = PWH_GET_BACKEND_ENTRY_UNSAFE(i);
 			Assert(be != NULL);
-			MemSet(be, 0, pwh_get_backend_entry_stride());
+
+			/*
+			 * First and last usage of memset() for backend entry.
+			 * The value of 'poll_generation' field should be preserved.
+			 */
+			MemSet(be, 0, calc_backend_entry_stride());
+
 			be->backend_pid = 0;
 		}
 
@@ -110,7 +122,7 @@ pwh_shared_memory_startup_hook(void)
 }
 
 PwhSharedMemoryBackendEntry *
-pwh_get_or_create_my_backend_entry_impl(bool should_acquire_entry)
+pwh_get_or_create_my_backend_entry_impl(bool should_create)
 {
 	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_SHARED);
 
@@ -132,7 +144,7 @@ pwh_get_or_create_my_backend_entry_impl(bool should_acquire_entry)
 		}
 	}
 
-	if (should_acquire_entry && free_slot_idx != -1U)
+	if (should_create && free_slot_idx != -1U)
 	{
 		PwhSharedMemoryBackendEntry *be =
 			PWH_GET_BACKEND_ENTRY_UNSAFE(free_slot_idx);
@@ -147,7 +159,7 @@ pwh_get_or_create_my_backend_entry_impl(bool should_acquire_entry)
 
 	PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
 
-	if (should_acquire_entry)
+	if (should_create)
 	{
 		ereport(LOG,
 				(errmsg("PWH: All backend entries exhausted"),
@@ -271,7 +283,6 @@ pwh_cleanup_orphaned_slots(void)
 
 				/* No one should be reading that memory anyway. */
 				pwh_release_backend_entry_unlocked(be);
-				PWH_MEMORY_BARRIER();
 
 				n_cleaned++;
 			}
