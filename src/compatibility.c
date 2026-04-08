@@ -25,6 +25,18 @@
 #include "nodes/nodes.h"
 #include "utils/timestamp.h"
 
+/*
+ * compatibility.h provides some inline shims:
+ *
+ * static inline const char
+ * *pwh_node_tag_to_string_inline(NodeTag tag);
+ *
+ * static inline bool
+ * pwh_walk_planstate_children_inline(PlanState *planstate,
+ * 									  PwhNodeVisitorFn visitor,
+ * 									  void *context);
+ */
+
 const char *
 pwh_node_tag_to_string(NodeTag tag)
 {

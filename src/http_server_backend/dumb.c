@@ -32,17 +32,17 @@
 
 typedef struct DumbHttpServer
 {
-	i32				   port;
-	i32				   listen_fd;
-	volatile bool	   running;
-	HttpRequestHandler handler;
-	void			  *user_data;
+	i32					 port;
+	i32					 listen_fd;
+	volatile bool		 is_running;
+	HttpRequestHandlerFn handler_fn;
+	void				*custom_context;
 } DumbHttpServer;
 
 static HttpServer *dumb_create(const char *listen_addr);
 static void		   dumb_destroy(HttpServer *server);
 
-static void dumb_set_handler(HttpServer *server, HttpRequestHandler handler,
+static void dumb_set_handler(HttpServer *server, HttpRequestHandlerFn handler,
 							 void *user_data);
 static i32	dumb_run(HttpServer *server);
 static void dumb_stop(HttpServer *server);
@@ -89,9 +89,9 @@ dumb_create(const char *listen_addr)
 
 	impl->port = port;
 	impl->listen_fd = -1;
-	impl->running = false;
-	impl->handler = NULL;
-	impl->user_data = NULL;
+	impl->is_running = false;
+	impl->handler_fn = NULL;
+	impl->custom_context = NULL;
 
 	server->vtable = &dumb_vtable;
 	server->impl = impl;
@@ -118,13 +118,13 @@ dumb_destroy(HttpServer *server)
 }
 
 static void
-dumb_set_handler(HttpServer *server, HttpRequestHandler handler,
+dumb_set_handler(HttpServer *server, HttpRequestHandlerFn handler,
 				 void *user_data)
 {
 	DumbHttpServer *impl = (DumbHttpServer *) server->impl;
 
-	impl->handler = handler;
-	impl->user_data = user_data;
+	impl->handler_fn = handler;
+	impl->custom_context = user_data;
 }
 
 static bool
@@ -218,9 +218,9 @@ handle_connection(DumbHttpServer *impl, i32 client_fd)
 	memset(&resp, 0, sizeof(resp));
 
 	/* Call handler. */
-	if (impl->handler)
+	if (impl->handler_fn)
 	{
-		impl->handler(&req, &resp, impl->user_data);
+		impl->handler_fn(&req, &resp, impl->custom_context);
 	}
 	else
 	{
@@ -283,24 +283,26 @@ dumb_run(HttpServer *server)
 		return -1;
 	}
 
-	impl->running = true;
+	impl->is_running = true;
 
 	/* Accept loop. */
-	while (impl->running)
+	while (impl->is_running)
 	{
 		client_fd = accept(impl->listen_fd, NULL, NULL);
 		if (client_fd < 0)
 		{
-			if (impl->running)
+			if (impl->is_running)
 				continue;
-			else
-				break;
+
+			break;
 		}
 
 		handle_connection(impl, client_fd);
 	}
 
 	close(impl->listen_fd);
+
+	impl->is_running = false;
 	impl->listen_fd = -1;
 
 	return 0;
@@ -311,7 +313,7 @@ dumb_stop(HttpServer *server)
 {
 	DumbHttpServer *impl = (DumbHttpServer *) server->impl;
 
-	impl->running = false;
+	impl->is_running = false;
 
 	if (impl->listen_fd >= 0)
 	{

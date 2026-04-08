@@ -43,15 +43,15 @@ typedef struct
 
 typedef struct HttpServer HttpServer;
 
-typedef void (*HttpRequestHandler)(const HttpRequest *req, HttpResponse *resp,
-								   void *user_data);
+typedef void (*HttpRequestHandlerFn)(const HttpRequest *req, HttpResponse *resp,
+									 void *user_data);
 
 /* Virtual function table for HTTP server backends. */
 typedef struct HttpServerVtable
 {
 	HttpServer *(*createFn)(const char *listen_addr);
 	void (*destroyFn)(HttpServer *server);
-	void (*setHandlerFn)(HttpServer *server, HttpRequestHandler handler,
+	void (*setHandlerFn)(HttpServer *server, HttpRequestHandlerFn handler,
 						 void *user_data);
 	i32 (*runFn)(HttpServer *server);
 	void (*stopFn)(HttpServer *server);
@@ -68,9 +68,9 @@ extern const HttpServerVtable *pwh_http_server_get_impl(void);
 
 extern HttpServer *pwh_http_server_create(const char *listen_addr);
 extern void		   pwh_http_server_destroy(HttpServer *server);
-extern void		   pwh_http_server_set_handler(HttpServer		 *server,
-											   HttpRequestHandler handler,
-											   void				 *user_data);
+extern void		   pwh_http_server_set_handler(HttpServer		   *server,
+											   HttpRequestHandlerFn handler,
+											   void				   *user_data);
 extern i32		   pwh_http_server_run(HttpServer *server);
 extern void		   pwh_http_server_stop(HttpServer *server);
 
