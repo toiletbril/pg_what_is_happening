@@ -4,7 +4,7 @@
   },
   "editable": true,
   "fiscalYearStartMonth": 0,
-  "graphTooltip": 0,
+  "graphTooltip": 1,
   "id": null,
   "links": [],
   "liveNow": false,
@@ -14,6 +14,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "Currently executing queries with their query_id, backend PID, and SQL text. Use this to identify which queries to drill into via the $query_id variable.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -53,10 +54,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 0
+        "y": 0,
+        "h": 5,
+        "w": 14,
+        "x": 0
       },
       "id": 1,
       "options": {
@@ -64,7 +65,9 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": ["sum"],
+          "reducer": [
+            "sum"
+          ],
           "show": false
         },
         "showHeader": true,
@@ -115,40 +118,11 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "Current elapsed execution time for each query's root node. Use for at-a-glance triage of which queries have been running longest.",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
+            "mode": "thresholds"
           },
           "mappings": [],
           "thresholds": {
@@ -157,269 +131,42 @@
               {
                 "color": "green",
                 "value": null
-              }
-            ]
-          },
-          "unit": "µs"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 8
-      },
-      "id": 2,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "rate(pg_what_is_happening_active_query_node_total_time_us{query_id=~\"$query_id\"}[1m]) * on(query_id) group_left(query_text, pid) pg_what_is_happening_query_info",
-          "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Query Node Execution Time",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
+              },
               {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 8
-      },
-      "id": 5,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\"}",
-          "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Rows Produced by Node",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
+                "color": "yellow",
+                "value": 10
+              },
               {
-                "color": "green",
-                "value": null
+                "color": "red",
+                "value": 60
               }
             ]
           },
-          "unit": "short"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 16
-      },
-      "id": 8,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_expressions{query_id=~\"$query_id\"}",
-          "legendFormat": "By expressions: {{node_tag}} q={{query_id}} n={{node_id}}",
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_joins{query_id=~\"$query_id\"}",
-          "legendFormat": "By joins: {{node_tag}} q={{query_id}} n={{node_id}}",
-          "refId": "B"
-        }
-      ],
-      "title": "Rows Filtered",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            }
-          },
-          "mappings": []
+          "unit": "s"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 16
+        "y": 0,
+        "h": 5,
+        "w": 5,
+        "x": 14
       },
-      "id": 6,
+      "id": 20,
       "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "showLegend": true,
-          "values": ["value"]
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         },
-        "pieType": "donut",
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
+        "text": {},
+        "textMode": "auto"
       },
       "pluginVersion": "10.0.0",
       "targets": [
@@ -428,86 +175,136 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count by (node_tag) (pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\"})",
-          "legendFormat": "{{node_tag}}",
+          "expr": "max by (query_id) (pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\"}) * on(query_id) group_left(query_text, pid) pg_what_is_happening_query_info{query_id=~\"$query_id\"}",
+          "legendFormat": "q={{query_id}} PID={{pid}}",
           "refId": "A"
         }
       ],
-      "title": "Executor Node Types Distribution",
-      "type": "piechart"
+      "title": "Query Elapsed Time",
+      "type": "stat"
     },
     {
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "Count of plan nodes currently spilling to temp files (work_mem exceeded). Any nonzero value means at least one sort or hash is using disk.",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "thresholds"
           },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "0 spilling"
+                }
+              },
+              "type": "value"
             }
-          },
-          "mappings": [],
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
               }
             ]
           },
           "unit": "short"
         },
+        "overrides": []
+      },
+      "gridPos": {
+        "y": 0,
+        "h": 5,
+        "w": 5,
+        "x": 19
+      },
+      "id": 9,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(pg_what_is_happening_active_query_node_spill_file_writes{query_id=~\"$query_id\",node_id=~\"$node_id\"} > 0) OR vector(0)",
+          "legendFormat": "Nodes Spilling",
+          "refId": "A"
+        }
+      ],
+      "title": "Spill Alert",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Interactive plan tree explorer. Nodes colored by time share (red=hot, green=cold). Displays wall-clock time and tuples produced. Click any node to inspect all 14 per-node metrics.",
+      "fieldConfig": {
+        "defaults": {},
         "overrides": [
           {
             "matcher": {
               "id": "byName",
-              "options": "Cache Hits"
+              "options": "mainstat"
             },
             "properties": [
               {
-                "id": "color",
-                "value": {
-                  "fixedColor": "green",
-                  "mode": "fixed"
-                }
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "displayName",
+                "value": "Time"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Cache Misses"
+              "options": "secondarystat"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "displayName",
+                "value": "Tuples"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "arc__hot"
             },
             "properties": [
               {
@@ -516,28 +313,864 @@
                   "fixedColor": "red",
                   "mode": "fixed"
                 }
+              },
+              {
+                "id": "displayName",
+                "value": "Time Share"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "arc__cold"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "Remaining"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "detail__time_pct"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Time %"
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "detail__startup_us"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Startup Time"
+              },
+              {
+                "id": "unit",
+                "value": "µs"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "detail__total_us"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total Time"
+              },
+              {
+                "id": "unit",
+                "value": "µs"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "detail__loops"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Loops Executed"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "detail__cache_hits"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Shared Cache Hits"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "detail__cache_misses"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Shared Cache Misses"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "detail__local_hits"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Local Cache Hits"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "detail__local_misses"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Local Cache Misses"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "detail__spill_reads"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Spill File Reads"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "detail__spill_writes"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Spill File Writes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "detail__filt_joins"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Rows Filtered (Joins)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "detail__filt_exprs"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Rows Filtered (Exprs)"
               }
             ]
           }
         ]
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
+        "h": 28,
+        "w": 24,
         "x": 0,
-        "y": 24
+        "y": 5
       },
-      "id": 3,
+      "id": 27,
+      "options": {
+        "nodes": {
+          "mainStatUnit": "s"
+        },
+        "edges": {}
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_replace(label_replace(label_join(pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\"), \"title\", \"$1\", \"node_tag\", \"(.*)\"), \"subtitle\", \"n=$1\", \"node_id\", \"(.*)\")",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_join(pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "format": "table",
+          "instant": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_join(clamp_max(pg_what_is_happening_active_query_node_time_percent{query_id=~\"$query_id\"} / 100, 1), \"id\", \":\", \"query_id\", \"node_id\")",
+          "format": "table",
+          "instant": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_join(clamp_min(1 - pg_what_is_happening_active_query_node_time_percent{query_id=~\"$query_id\"} / 100, 0), \"id\", \":\", \"query_id\", \"node_id\")",
+          "format": "table",
+          "instant": true,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_join(pg_what_is_happening_active_query_node_time_percent{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "format": "table",
+          "instant": true,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_join(pg_what_is_happening_active_query_node_startup_time_us{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "format": "table",
+          "instant": true,
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_join(pg_what_is_happening_active_query_node_total_time_us{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "format": "table",
+          "instant": true,
+          "refId": "G"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_join(pg_what_is_happening_active_query_node_loops_executed{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "format": "table",
+          "instant": true,
+          "refId": "H"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_join(pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "format": "table",
+          "instant": true,
+          "refId": "I"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_join(pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "format": "table",
+          "instant": true,
+          "refId": "J"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_join(pg_what_is_happening_active_query_node_local_cache_hits{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "format": "table",
+          "instant": true,
+          "refId": "K"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_join(pg_what_is_happening_active_query_node_local_cache_misses{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "format": "table",
+          "instant": true,
+          "refId": "L"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_join(pg_what_is_happening_active_query_node_spill_file_reads{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "format": "table",
+          "instant": true,
+          "refId": "M"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_join(pg_what_is_happening_active_query_node_spill_file_writes{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "format": "table",
+          "instant": true,
+          "refId": "N"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_join(pg_what_is_happening_active_query_node_rows_filtered_by_joins{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "format": "table",
+          "instant": true,
+          "refId": "O"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_join(pg_what_is_happening_active_query_node_rows_filtered_by_expressions{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "format": "table",
+          "instant": true,
+          "refId": "P"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_join(label_join(label_join(pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",parent_node_id!=\"-1\"}, \"source\", \":\", \"query_id\", \"parent_node_id\"), \"target\", \":\", \"query_id\", \"node_id\"), \"id\", \"->\", \"query_id\", \"parent_node_id\", \"node_id\")",
+          "format": "table",
+          "instant": true,
+          "refId": "edges"
+        }
+      ],
+      "title": "Plan Tree",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "pattern": "^(id|title|subtitle|source|target|Value.*)$"
+            }
+          }
+        },
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "id",
+            "mode": "outer"
+          },
+          "filter": {
+            "id": "byRefId",
+            "options": "A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {},
+            "renameByName": {
+              "Value #A": "mainstat",
+              "Value #B": "secondarystat",
+              "Value #C": "arc__hot",
+              "Value #D": "arc__cold",
+              "Value #E": "detail__time_pct",
+              "Value #F": "detail__startup_us",
+              "Value #G": "detail__total_us",
+              "Value #H": "detail__loops",
+              "Value #I": "detail__cache_hits",
+              "Value #J": "detail__cache_misses",
+              "Value #K": "detail__local_hits",
+              "Value #L": "detail__local_misses",
+              "Value #M": "detail__spill_reads",
+              "Value #N": "detail__spill_writes",
+              "Value #O": "detail__filt_joins",
+              "Value #P": "detail__filt_exprs",
+              "Value #edges": "mainstat"
+            }
+          }
+        }
+      ],
+      "type": "nodeGraph"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "All 14 per-node metrics across all active queries. Sort by any column to find problem nodes.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "time_s"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 0.1
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "time_%"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "spill_wr"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "y": 33,
+        "h": 10,
+        "w": 24,
+        "x": 0
+      },
+      "id": 7,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "time_seconds"
+          }
+        ]
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_time_percent{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_startup_time_us{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_total_time_us{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_loops_executed{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "G"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "H"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_local_cache_hits{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "I"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_local_cache_misses{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "J"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_spill_file_reads{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "K"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_spill_file_writes{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "L"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_joins{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "M"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_expressions{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "N"
+        }
+      ],
+      "title": "Active Query Metrics",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "pattern": "^(query_id|node_id|parent_node_id|node_tag|Value.*)$"
+            }
+          }
+        },
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "query_id": 0,
+              "node_id": 1,
+              "parent_node_id": 2,
+              "node_tag": 3,
+              "Value #A": 4,
+              "Value #B": 5,
+              "Value #C": 6,
+              "Value #D": 7,
+              "Value #E": 8,
+              "Value #F": 9,
+              "Value #G": 10,
+              "Value #H": 11,
+              "Value #I": 12,
+              "Value #J": 13,
+              "Value #K": 14,
+              "Value #L": 15,
+              "Value #M": 16,
+              "Value #N": 17
+            },
+            "renameByName": {
+              "query_id": "query_id",
+              "node_id": "node_id",
+              "parent_node_id": "parent",
+              "node_tag": "node_tag",
+              "Value #A": "time_s",
+              "Value #B": "time_%",
+              "Value #C": "startup_us",
+              "Value #D": "total_us",
+              "Value #E": "loops",
+              "Value #F": "tuples",
+              "Value #G": "cache_hit",
+              "Value #H": "cache_miss",
+              "Value #I": "local_hit",
+              "Value #J": "local_miss",
+              "Value #K": "spill_rd",
+              "Value #L": "spill_wr",
+              "Value #M": "filt_join",
+              "Value #N": "filt_expr"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 43
+      },
+      "id": 28,
+      "panels": [],
+      "title": "Timing",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Wall-clock execution time per plan node. Nodes climbing fastest are actively consuming CPU or waiting on I/O right now.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        }
+      },
+      "gridPos": {
+        "y": 44,
+        "h": 8,
+        "w": 8,
+        "x": 0
+      },
+      "id": 2,
       "options": {
         "legend": {
-          "calcs": ["sum"],
+          "calcs": [
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
           "mode": "multi",
-          "sort": "none"
+          "sort": "desc"
         }
       },
       "pluginVersion": "10.0.0",
@@ -547,21 +1180,12 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\"}[5m]))",
-          "legendFormat": "Cache Hits",
+          "expr": "pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(rate(pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\"}[5m]))",
-          "legendFormat": "Cache Misses",
-          "refId": "B"
         }
       ],
-      "title": "Buffer Cache Performance",
+      "title": "Node Execution Time",
       "type": "timeseries"
     },
     {
@@ -569,6 +1193,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "Each node's percentage share of total query wall-clock time. The highest line is the current bottleneck node.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -620,15 +1245,1127 @@
         }
       },
       "gridPos": {
+        "y": 44,
         "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 24
+        "w": 8,
+        "x": 8
       },
-      "id": 4,
+      "id": 11,
       "options": {
         "legend": {
-          "calcs": ["mean", "last"],
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_time_percent{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Time Percent by Node",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Fraction of a parent node's time consumed by each child. The child closest to 1.0 is the critical path through that subtree.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {
+        "y": 44,
+        "h": 8,
+        "w": 8,
+        "x": 16
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",node_id=~\"$node_id\",parent_node_id!=\"-1\"} / on(query_id, parent_node_id) group_left label_replace(pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\"}, \"parent_node_id\", \"$1\", \"node_id\", \"(.*)\")",
+          "legendFormat": "{{node_tag}} n={{node_id}} -> parent={{parent_node_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Child-to-Parent Time Ratio",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 52
+      },
+      "id": 29,
+      "panels": [],
+      "title": "Tuples",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Cumulative tuples returned by each plan node. Compare sibling nodes to identify data volume asymmetries in joins.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "y": 53,
+        "h": 8,
+        "w": 8,
+        "x": 0
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Rows Produced by Node",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Rows a child produces vs rows its parent outputs. Values >>1 indicate the parent filters heavily or the child scans far more data than needed.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "log",
+              "log": 2
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "y": 53,
+        "h": 8,
+        "w": 8,
+        "x": 8
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\",node_id=~\"$node_id\",parent_node_id!=\"-1\"} / on(query_id, parent_node_id) group_left clamp_min(label_replace(pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\"}, \"parent_node_id\", \"$1\", \"node_id\", \"(.*)\"), 1)",
+          "legendFormat": "{{node_tag}} n={{node_id}} -> parent={{parent_node_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Row Fan-Out: Child vs Parent",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Rows discarded by expression filters (WHERE/HAVING) and join conditions per node. High values indicate scan-heavy operations that could benefit from indexing.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "y": 53,
+        "h": 8,
+        "w": 8,
+        "x": 16
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_expressions{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "legendFormat": "Expressions: {{node_tag}} q={{query_id}} n={{node_id}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_joins{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "legendFormat": "Joins: {{node_tag}} q={{query_id}} n={{node_id}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Rows Filtered",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 61
+      },
+      "id": 30,
+      "panels": [],
+      "title": "Filtering",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Fraction of rows examined then discarded by expression filters. Values above 0.9 mean >90% of scanned rows are thrown away -- missing index or bad filter pushdown.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {
+        "y": 62,
+        "h": 8,
+        "w": 8,
+        "x": 0
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_expressions{query_id=~\"$query_id\",node_id=~\"$node_id\"} / clamp_min(pg_what_is_happening_active_query_node_rows_filtered_by_expressions{query_id=~\"$query_id\",node_id=~\"$node_id\"} + pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\",node_id=~\"$node_id\"}, 1)",
+          "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Filter Waste Ratio",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "For join nodes, fraction of processed rows discarded by the join condition. High values (>0.9) = highly selective join. Low values = near-cartesian product.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {
+        "y": 62,
+        "h": 8,
+        "w": 8,
+        "x": 8
+      },
+      "id": 23,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_joins{query_id=~\"$query_id\",node_id=~\"$node_id\",node_tag=~\"HashJoin|MergeJoin|NestLoop\"} / clamp_min(pg_what_is_happening_active_query_node_rows_filtered_by_joins{query_id=~\"$query_id\",node_id=~\"$node_id\",node_tag=~\"HashJoin|MergeJoin|NestLoop\"} + pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\",node_id=~\"$node_id\",node_tag=~\"HashJoin|MergeJoin|NestLoop\"}, 1)",
+          "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Join Selectivity",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Loop count of inner-side nodes driven by NestLoop parents. The value equals how many times the inner plan executes, directly multiplying its cost.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "log",
+              "log": 2
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "y": 62,
+        "h": 8,
+        "w": 8,
+        "x": 16
+      },
+      "id": 24,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_loops_executed{query_id=~\"$query_id\",node_id=~\"$node_id\"} * on(query_id, parent_node_id) group_left label_replace(pg_what_is_happening_active_query_node_loops_executed{query_id=~\"$query_id\",node_tag=\"NestLoop\"} * 0 + 1, \"parent_node_id\", \"$1\", \"node_id\", \"(.*)\")",
+          "legendFormat": "{{node_tag}} n={{node_id}} (inner of NestLoop)",
+          "refId": "A"
+        }
+      ],
+      "title": "Nested Loop Amplification",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 70
+      },
+      "id": 31,
+      "panels": [],
+      "title": "Cost & Loops",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Wall-clock time divided by loop count per node. Reveals per-iteration cost independent of how many times a node rescans. Use with Nested Loop Amplification to decide if the problem is per-loop cost or loop count.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "µs"
+        }
+      },
+      "gridPos": {
+        "y": 71,
+        "h": 8,
+        "w": 8,
+        "x": 0
+      },
+      "id": 25,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_total_time_us{query_id=~\"$query_id\",node_id=~\"$node_id\"} / clamp_min(pg_what_is_happening_active_query_node_loops_executed{query_id=~\"$query_id\",node_id=~\"$node_id\"}, 1)",
+          "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Per-Loop Node Cost",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Shows only nodes executed more than once, indicating rescan inside nested loops. The value equals the outer row count driving the inner side.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "y": 71,
+        "h": 8,
+        "w": 8,
+        "x": 8
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_loops_executed{query_id=~\"$query_id\",node_id=~\"$node_id\"} > 1",
+          "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Loops Executed (> 1)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Root node startup_time_us (time to first result tuple) vs total_time_us (time to last tuple). The gap shows how long the result set takes to stream out.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "µs"
+        }
+      },
+      "gridPos": {
+        "y": 71,
+        "h": 8,
+        "w": 8,
+        "x": 16
+      },
+      "id": 18,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_startup_time_us{query_id=~\"$query_id\",parent_node_id=\"-1\"} * on(query_id) group_left(query_text, pid) pg_what_is_happening_query_info",
+          "legendFormat": "First tuple: q={{query_id}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_total_time_us{query_id=~\"$query_id\",parent_node_id=\"-1\"} * on(query_id) group_left(query_text, pid) pg_what_is_happening_query_info",
+          "legendFormat": "Last tuple: q={{query_id}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Tuple Pipeline Latency",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 79
+      },
+      "id": 32,
+      "panels": [],
+      "title": "Buffers",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Total shared buffer hits and misses across all nodes. A growing miss count means the query is reading pages not in shared_buffers.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cache Hits"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cache Misses"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "y": 80,
+        "h": 8,
+        "w": 8,
+        "x": 0
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -645,7 +2382,109 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 * sum(pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\"}) / (sum(pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\"}) + sum(pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\"}))",
+          "expr": "sum(pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\",node_id=~\"$node_id\"})",
+          "legendFormat": "Cache Hits",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\",node_id=~\"$node_id\"})",
+          "legendFormat": "Cache Misses",
+          "refId": "B"
+        }
+      ],
+      "title": "Shared Buffer Activity",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Shared buffer cache hit ratio across all nodes. Values below 90% for analytic queries indicate the working set exceeds shared_buffers.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "gridPos": {
+        "y": 80,
+        "h": 8,
+        "w": 8,
+        "x": 8
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * sum(pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\",node_id=~\"$node_id\"}) / clamp_min(sum(pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\",node_id=~\"$node_id\"}) + sum(pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\",node_id=~\"$node_id\"}), 1)",
           "legendFormat": "Cache Hit Ratio",
           "refId": "A"
         }
@@ -658,6 +2497,734 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "Local/temp buffer hits and misses. Relevant for queries using temporary tables or materialized CTEs.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Local Cache Hits"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Local Cache Misses"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "y": 80,
+        "h": 8,
+        "w": 8,
+        "x": 16
+      },
+      "id": 15,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(pg_what_is_happening_active_query_node_local_cache_hits{query_id=~\"$query_id\",node_id=~\"$node_id\"})",
+          "legendFormat": "Local Cache Hits",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(pg_what_is_happening_active_query_node_local_cache_misses{query_id=~\"$query_id\",node_id=~\"$node_id\"})",
+          "legendFormat": "Local Cache Misses",
+          "refId": "B"
+        }
+      ],
+      "title": "Local Buffer Activity",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 88
+      },
+      "id": 33,
+      "panels": [],
+      "title": "Cache Analysis",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Cache misses aggregated by executor node type. Identifies whether SeqScans, IndexScans, or other operations cause the most physical I/O.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "y": 89,
+        "h": 8,
+        "w": 8,
+        "x": 0
+      },
+      "id": 16,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (node_tag) (pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\",node_id=~\"$node_id\"})",
+          "legendFormat": "{{node_tag}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Buffer Misses by Node Type",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Physical read block count grouped by parent node. Identifies which branch of the plan tree drives the most disk I/O.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "y": 89,
+        "h": 8,
+        "w": 8,
+        "x": 8
+      },
+      "id": 26,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (query_id, parent_node_id) (pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\",node_id=~\"$node_id\"})",
+          "legendFormat": "Children of node {{parent_node_id}} q={{query_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Cache Misses by Parent Branch",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Total wall-clock seconds consumed by each executor node type. Shows whether sorts, scans, joins, or aggregations dominate the query.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            }
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "y": 89,
+        "h": 8,
+        "w": 8,
+        "x": 16
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "value"
+          ]
+        },
+        "pieType": "donut",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (node_tag) (pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",node_id=~\"$node_id\"})",
+          "legendFormat": "{{node_tag}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Time by Node Type",
+      "type": "piechart"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 97
+      },
+      "id": 34,
+      "panels": [],
+      "title": "Spill & Startup",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Temp file read and write block counts per node. Rising writes = ongoing spill to disk. Rising reads = rescan of spilled data.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Writes.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Reads.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "y": 98,
+        "h": 8,
+        "w": 8,
+        "x": 0
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_spill_file_writes{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "legendFormat": "Writes: {{node_tag}} q={{query_id}} n={{node_id}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_spill_file_reads{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "legendFormat": "Reads: {{node_tag}} q={{query_id}} n={{node_id}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Spill Activity",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Microseconds before each node returns its first tuple. High values on sort/hash nodes indicate blocking materialization phases.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "µs"
+        }
+      },
+      "gridPos": {
+        "y": 98,
+        "h": 8,
+        "w": 8,
+        "x": 8
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_startup_time_us{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Startup Time by Node",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Ratio of startup_time to total_time per node. Values near 1.0 indicate blocking nodes (sorts, hashes) that must fully materialize before producing output.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line+area",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 0.9
+                }
+              ]
+            }
+          },
+          "mappings": [],
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.9
+              }
+            ]
+          },
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {
+        "y": 98,
+        "h": 8,
+        "w": 8,
+        "x": 16
+      },
+      "id": 19,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_what_is_happening_active_query_node_startup_time_us{query_id=~\"$query_id\",node_id=~\"$node_id\"} / clamp_min(pg_what_is_happening_active_query_node_total_time_us{query_id=~\"$query_id\",node_id=~\"$node_id\"}, 1)",
+          "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Startup Fraction (Blocking Indicator)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "10 nodes with highest wall-clock time across all active queries, joined with query text for cross-query comparison.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -721,22 +3288,36 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "query_text"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 500
+              }
+            ]
           }
         ]
       },
       "gridPos": {
+        "y": 106,
         "h": 10,
         "w": 24,
-        "x": 0,
-        "y": 32
+        "x": 0
       },
-      "id": 7,
+      "id": 17,
       "options": {
         "cellHeight": "sm",
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": ["sum"],
+          "reducer": [
+            "sum"
+          ],
           "show": false
         },
         "showHeader": true,
@@ -754,13 +3335,13 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\"}",
+          "expr": "topk(10, pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",node_id=~\"$node_id\"} * on(query_id) group_left(query_text, pid) pg_what_is_happening_query_info)",
           "format": "table",
           "instant": true,
           "refId": "A"
         }
       ],
-      "title": "Active Query Metrics (Real-time)",
+      "title": "Top 10 Slowest Nodes",
       "transformations": [
         {
           "id": "organize",
@@ -771,13 +3352,21 @@
               "job": true,
               "instance": true
             },
-            "indexByName": {},
+            "indexByName": {
+              "query_id": 0,
+              "pid": 1,
+              "node_tag": 2,
+              "node_id": 3,
+              "Value": 4,
+              "query_text": 5
+            },
             "renameByName": {
               "Value": "time_seconds",
               "query_id": "Query ID",
               "node_tag": "Node Type",
               "node_id": "Node ID",
-              "pid": "PID"
+              "pid": "PID",
+              "query_text": "Query Text"
             }
           }
         }
@@ -819,6 +3408,33 @@
         "regex": "",
         "skipUrlSync": false,
         "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\"}, node_id)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Node ID",
+        "multi": true,
+        "name": "node_id",
+        "options": [],
+        "query": {
+          "query": "label_values(pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\"}, node_id)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 3,
         "type": "query"
       }
     ]
