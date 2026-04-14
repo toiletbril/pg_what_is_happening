@@ -4,7 +4,7 @@
 # See Shfile.sh.
 #
 
-set -xeu
+set -eu
 
 cd '/pg_what_is_happening'
 . "scripts/common.sh"
