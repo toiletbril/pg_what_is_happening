@@ -44,6 +44,80 @@ extern bool pwh_walk_planstate_recursive(PlanState		 *planstate,
 										 PwhNodeVisitorFn visitor,
 										 void			 *context);
 
+static forceinline const char *
+node_to_name(NodeTag tag)
+{
+	switch (tag)
+	{
+		case T_Result:
+			return "Result";
+		case T_ModifyTable:
+			return "ModifyTable";
+		case T_Append:
+			return "Append";
+		case T_MergeAppend:
+			return "MergeAppend";
+		case T_RecursiveUnion:
+			return "RecursiveUnion";
+		case T_BitmapAnd:
+			return "BitmapAnd";
+		case T_BitmapOr:
+			return "BitmapOr";
+		case T_SeqScan:
+			return "SeqScan";
+		case T_IndexScan:
+			return "IndexScan";
+		case T_IndexOnlyScan:
+			return "IndexOnlyScan";
+		case T_BitmapIndexScan:
+			return "BitmapIndexScan";
+		case T_BitmapHeapScan:
+			return "BitmapHeapScan";
+		case T_TidScan:
+			return "TidScan";
+		case T_SubqueryScan:
+			return "SubqueryScan";
+		case T_FunctionScan:
+			return "FunctionScan";
+		case T_ValuesScan:
+			return "ValuesScan";
+		case T_CteScan:
+			return "CteScan";
+		case T_WorkTableScan:
+			return "WorkTableScan";
+		case T_ForeignScan:
+			return "ForeignScan";
+		case T_NestLoop:
+			return "NestLoop";
+		case T_MergeJoin:
+			return "MergeJoin";
+		case T_HashJoin:
+			return "HashJoin";
+		case T_Material:
+			return "Material";
+		case T_Sort:
+			return "Sort";
+		case T_Group:
+			return "Group";
+		case T_Agg:
+			return "Agg";
+		case T_WindowAgg:
+			return "WindowAgg";
+		case T_Unique:
+			return "Unique";
+		case T_Hash:
+			return "Hash";
+		case T_SetOp:
+			return "SetOp";
+		case T_LockRows:
+			return "LockRows";
+		case T_Limit:
+			return "Limit";
+		default:
+			return NULL;
+	}
+}
+
 /* Include version-specific compatibility definitions. */
 #if PG_VERSION_NUM >= 190000
 #include "compatibility/19.h"

@@ -26,28 +26,100 @@
 #include "utils/timestamp.h"
 
 /*
- * compatibility.h provides some inline shims:
+ * compatibility.h provides one inline shim:
  *
- * static inline const char
- * *pwh_node_tag_to_string_inline(NodeTag tag);
- *
- * static inline bool
- * pwh_walk_planstate_children_inline(PlanState *planstate,
- * 									  PwhNodeVisitorFn visitor,
- * 									  void *context);
+ * static inline const char *pwh_node_tag_to_string_inline(NodeTag tag);
  */
 
 const char *
 pwh_node_tag_to_string(NodeTag tag)
 {
-	return pwh_node_tag_to_string_inline(tag);
+	const char *name = node_to_name(tag);
+	if (name != NULL)
+		return name;
+	name = pwh_node_tag_to_string_inline(tag);
+	if (name != NULL)
+		return name;
+	return "Unknown";
 }
 
 bool
 pwh_walk_planstate_children(PlanState *planstate, PwhNodeVisitorFn visitor,
 							void *context)
 {
-	return pwh_walk_planstate_children_inline(planstate, visitor, context);
+	if (IsA(planstate->plan, CteScan))
+	{
+		CteScanState *cs = (CteScanState *) planstate;
+		if (cs->cteplanstate != NULL)
+		{
+			if (!pwh_walk_planstate_recursive(cs->cteplanstate, visitor,
+											  context))
+				return false;
+		}
+	}
+
+	switch (nodeTag(planstate))
+	{
+		case T_AppendState:
+		{
+			AppendState *as = (AppendState *) planstate;
+			for (i32 i = 0; i < as->as_nplans; i++)
+			{
+				if (!pwh_walk_planstate_recursive(as->appendplans[i], visitor,
+												  context))
+					return false;
+			}
+			break;
+		}
+		case T_MergeAppendState:
+		{
+			MergeAppendState *mas = (MergeAppendState *) planstate;
+			for (i32 i = 0; i < mas->ms_nplans; i++)
+			{
+				if (!pwh_walk_planstate_recursive(mas->mergeplans[i], visitor,
+												  context))
+					return false;
+			}
+			break;
+		}
+		case T_BitmapAndState:
+		{
+			BitmapAndState *bas = (BitmapAndState *) planstate;
+			for (i32 i = 0; i < bas->nplans; i++)
+			{
+				if (!pwh_walk_planstate_recursive(bas->bitmapplans[i], visitor,
+												  context))
+					return false;
+			}
+			break;
+		}
+		case T_BitmapOrState:
+		{
+			BitmapOrState *bos = (BitmapOrState *) planstate;
+			for (i32 i = 0; i < bos->nplans; i++)
+			{
+				if (!pwh_walk_planstate_recursive(bos->bitmapplans[i], visitor,
+												  context))
+					return false;
+			}
+			break;
+		}
+		case T_SubqueryScanState:
+		{
+			SubqueryScanState *sqs = (SubqueryScanState *) planstate;
+			if (sqs->subplan != NULL)
+			{
+				if (!pwh_walk_planstate_recursive(sqs->subplan, visitor,
+												  context))
+					return false;
+			}
+			break;
+		}
+		default:
+			break;
+	}
+
+	return true;
 }
 
 u64

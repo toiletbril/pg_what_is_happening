@@ -50,6 +50,7 @@ typedef struct
 typedef bool (*PwhNodeVisitorFn)(PlanState *planstate, void *context);
 
 static bool topology_visitor(PlanState *planstate, void *context);
+static bool topology_recurse_visitor(PlanState *planstate, void *context);
 static void walk_topology_with_parent(PlanState *planstate, i32 parent_id,
 									  TopologyContext *ctx);
 
@@ -83,7 +84,7 @@ pwh_walk_planstate_recursive(PlanState *planstate, PwhNodeVisitorFn visitor,
 		return false;
 	}
 
-	/* Standard children: left, right, subPlan. */
+	/* Standard children. */
 	if (planstate->lefttree != NULL)
 	{
 		if (!pwh_walk_planstate_recursive(planstate->lefttree, visitor,
@@ -105,16 +106,14 @@ pwh_walk_planstate_recursive(PlanState *planstate, PwhNodeVisitorFn visitor,
 		ListCell *lc;
 		foreach (lc, planstate->subPlan)
 		{
-			SubPlanState *subplanstate = (SubPlanState *) lfirst(lc);
-			if (!pwh_walk_planstate_recursive(subplanstate->planstate, visitor,
-											  context))
+			SubPlanState *sp = (SubPlanState *) lfirst(lc);
+			if (!pwh_walk_planstate_recursive(sp->planstate, visitor, context))
 			{
 				return false;
 			}
 		}
 	}
 
-	/* Version-specific or non-standard children. */
 	return pwh_walk_planstate_children(planstate, visitor, context);
 }
 
