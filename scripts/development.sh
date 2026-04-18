@@ -16,7 +16,7 @@ echo "Installing extension from ./pg_what_is_happening.so..."
 make install -j"$(nproc)"
 
 # Allow core files.
-ulimit -c unlimited
+sudo prlimit --pid $$ --core=unlimited
 
 init_postgresql_data_dir
 edit_postgresql_conf
