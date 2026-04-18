@@ -28,7 +28,7 @@
 		if (PREV_SHMEM_REQUEST_HOOK)                                 \
 			PREV_SHMEM_REQUEST_HOOK();                               \
 		RequestNamedLWLockTranche("pg_what_is_happening", 1);        \
-		RequestAddinShmemSpace(pwh_get_shared_memory_size());        \
+		RequestAddinShmemSpace(PWH_SHMEM_SIZE);                      \
 	}
 
 #define PWH_INSTALL_SHMEM_REQUEST_HOOK()                  \
@@ -63,170 +63,30 @@
 			(instr)->bufusage.temp_blks_written;         \
 	} while (0)
 
-static forceinline bool
-pwh_walk_planstate_children_inline(PlanState	   *planstate,
-								   PwhNodeVisitorFn visitor, void *context)
-{
-	switch (nodeTag(planstate))
-	{
-		case T_AppendState:
-		{
-			AppendState *appendstate = (AppendState *) planstate;
-			for (i32 i = 0; i < appendstate->as_nplans; i++)
-			{
-				if (!pwh_walk_planstate_recursive(appendstate->appendplans[i],
-												  visitor, context))
-				{
-					return false;
-				}
-			}
-			return true;
-		}
-		case T_MergeAppendState:
-		{
-			MergeAppendState *mergeappendstate = (MergeAppendState *) planstate;
-			for (i32 i = 0; i < mergeappendstate->ms_nplans; i++)
-			{
-				if (!pwh_walk_planstate_recursive(
-						mergeappendstate->mergeplans[i], visitor, context))
-				{
-					return false;
-				}
-			}
-			return true;
-		}
-		case T_BitmapAndState:
-		{
-			BitmapAndState *bitmapandstate = (BitmapAndState *) planstate;
-			for (i32 i = 0; i < bitmapandstate->nplans; i++)
-			{
-				if (!pwh_walk_planstate_recursive(
-						bitmapandstate->bitmapplans[i], visitor, context))
-				{
-					return false;
-				}
-			}
-			return true;
-		}
-		case T_BitmapOrState:
-		{
-			BitmapOrState *bitmaporstate = (BitmapOrState *) planstate;
-			for (i32 i = 0; i < bitmaporstate->nplans; i++)
-			{
-				if (!pwh_walk_planstate_recursive(bitmaporstate->bitmapplans[i],
-												  visitor, context))
-				{
-					return false;
-				}
-			}
-			return true;
-		}
-		case T_SubqueryScanState:
-		{
-			SubqueryScanState *subqueryscan = (SubqueryScanState *) planstate;
-			if (subqueryscan->subplan != NULL)
-			{
-				if (!pwh_walk_planstate_recursive(subqueryscan->subplan,
-												  visitor, context))
-				{
-					return false;
-				}
-			}
-			return true;
-		}
-		default:
-			return true;
-	}
-}
-
 static forceinline const char *
 pwh_node_tag_to_string_inline(NodeTag tag)
 {
 	switch (tag)
 	{
-		case T_Result:
-			return "Result";
-		case T_ProjectSet:
-			return "ProjectSet";
-		case T_ModifyTable:
-			return "ModifyTable";
-		case T_Append:
-			return "Append";
-		case T_MergeAppend:
-			return "MergeAppend";
-		case T_RecursiveUnion:
-			return "RecursiveUnion";
-		case T_BitmapAnd:
-			return "BitmapAnd";
-		case T_BitmapOr:
-			return "BitmapOr";
-		case T_SeqScan:
-			return "SeqScan";
-		case T_IndexScan:
-			return "IndexScan";
-		case T_IndexOnlyScan:
-			return "IndexOnlyScan";
-		case T_BitmapIndexScan:
-			return "BitmapIndexScan";
-		case T_BitmapHeapScan:
-			return "BitmapHeapScan";
-		case T_TidScan:
-			return "TidScan";
-		case T_SubqueryScan:
-			return "SubqueryScan";
-		case T_FunctionScan:
-			return "FunctionScan";
-		case T_ValuesScan:
-			return "ValuesScan";
-		case T_TableFuncScan:
-			return "TableFuncScan";
-		case T_CteScan:
-			return "CteScan";
-		case T_NamedTuplestoreScan:
-			return "NamedTuplestoreScan";
-		case T_WorkTableScan:
-			return "WorkTableScan";
-		case T_ForeignScan:
-			return "ForeignScan";
 		case T_CustomScan:
 			return "CustomScan";
-		case T_NestLoop:
-			return "NestLoop";
-		case T_MergeJoin:
-			return "MergeJoin";
-		case T_HashJoin:
-			return "HashJoin";
-		case T_Material:
-			return "Material";
-		case T_Memoize:
-			return "Memoize";
-		case T_Sort:
-			return "Sort";
-		case T_IncrementalSort:
-			return "IncrementalSort";
-		case T_Group:
-			return "Group";
-		case T_Agg:
-			return "Agg";
-		case T_WindowAgg:
-			return "WindowAgg";
-		case T_Unique:
-			return "Unique";
 		case T_Gather:
 			return "Gather";
 		case T_GatherMerge:
 			return "GatherMerge";
-		case T_Hash:
-			return "Hash";
-		case T_SetOp:
-			return "SetOp";
-		case T_LockRows:
-			return "LockRows";
-		case T_Limit:
-			return "Limit";
+		case T_ProjectSet:
+			return "ProjectSet";
+		case T_TableFuncScan:
+			return "TableFuncScan";
+		case T_NamedTuplestoreScan:
+			return "NamedTuplestoreScan";
+		case T_IncrementalSort:
+			return "IncrementalSort";
+		case T_Memoize:
+			return "Memoize";
 		default:
-			return "Unknown";
+			return NULL;
 	}
 }
 
-#endif /* PWH_COMPAT_15_18_H. */
+#endif /* PWH_COMPAT_15_18_H */

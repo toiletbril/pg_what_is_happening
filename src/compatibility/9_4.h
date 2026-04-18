@@ -19,11 +19,11 @@
 #define PWH_SHMEM_REQUEST_HOOK_DECL		 /* no shmem_request_hook in PG < 15 */
 #define PWH_INSTALL_SHMEM_REQUEST_HOOK() /* no shmem_request_hook in PG < 15 \
 										  */
-#define PWH_SHMEM_REQUEST_IN_STARTUP_HOOK()                   \
-	do                                                        \
-	{                                                         \
-		PWH_REQUEST_LWLOCKS("pg_what_is_happening", 1);       \
-		RequestAddinShmemSpace(pwh_get_shared_memory_size()); \
+#define PWH_SHMEM_REQUEST_IN_STARTUP_HOOK()             \
+	do                                                  \
+	{                                                   \
+		PWH_REQUEST_LWLOCKS("pg_what_is_happening", 1); \
+		RequestAddinShmemSpace(PWH_SHMEM_SIZE);         \
 	} while (0)
 
 #define PWH_CREATE_TUPLE_DESC(natts) CreateTemplateTupleDesc(natts, false)
@@ -48,150 +48,10 @@
 			(instr)->bufusage.temp_blks_written;         \
 	} while (0)
 
-static forceinline bool
-pwh_walk_planstate_children_inline(PlanState	   *planstate,
-								   PwhNodeVisitorFn visitor, void *context)
-{
-	switch (nodeTag(planstate))
-	{
-		case T_AppendState:
-		{
-			AppendState *appendstate = (AppendState *) planstate;
-			for (i32 i = 0; i < appendstate->as_nplans; i++)
-			{
-				if (!visitor(appendstate->appendplans[i], context))
-				{
-					return false;
-				}
-			}
-			return true;
-		}
-		case T_MergeAppendState:
-		{
-			MergeAppendState *mergeappendstate = (MergeAppendState *) planstate;
-			for (i32 i = 0; i < mergeappendstate->ms_nplans; i++)
-			{
-				if (!visitor(mergeappendstate->mergeplans[i], context))
-				{
-					return false;
-				}
-			}
-			return true;
-		}
-		case T_BitmapAndState:
-		{
-			BitmapAndState *bitmapandstate = (BitmapAndState *) planstate;
-			for (i32 i = 0; i < bitmapandstate->nplans; i++)
-			{
-				if (!visitor(bitmapandstate->bitmapplans[i], context))
-				{
-					return false;
-				}
-			}
-			return true;
-		}
-		case T_BitmapOrState:
-		{
-			BitmapOrState *bitmaporstate = (BitmapOrState *) planstate;
-			for (i32 i = 0; i < bitmaporstate->nplans; i++)
-			{
-				if (!visitor(bitmaporstate->bitmapplans[i], context))
-				{
-					return false;
-				}
-			}
-			return true;
-		}
-		case T_SubqueryScanState:
-		{
-			SubqueryScanState *subqueryscan = (SubqueryScanState *) planstate;
-			if (subqueryscan->subplan != NULL)
-			{
-				if (!visitor(subqueryscan->subplan, context))
-				{
-					return false;
-				}
-			}
-			return true;
-		}
-		default:
-			return true;
-	}
-}
-
-
 static forceinline const char *
 pwh_node_tag_to_string_inline(NodeTag tag)
 {
-	switch (tag)
-	{
-		case T_Result:
-			return "Result";
-		case T_ModifyTable:
-			return "ModifyTable";
-		case T_Append:
-			return "Append";
-		case T_MergeAppend:
-			return "MergeAppend";
-		case T_RecursiveUnion:
-			return "RecursiveUnion";
-		case T_BitmapAnd:
-			return "BitmapAnd";
-		case T_BitmapOr:
-			return "BitmapOr";
-		case T_SeqScan:
-			return "SeqScan";
-		case T_IndexScan:
-			return "IndexScan";
-		case T_IndexOnlyScan:
-			return "IndexOnlyScan";
-		case T_BitmapIndexScan:
-			return "BitmapIndexScan";
-		case T_BitmapHeapScan:
-			return "BitmapHeapScan";
-		case T_TidScan:
-			return "TidScan";
-		case T_SubqueryScan:
-			return "SubqueryScan";
-		case T_FunctionScan:
-			return "FunctionScan";
-		case T_ValuesScan:
-			return "ValuesScan";
-		case T_CteScan:
-			return "CteScan";
-		case T_WorkTableScan:
-			return "WorkTableScan";
-		case T_ForeignScan:
-			return "ForeignScan";
-		case T_NestLoop:
-			return "NestLoop";
-		case T_MergeJoin:
-			return "MergeJoin";
-		case T_HashJoin:
-			return "HashJoin";
-		case T_Material:
-			return "Material";
-		case T_Sort:
-			return "Sort";
-		case T_Group:
-			return "Group";
-		case T_Agg:
-			return "Agg";
-		case T_WindowAgg:
-			return "WindowAgg";
-		case T_Unique:
-			return "Unique";
-		case T_Hash:
-			return "Hash";
-		case T_SetOp:
-			return "SetOp";
-		case T_LockRows:
-			return "LockRows";
-		case T_Limit:
-			return "Limit";
-		default:
-			return "Unknown";
-	}
+	return NULL;
 }
 
-#endif /* PWH_COMPAT_94_H. */
+#endif /* PWH_COMPAT_94_H */

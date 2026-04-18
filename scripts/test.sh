@@ -4,7 +4,7 @@
 # See Shfile.sh.
 #
 
-set -xeu
+set -eu
 
 cd '/pg_what_is_happening'
 . "scripts/common.sh"
@@ -15,7 +15,7 @@ build_postgresql_if_not_built
 echo "Installing extension from ./pg_what_is_happening.so..."
 make install -j"$(nproc)"
 
-ulimit -c unlimited
+sudo prlimit --pid $$ --core=unlimited
 
 init_postgresql_data_dir
 edit_postgresql_conf

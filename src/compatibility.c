@@ -25,17 +25,96 @@
 #include "nodes/nodes.h"
 #include "utils/timestamp.h"
 
+/*
+ * compatibility.h provides one inline shim:
+ *
+ * static inline const char *pwh_node_tag_to_string_inline(NodeTag tag);
+ */
+
+static forceinline const char *
+node_to_name(NodeTag tag)
+{
+	switch (tag)
+	{
+		case T_Result:
+			return "Result";
+		case T_ModifyTable:
+			return "ModifyTable";
+		case T_Append:
+			return "Append";
+		case T_MergeAppend:
+			return "MergeAppend";
+		case T_RecursiveUnion:
+			return "RecursiveUnion";
+		case T_BitmapAnd:
+			return "BitmapAnd";
+		case T_BitmapOr:
+			return "BitmapOr";
+		case T_SeqScan:
+			return "SeqScan";
+		case T_IndexScan:
+			return "IndexScan";
+		case T_IndexOnlyScan:
+			return "IndexOnlyScan";
+		case T_BitmapIndexScan:
+			return "BitmapIndexScan";
+		case T_BitmapHeapScan:
+			return "BitmapHeapScan";
+		case T_TidScan:
+			return "TidScan";
+		case T_SubqueryScan:
+			return "SubqueryScan";
+		case T_FunctionScan:
+			return "FunctionScan";
+		case T_ValuesScan:
+			return "ValuesScan";
+		case T_CteScan:
+			return "CteScan";
+		case T_WorkTableScan:
+			return "WorkTableScan";
+		case T_ForeignScan:
+			return "ForeignScan";
+		case T_NestLoop:
+			return "NestLoop";
+		case T_MergeJoin:
+			return "MergeJoin";
+		case T_HashJoin:
+			return "HashJoin";
+		case T_Material:
+			return "Material";
+		case T_Sort:
+			return "Sort";
+		case T_Group:
+			return "Group";
+		case T_Agg:
+			return "Agg";
+		case T_WindowAgg:
+			return "WindowAgg";
+		case T_Unique:
+			return "Unique";
+		case T_Hash:
+			return "Hash";
+		case T_SetOp:
+			return "SetOp";
+		case T_LockRows:
+			return "LockRows";
+		case T_Limit:
+			return "Limit";
+		default:
+			return NULL;
+	}
+}
+
 const char *
 pwh_node_tag_to_string(NodeTag tag)
 {
-	return pwh_node_tag_to_string_inline(tag);
-}
-
-bool
-pwh_walk_planstate_children(PlanState *planstate, PwhNodeVisitorFn visitor,
-							void *context)
-{
-	return pwh_walk_planstate_children_inline(planstate, visitor, context);
+	const char *name = node_to_name(tag);
+	if (name != NULL)
+		return name;
+	name = pwh_node_tag_to_string_inline(tag);
+	if (name != NULL)
+		return name;
+	return "Unknown";
 }
 
 u64
@@ -48,7 +127,7 @@ pwh_compute_query_id(const QueryDesc *qd)
 							 strlen(qd->sourceText));
 	}
 
-	hash ^= (u64) GetCurrentTimestamp() >> 32;
+	hash ^= (u64) GetCurrentTimestamp() >> 16;
 	hash ^= MyProcPid;
 
 	return hash;

@@ -78,13 +78,13 @@ typedef struct
 
 extern PwhSharedMemoryHeader *PWH_SHMEM;
 
-Size pwh_get_backend_entry_stride(void);
+extern Size PWH_SHMEM_SIZE;
+extern Size PWH_BACKEND_ENTRY_STRIDE;
 
 #define PWH_GET_BACKEND_ENTRY_UNSAFE(idx)                             \
 	((PwhSharedMemoryBackendEntry *) ((char *) (PWH_SHMEM) +          \
 									  sizeof(PwhSharedMemoryHeader) + \
-									  ((idx) *                        \
-									   pwh_get_backend_entry_stride())))
+									  ((idx) * PWH_BACKEND_ENTRY_STRIDE)))
 
 /* Can return NULL. */
 extern PwhSharedMemoryBackendEntry *pwh_get_or_create_my_backend_entry_impl(
@@ -123,13 +123,16 @@ pwh_get_my_backend_entry(void)
 extern void pwh_release_my_backend_entry(void);
 
 /* Cannot return NULL. */
-void	   *pwh_get_shared_memory_ptr(void);
-extern Size pwh_get_shared_memory_size(void);
+void *pwh_get_shared_memory_ptr(void);
+
 extern void pwh_shared_memory_startup_hook(void);
+
 /* Cannot return NULL. */
 extern PwhSharedMemoryBackendEntry *pwh_get_backend_entry(u64 index);
-extern char						   *pwh_get_backend_entry_query_text(
-						   PwhSharedMemoryBackendEntry *entry);
+
+/* Cannot return NULL. */
+extern char *pwh_get_backend_entry_query_text(
+	PwhSharedMemoryBackendEntry *entry);
 /* Cannot return NULL. */
 extern PwhNodeMetrics *pwh_get_backend_entry_metrics(
 	PwhSharedMemoryBackendEntry *entry);

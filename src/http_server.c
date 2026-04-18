@@ -52,7 +52,7 @@ pwh_http_server_destroy(HttpServer *server)
 }
 
 void
-pwh_http_server_set_handler(HttpServer *server, HttpRequestHandler handler,
+pwh_http_server_set_handler(HttpServer *server, HttpRequestHandlerFn handler,
 							void *user_data)
 {
 	Assert(server != NULL);

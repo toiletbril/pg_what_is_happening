@@ -3,14 +3,15 @@
 [![Regression Test Suite](https://github.com/toiletbril/pg_what_is_happening/actions/workflows/pg-regress.yml/badge.svg?branch=master)](https://github.com/toiletbril/pg_what_is_happening/actions/workflows/pg-regress.yml)
 
 Live per-plan-node execution OpenMetrics-compatible stats for PostgreSQL and
-friends with the most granular per-node visibility the executor can provide.
-There are tests, but if you currently use this in production you're braver than
-I am.
+friends with the most granular per-node visibility the executor can provide. If
+you use this in production, you're as brave as I am!
 
 PostgreSQL versions from 9.4 through 18+ are supported. No stable ABI for `.so`
 is guaranteed until stated otherwise.
 
-See [`example/`](./example/) for a Prometheus/Grafana setup.
+See [`example/`](./example/) for the following Prometheus/Grafana setup:
+
+![](./assets/grafana_example.png)
 
 ## Usage
 

@@ -62,7 +62,7 @@ build_postgresql_if_not_built()
 init_postgresql_data_dir()
 {
   log "initializing database..."
-  initdb -D "$PG_DATA_DIR"
+  initdb -D "$PG_DATA_DIR" > /dev/null
 }
 
 edit_postgresql_conf()
@@ -70,13 +70,8 @@ edit_postgresql_conf()
   log "editing postgresql.conf..."
   cat >> "$PG_DATA_DIR/postgresql.conf" <<EOF
 shared_preload_libraries = 'pg_what_is_happening'
-log_min_messages = debug1
-max_connections = 50
-what_is_happening.max_tracked_queries = 16
-what_is_happening.max_nodes_per_query = 64
-what_is_happening.max_query_text_length = 512
+log_min_messages = debug4
 what_is_happening.min_cost_to_track = 0
-shared_buffers = 256MB
 EOF
 }
 

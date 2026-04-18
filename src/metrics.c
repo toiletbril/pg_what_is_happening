@@ -241,8 +241,10 @@ formatter_append_metric(Formatter *fmt, PwhNodeMetrics *node, MetricType type,
 
 	buffer_append(fmt->buffer,
 				  "pg_what_is_happening_active_query_node_%s{"
-				  "query_id=\"%lu\",node_id=\"%lu\",node_tag=\"%s\"} %s\n",
-				  suffix, fmt->query_id, node->node_id, tag_str, value_buf);
+				  "query_id=\"%lu\",node_id=\"%lu\","
+				  "parent_node_id=\"%d\",node_tag=\"%s\"} %s\n",
+				  suffix, fmt->query_id, node->node_id,
+				  (i32) node->parent_node_id, tag_str, value_buf);
 }
 
 char *

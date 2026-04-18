@@ -38,11 +38,6 @@
 
 /* Forward declarations for compatibility headers. */
 typedef struct PlanState PlanState;
-typedef bool (*PwhNodeVisitorFn)(PlanState *planstate, void *context);
-
-extern bool pwh_walk_planstate_recursive(PlanState		 *planstate,
-										 PwhNodeVisitorFn visitor,
-										 void			 *context);
 
 /* Include version-specific compatibility definitions. */
 #if PG_VERSION_NUM >= 190000
@@ -85,15 +80,11 @@ typedef struct
 	u8		__pad[8];
 } PwhSharedMemoryHeader;
 #endif
+_Static_assert(sizeof(PwhSharedMemoryHeader) == 16);
 
-/* Query ID computation fallback, used when queryId is 0. */
 extern u64 pwh_compute_query_id(const QueryDesc *qd);
 
 extern const char *pwh_node_tag_to_string(NodeTag tag);
-
-extern bool pwh_walk_planstate_children(PlanState		*planstate,
-										PwhNodeVisitorFn visitor,
-										void			*context);
 
 extern pqsigfunc pwh_install_pqsignal(int signo, pqsigfunc func);
 

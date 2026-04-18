@@ -31,6 +31,7 @@ RUN apk add \
     icu-dev \
     diffutils \
     tmux \
+    util-linux \
     ncurses
 
 RUN adduser -D -u 1000 "postgres" && \

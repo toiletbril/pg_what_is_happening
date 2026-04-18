@@ -39,7 +39,7 @@ C="${1:-}"
 
 docker_run() {
 docker run --pull=never --rm --network=host -v "$PWD:/pg_what_is_happening" \
-           -v "$POSTGRES_SOURCE:/postgres" "$@"
+           -v "$POSTGRES_SOURCE:/postgres" --privileged "$@"
 }
 
 case $C in

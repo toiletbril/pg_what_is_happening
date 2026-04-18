@@ -30,18 +30,18 @@
 typedef struct MongooseHttpServer
 {
 	struct mg_mgr		  mgr;
-	struct mg_connection *conn;
-	char				  listen_addr[128];
-	volatile bool		  running;
-	HttpRequestHandler	  handler;
-	void				 *user_data;
+	struct mg_connection *connection;
+	char				  listen_address[128];
+	volatile bool		  is_running;
+	HttpRequestHandlerFn  handler_fn;
+	void				 *custom_context;
 } MongooseHttpServer;
 
 /* Forward declarations. */
 static HttpServer *mongoose_create(const char *listen_addr);
 static void		   mongoose_destroy(HttpServer *server);
-static void mongoose_set_handler(HttpServer *server, HttpRequestHandler handler,
-								 void *user_data);
+static void mongoose_set_handler(HttpServer			 *server,
+								 HttpRequestHandlerFn handler, void *user_data);
 static i32	mongoose_run(HttpServer *server);
 static void mongoose_stop(HttpServer *server);
 
@@ -90,9 +90,9 @@ mongoose_event_handler(struct mg_connection *c, int ev, void *ev_data)
 		memset(&resp, 0, sizeof(resp));
 
 		/* Call handler. */
-		if (impl->handler != NULL)
+		if (impl->handler_fn != NULL)
 		{
-			impl->handler(&req, &resp, impl->user_data);
+			impl->handler_fn(&req, &resp, impl->custom_context);
 		}
 		else
 		{
@@ -131,16 +131,16 @@ mongoose_create(const char *listen_addr)
 
 	/* Format listen address - if it doesn't start with http://, prepend it. */
 	if (strncmp(listen_addr, "http://", 7) == 0)
-		snprintf(impl->listen_addr, sizeof(impl->listen_addr), "%s",
+		snprintf(impl->listen_address, sizeof(impl->listen_address), "%s",
 				 listen_addr);
 	else
-		snprintf(impl->listen_addr, sizeof(impl->listen_addr), "http://%s",
-				 listen_addr);
+		snprintf(impl->listen_address, sizeof(impl->listen_address),
+				 "http://%s", listen_addr);
 
-	impl->conn = NULL;
-	impl->running = false;
-	impl->handler = NULL;
-	impl->user_data = NULL;
+	impl->connection = NULL;
+	impl->is_running = false;
+	impl->handler_fn = NULL;
+	impl->custom_context = NULL;
 
 	server->vtable = &mongoose_vtable;
 	server->impl = impl;
@@ -166,13 +166,13 @@ mongoose_destroy(HttpServer *server)
 }
 
 static void
-mongoose_set_handler(HttpServer *server, HttpRequestHandler handler,
+mongoose_set_handler(HttpServer *server, HttpRequestHandlerFn handler,
 					 void *user_data)
 {
 	MongooseHttpServer *impl = (MongooseHttpServer *) server->impl;
 
-	impl->handler = handler;
-	impl->user_data = user_data;
+	impl->handler_fn = handler;
+	impl->custom_context = user_data;
 }
 
 static i32
@@ -181,15 +181,15 @@ mongoose_run(HttpServer *server)
 	MongooseHttpServer *impl = (MongooseHttpServer *) server->impl;
 
 	/* Start listening. */
-	impl->conn = mg_http_listen(&impl->mgr, impl->listen_addr,
-								mongoose_event_handler, impl);
-	if (!impl->conn)
+	impl->connection = mg_http_listen(&impl->mgr, impl->listen_address,
+									  mongoose_event_handler, impl);
+	if (!impl->connection)
 		return -1;
 
-	impl->running = true;
+	impl->is_running = true;
 
 	/* Event loop. */
-	while (impl->running)
+	while (impl->is_running)
 	{
 		mg_mgr_poll(&impl->mgr, 1000); /* Poll with 1 second timeout. */
 	}
@@ -201,6 +201,5 @@ static void
 mongoose_stop(HttpServer *server)
 {
 	MongooseHttpServer *impl = (MongooseHttpServer *) server->impl;
-
-	impl->running = false;
+	impl->is_running = false;
 }
