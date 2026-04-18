@@ -31,6 +31,80 @@
  * static inline const char *pwh_node_tag_to_string_inline(NodeTag tag);
  */
 
+static forceinline const char *
+node_to_name(NodeTag tag)
+{
+	switch (tag)
+	{
+		case T_Result:
+			return "Result";
+		case T_ModifyTable:
+			return "ModifyTable";
+		case T_Append:
+			return "Append";
+		case T_MergeAppend:
+			return "MergeAppend";
+		case T_RecursiveUnion:
+			return "RecursiveUnion";
+		case T_BitmapAnd:
+			return "BitmapAnd";
+		case T_BitmapOr:
+			return "BitmapOr";
+		case T_SeqScan:
+			return "SeqScan";
+		case T_IndexScan:
+			return "IndexScan";
+		case T_IndexOnlyScan:
+			return "IndexOnlyScan";
+		case T_BitmapIndexScan:
+			return "BitmapIndexScan";
+		case T_BitmapHeapScan:
+			return "BitmapHeapScan";
+		case T_TidScan:
+			return "TidScan";
+		case T_SubqueryScan:
+			return "SubqueryScan";
+		case T_FunctionScan:
+			return "FunctionScan";
+		case T_ValuesScan:
+			return "ValuesScan";
+		case T_CteScan:
+			return "CteScan";
+		case T_WorkTableScan:
+			return "WorkTableScan";
+		case T_ForeignScan:
+			return "ForeignScan";
+		case T_NestLoop:
+			return "NestLoop";
+		case T_MergeJoin:
+			return "MergeJoin";
+		case T_HashJoin:
+			return "HashJoin";
+		case T_Material:
+			return "Material";
+		case T_Sort:
+			return "Sort";
+		case T_Group:
+			return "Group";
+		case T_Agg:
+			return "Agg";
+		case T_WindowAgg:
+			return "WindowAgg";
+		case T_Unique:
+			return "Unique";
+		case T_Hash:
+			return "Hash";
+		case T_SetOp:
+			return "SetOp";
+		case T_LockRows:
+			return "LockRows";
+		case T_Limit:
+			return "Limit";
+		default:
+			return NULL;
+	}
+}
+
 const char *
 pwh_node_tag_to_string(NodeTag tag)
 {
@@ -43,85 +117,6 @@ pwh_node_tag_to_string(NodeTag tag)
 	return "Unknown";
 }
 
-bool
-pwh_walk_planstate_children(PlanState *planstate, PwhNodeVisitorFn visitor,
-							void *context)
-{
-	if (IsA(planstate->plan, CteScan))
-	{
-		CteScanState *cs = (CteScanState *) planstate;
-		if (cs->cteplanstate != NULL)
-		{
-			if (!pwh_walk_planstate_recursive(cs->cteplanstate, visitor,
-											  context))
-				return false;
-		}
-	}
-
-	switch (nodeTag(planstate))
-	{
-		case T_AppendState:
-		{
-			AppendState *as = (AppendState *) planstate;
-			for (i32 i = 0; i < as->as_nplans; i++)
-			{
-				if (!pwh_walk_planstate_recursive(as->appendplans[i], visitor,
-												  context))
-					return false;
-			}
-			break;
-		}
-		case T_MergeAppendState:
-		{
-			MergeAppendState *mas = (MergeAppendState *) planstate;
-			for (i32 i = 0; i < mas->ms_nplans; i++)
-			{
-				if (!pwh_walk_planstate_recursive(mas->mergeplans[i], visitor,
-												  context))
-					return false;
-			}
-			break;
-		}
-		case T_BitmapAndState:
-		{
-			BitmapAndState *bas = (BitmapAndState *) planstate;
-			for (i32 i = 0; i < bas->nplans; i++)
-			{
-				if (!pwh_walk_planstate_recursive(bas->bitmapplans[i], visitor,
-												  context))
-					return false;
-			}
-			break;
-		}
-		case T_BitmapOrState:
-		{
-			BitmapOrState *bos = (BitmapOrState *) planstate;
-			for (i32 i = 0; i < bos->nplans; i++)
-			{
-				if (!pwh_walk_planstate_recursive(bos->bitmapplans[i], visitor,
-												  context))
-					return false;
-			}
-			break;
-		}
-		case T_SubqueryScanState:
-		{
-			SubqueryScanState *sqs = (SubqueryScanState *) planstate;
-			if (sqs->subplan != NULL)
-			{
-				if (!pwh_walk_planstate_recursive(sqs->subplan, visitor,
-												  context))
-					return false;
-			}
-			break;
-		}
-		default:
-			break;
-	}
-
-	return true;
-}
-
 u64
 pwh_compute_query_id(const QueryDesc *qd)
 {
@@ -132,7 +127,7 @@ pwh_compute_query_id(const QueryDesc *qd)
 							 strlen(qd->sourceText));
 	}
 
-	hash ^= (u64) GetCurrentTimestamp() >> 32;
+	hash ^= (u64) GetCurrentTimestamp() >> 16;
 	hash ^= MyProcPid;
 
 	return hash;

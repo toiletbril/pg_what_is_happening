@@ -259,7 +259,7 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 
 			/* Set initial backend state and prepare for metric collection. */
 			u64 num_nodes = pwh_remember_planstate_tree_as_metric_structure(
-				queryDesc->planstate, metrics, PWH_GUC_MAX_NODES_PER_QUERY, -1);
+				queryDesc->planstate, metrics, PWH_GUC_MAX_NODES_PER_QUERY);
 
 			ereport(DEBUG1, (errmsg("PWH: Tracking query with %lu nodes",
 									(unsigned long) num_nodes),

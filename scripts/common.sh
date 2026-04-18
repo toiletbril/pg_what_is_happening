@@ -70,7 +70,8 @@ edit_postgresql_conf()
   log "editing postgresql.conf..."
   cat >> "$PG_DATA_DIR/postgresql.conf" <<EOF
 shared_preload_libraries = 'pg_what_is_happening'
-log_min_messages = debug1
+log_min_messages = debug4
+what_is_happening.min_cost_to_track = 0
 EOF
 }
 

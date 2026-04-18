@@ -40,10 +40,10 @@ typedef struct MongooseHttpServer
 /* Forward declarations. */
 static HttpServer *mongoose_create(const char *listen_addr);
 static void		   mongoose_destroy(HttpServer *server);
-static void		   mongoose_set_handler(HttpServer			*server,
-										HttpRequestHandlerFn handler, void *user_data);
-static i32		   mongoose_run(HttpServer *server);
-static void		   mongoose_stop(HttpServer *server);
+static void mongoose_set_handler(HttpServer			 *server,
+								 HttpRequestHandlerFn handler, void *user_data);
+static i32	mongoose_run(HttpServer *server);
+static void mongoose_stop(HttpServer *server);
 
 /* Vtable. */
 static const HttpServerVtable mongoose_vtable = {
