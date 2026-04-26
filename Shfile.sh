@@ -25,6 +25,16 @@ clean_docker_target() {
   fi
 }
 
+steal_tmux_conf() {
+  if test -f "$HOME/.tmux.conf"; then
+    cp -Ln "$HOME/.tmux.conf" "./.tmux.conf" || true
+  elif test -f "/etc/tmux.conf"; then
+    cp -Ln "/etc/tmux.conf" "./.tmux.conf" || true
+  else
+    touch "./.tmux.conf"
+  fi
+}
+
 make_sure_postgres_source_is_available() {
   if test -z "${POSTGRES_SOURCE:-}"; then
     echo "ERROR: POSTGRES_SOURCE environment variable must be set to postgres source directory." >&2
@@ -45,8 +55,10 @@ docker run --pull=never --rm --network=host -v "$PWD:/pg_what_is_happening" \
 case $C in
 "make-image")
   clean_docker_target
+  steal_tmux_conf
+  dirname "$(realpath "$0")"
   docker build --network=host --progress=plain -f Dockerfile \
-               -t "$IMG" "$(dirname "$0")"
+               -t "$IMG" "$(dirname "$(realpath "$0")")"
   ;;
 "build")
   make_sure_postgres_source_is_available

@@ -128,9 +128,9 @@ metric_help(MetricType type)
 }
 
 TupleDesc pwh_create_v1_status_tupdesc(void);
-void pwh_fill_v1_status_tuple(Datum *values, bool *nulls,
-							  PwhSharedMemoryBackendEntry *entry,
-							  PwhNodeMetrics *node, double total_query_time);
+void	  pwh_fill_v1_status_tuple(Datum *values, bool *nulls,
+								   PwhSharedMemoryBackendEntry *entry,
+								   PwhNodeMetrics *node, double total_query_time);
 
 char *pwh_format_openmetrics(void);
 

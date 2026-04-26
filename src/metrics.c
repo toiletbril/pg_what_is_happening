@@ -16,6 +16,10 @@
  * See top-level LICENSE file.
  */
 
+/*
+ * Helpers for the actual metrics the extension collects.
+ */
+
 #include "postgres.h"
 
 #include "metrics.h"
@@ -30,6 +34,8 @@
 #include "gucs.h"
 #include "shared_memory.h"
 #include "utils/builtins.h"
+
+#ifdef WITH_BGWORKER
 
 #define METRIC_BUFFER_SIZE 65536
 
@@ -60,9 +66,10 @@ static void formatter_append_all_node_metrics(Formatter		 *fmt,
 static void formatter_append_query_info(FormatterBuffer				*buf,
 										PwhSharedMemoryBackendEntry *entry);
 
+#endif /* WITH_BGWORKER */
+
 #define TupleDescInitEntryMetric(desc, att_num, metric_enum, type) \
 	TupleDescInitEntry(desc, att_num, metric_suffix(metric_enum), type, -1, 0);
-
 
 TupleDesc
 pwh_create_v1_status_tupdesc(void)
@@ -138,6 +145,74 @@ pwh_fill_v1_status_tuple(Datum *values, bool *nulls,
 	values[n++] = Float8GetDatum(node->execution.rows_filtered_by_expressions);
 
 	Assert(n == PWH_V1_STATUS_TUPLE_COUNT);
+}
+
+#ifdef WITH_BGWORKER
+
+char *
+pwh_format_openmetrics(void)
+{
+	FormatterBuffer buf;
+	buffer_init(&buf);
+
+	/* Add query_info metric help and type. */
+	buffer_append(&buf,
+				  "# HELP pg_what_is_happening_query_info "
+				  "Query metadata for active queries\n"
+				  "# TYPE pg_what_is_happening_query_info gauge\n");
+
+	/* Initialize help for node metrics. */
+	for (u32 i = METRIC_START; i < METRIC_COUNT; i++)
+	{
+		const char *suffix = metric_suffix((MetricType) i);
+		const char *help = metric_help((MetricType) i);
+
+		buffer_append(
+			&buf,
+			"# HELP pg_what_is_happening_active_query_node_%s %s\n"
+			"# TYPE pg_what_is_happening_active_query_node_%s gauge\n",
+			suffix, help, suffix);
+	}
+
+	for (u64 i = 0; i < (u64) PWH_GUC_MAX_TRACKED_QUERIES; i++)
+	{
+		PwhSharedMemoryBackendEntry *shmem_be_entry = pwh_get_backend_entry(i);
+
+		if (!pwh_is_backend_entry_active(shmem_be_entry))
+			continue;
+
+		ereport(DEBUG2, (errmsg("PWH: Formatting backend entry %lu", i),
+						 errdetail("PID=%d query_id=%lu num_nodes=%d",
+								   shmem_be_entry->backend_pid,
+								   (unsigned long) shmem_be_entry->query_id,
+								   shmem_be_entry->count_of_metrics)));
+
+		/* _info pseudo-metric. */
+		formatter_append_query_info(&buf, shmem_be_entry);
+
+		PwhNodeMetrics *metrics = pwh_get_backend_entry_metrics(shmem_be_entry);
+
+		double total_query_time = 0.0;
+		for (u32 j = 0; j < shmem_be_entry->count_of_metrics; j++)
+		{
+			total_query_time += metrics[j].execution.total_time_us;
+		}
+
+		Formatter fmt;
+		formatter_init(&fmt, &buf, shmem_be_entry->query_id);
+
+		for (u32 j = 0; j < shmem_be_entry->count_of_metrics; j++)
+		{
+			/* Validate node magic before reading. */
+			if (!pwh_validate_node_magic(&metrics[j], j))
+				continue;
+
+			formatter_append_all_node_metrics(&fmt, &metrics[j],
+											  total_query_time);
+		}
+	}
+
+	return buf.data;
 }
 
 static void
@@ -247,72 +322,6 @@ formatter_append_metric(Formatter *fmt, PwhNodeMetrics *node, MetricType type,
 				  (i32) node->parent_node_id, tag_str, value_buf);
 }
 
-char *
-pwh_format_openmetrics(void)
-{
-	FormatterBuffer buf;
-	buffer_init(&buf);
-
-	/* Add query_info metric help and type. */
-	buffer_append(&buf,
-				  "# HELP pg_what_is_happening_query_info "
-				  "Query metadata for active queries\n"
-				  "# TYPE pg_what_is_happening_query_info gauge\n");
-
-	/* Initialize help for node metrics. */
-	for (u32 i = METRIC_START; i < METRIC_COUNT; i++)
-	{
-		const char *suffix = metric_suffix((MetricType) i);
-		const char *help = metric_help((MetricType) i);
-
-		buffer_append(
-			&buf,
-			"# HELP pg_what_is_happening_active_query_node_%s %s\n"
-			"# TYPE pg_what_is_happening_active_query_node_%s gauge\n",
-			suffix, help, suffix);
-	}
-
-	for (u64 i = 0; i < (u64) PWH_GUC_MAX_TRACKED_QUERIES; i++)
-	{
-		PwhSharedMemoryBackendEntry *shmem_be_entry = pwh_get_backend_entry(i);
-
-		if (!pwh_is_backend_entry_active(shmem_be_entry))
-			continue;
-
-		ereport(DEBUG2, (errmsg("PWH: Formatting backend entry %lu", i),
-						 errdetail("PID=%d query_id=%lu num_nodes=%d",
-								   shmem_be_entry->backend_pid,
-								   (unsigned long) shmem_be_entry->query_id,
-								   shmem_be_entry->count_of_metrics)));
-
-		/* _info pseudo-metric. */
-		formatter_append_query_info(&buf, shmem_be_entry);
-
-		Formatter fmt;
-		formatter_init(&fmt, &buf, shmem_be_entry->query_id);
-
-		PwhNodeMetrics *metrics = pwh_get_backend_entry_metrics(shmem_be_entry);
-
-		double total_query_time = 0.0;
-		for (u32 j = 0; j < shmem_be_entry->count_of_metrics; j++)
-		{
-			total_query_time += metrics[j].execution.total_time_us;
-		}
-
-		for (u32 j = 0; j < shmem_be_entry->count_of_metrics; j++)
-		{
-			/* Validate node magic before reading. */
-			if (!pwh_validate_node_magic(&metrics[j], j))
-				continue;
-
-			formatter_append_all_node_metrics(&fmt, &metrics[j],
-											  total_query_time);
-		}
-	}
-
-	return buf.data;
-}
-
 static void
 buffer_append_escaped(FormatterBuffer *buf, const char *str)
 {
@@ -352,3 +361,5 @@ formatter_append_query_info(FormatterBuffer				*buf,
 	buffer_append_escaped(buf, query_text);
 	buffer_append(buf, "\"} 1\n");
 }
+
+#endif /* WITH_BGWORKER */

@@ -16,6 +16,19 @@
  * See top-level LICENSE file.
  */
 
+/*
+ * Main file of the extension. Ties up all initialization and exports workhorse
+ * functions. OpenMetrics exporter is registered only if BG worker has been
+ * compiled in and is located in bg_worker.c/h.
+ *
+ * NOTE (regarding locks): The extension tries best-effort locking only when
+ * searching for an entry in the shared memory. It is assumed that nothing
+ * besides the backend itself may write to it's corresponding shared memory
+ * entry, and all routines that read the metrics won't touch the shared memory
+ * in any way. That may result in partially written metrics in rare cases, and
+ * it's the best can do at the moment.
+ */
+
 #include "postgres.h"
 
 #include "access/xact.h"
@@ -34,6 +47,11 @@
 #include "storage/lwlock.h"
 #include "utils/timestamp.h"
 
+/*
+ * XXX should we store a lock per backend instead of one global search lock?
+ * Will that approach affect current best-effort metric collection?
+ */
+
 #ifdef WITH_BGWORKER
 #include "bg_worker.h"
 #endif
@@ -43,7 +61,6 @@ PG_MODULE_MAGIC;
 /* Previous hooks. */
 static ExecutorStart_hook_type PREV_QUERY_START_HOOK = NULL;
 static ExecutorEnd_hook_type   PREV_QUERY_FINISH_HOOK = NULL;
-extern shmem_startup_hook_type PREV_SHMEM_STARTUP_HOOK;
 
 void _PG_init(void);
 void _PG_fini(void);
@@ -133,7 +150,7 @@ query_cleanup_callback(XactEvent event, void *arg)
 	unused(arg);
 
 	/*
-	 * Only clean up on abort - commit path goes through ExecutorEnd normally.
+	 * This functions fires either on ABORT or COMMIT. Only clean up on abort.
 	 */
 	if (!PWH_IS_ABORT_EVENT(event))
 		return;
@@ -228,15 +245,15 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 	}
 
 	/* Does this query satisfy the minimum cost constraint? */
-	if (queryDesc->plannedstmt->planTree->total_cost <
-		PWH_GUC_MIN_COST_TO_TRACK)
+	if (likely(queryDesc->plannedstmt->planTree->total_cost <
+			   PWH_GUC_MIN_COST_TO_TRACK))
 	{
 		return;
 	}
 
 	/* Okay, we're tracking this query. */
 
-	if (!WAS_BACKEND_INITIALIZED)
+	if (unlikely(!WAS_BACKEND_INITIALIZED))
 	{
 		initialize_state_once_per_backend();
 	}
@@ -330,10 +347,9 @@ query_end_hook(QueryDesc *queryDesc)
 
 		PG_TRY();
 		{
-			/* Get our backend entry. */
 			PwhSharedMemoryBackendEntry *be = pwh_get_my_backend_entry();
 
-			if (be != NULL)
+			if (likely(be != NULL))
 			{
 				PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_EXCLUSIVE);
 
@@ -355,7 +371,6 @@ query_end_hook(QueryDesc *queryDesc)
 				}
 
 				PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
-
 
 				/* Clear QueryDesc pointer. */
 				pwh_set_current_query_desc(NULL);

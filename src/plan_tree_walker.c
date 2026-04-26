@@ -16,6 +16,11 @@
  * See top-level LICENSE file.
  */
 
+/*
+ * Rewritten, version-agnostic (via compatibility header) planstate walker and
+ * friend routines used for metric collection.
+ */
+
 #include "postgres.h"
 
 #include "plan_tree_walker.h"

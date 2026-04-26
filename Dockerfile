@@ -40,5 +40,8 @@ RUN adduser -D -u 1000 "postgres" && \
 ENV PWH_PERMIT_DIRS="/postgres /postgres-bin /data /pg_what_is_happening"
 RUN mkdir -p $PWH_PERMIT_DIRS # Permissions will be set at runtime.
 
+# Steal host's tmux.conf for the container.
+COPY .tmux.conf /etc/tmux.conf
+
 USER postgres
 WORKDIR "/pg_what_is_happening"
