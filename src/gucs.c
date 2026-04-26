@@ -1,3 +1,7 @@
+/*
+ * Extension-related variables.
+ */
+
 #include "gucs.h"
 
 bool PWH_GUC_IS_ENABLED = true;

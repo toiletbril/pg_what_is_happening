@@ -16,6 +16,11 @@
  * See top-level LICENSE file.
  */
 
+/*
+ * Helpers to compile the extension on as many PostgreSQL versions as possible.
+ * Main code lies in compatibility/ dir.
+ */
+
 #include "postgres.h"
 
 #include "compatibility.h"
@@ -32,7 +37,7 @@
  */
 
 static forceinline const char *
-node_to_name(NodeTag tag)
+general_tag_to_string(NodeTag tag)
 {
 	switch (tag)
 	{
@@ -108,7 +113,7 @@ node_to_name(NodeTag tag)
 const char *
 pwh_node_tag_to_string(NodeTag tag)
 {
-	const char *name = node_to_name(tag);
+	const char *name = general_tag_to_string(tag);
 	if (name != NULL)
 		return name;
 	name = pwh_node_tag_to_string_inline(tag);

@@ -103,14 +103,15 @@ pwh_bgworker_main(Datum main_arg)
 	proc_exit(0);
 }
 
+/* XXX make HTTP replies more cool. */
 static void
 metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 {
 	unused(user_data);
 
-	if (strcmp(req->method, "GET") != 0 || strcmp(req->path, "/metrics") != 0)
+	if (!streq(req->method, "GET") || !streq(req->path, "/metrics"))
 	{
-		pwh_http_response_set_text(resp, 404, "Not Found");
+		pwh_http_response_set_text(resp, 404, "Unknown Path");
 		return;
 	}
 

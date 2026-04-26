@@ -1,5 +1,7 @@
 # pg_what_is_happening monitoring stack example
 
+<!-- XXX make node graph actually useful -->
+
 The example Grafana dashboard provides a live page of active queries, utilizing
 most of the metrics provided by the extension.
 

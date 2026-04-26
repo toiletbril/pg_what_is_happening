@@ -16,6 +16,12 @@
  * See top-level LICENSE file.
  */
 
+/*
+ * Shared memory-related routines. This is extensions' main way of interacting
+ * with all currently-running backends on the host, either via BG worker or SQL
+ * query.
+ */
+
 #include "postgres.h"
 
 #include "shared_memory.h"
@@ -29,6 +35,8 @@
 #include "storage/ipc.h"
 #include "storage/lwlock.h"
 #include "storage/shmem.h"
+
+/* XXX get rid of shared memory and use a socket instead. */
 
 /* Global shared memory state pointer. */
 PwhSharedMemoryHeader *PWH_SHMEM = NULL;
@@ -122,9 +130,11 @@ pwh_shared_memory_startup_hook(void)
 }
 
 PwhSharedMemoryBackendEntry *
-pwh_get_or_create_my_backend_entry_impl(bool should_create)
+pwh_get_or_create_my_backend_entry_impl(bool should_create,
+										bool should_acquire_lock)
 {
-	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_SHARED);
+	if (should_acquire_lock)
+		PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_SHARED);
 
 	u64 free_slot_idx = -1U;
 
@@ -139,7 +149,9 @@ pwh_get_or_create_my_backend_entry_impl(bool should_create)
 		}
 		else if (be->backend_pid == MyProcPid)
 		{
-			PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+			if (should_acquire_lock)
+				PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+
 			return be;
 		}
 	}
@@ -153,11 +165,14 @@ pwh_get_or_create_my_backend_entry_impl(bool should_create)
 								free_slot_idx, MyProcPid)));
 		be->backend_pid = MyProcPid;
 
-		PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+		if (should_acquire_lock)
+			PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+
 		return be;
 	}
 
-	PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+	if (should_acquire_lock)
+		PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
 
 	if (should_create)
 	{
@@ -256,7 +271,7 @@ pwh_validate_node_magic(PwhNodeMetrics *node, u32 node_id)
 {
 	if (node->magic != PWH_NODE_MAGIC)
 	{
-		ereport(LOG, (errmsg("PWH: Node ID %u magic mismatch", node_id)));
+		ereport(DEBUG1, (errmsg("PWH: Node ID %u magic mismatch", node_id)));
 		return false;
 	}
 

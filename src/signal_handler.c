@@ -16,6 +16,14 @@
  * See top-level LICENSE file.
  */
 
+/*
+ * Lazy-async approach of collection backend metrics. All backends have a
+ * SIGUSR2 signal installed, which forces the backends to write the metrics to
+ * the shared memory. We send a SIGUSR2 signal to all backends, all of which
+ * provides us the ability to interrupt the queries whenever we want in an
+ * totally asynchronous way.
+ */
+
 #include "postgres.h"
 
 #include "signal_handler.h"

@@ -27,15 +27,17 @@
 #include "compatibility.h"
 #include "datatype/timestamp.h"
 #include "nodes/nodeFuncs.h"
+#include "storage/ipc.h"
 #include "storage/lwlock.h"
 #include "storage/spin.h"
 
-/* TODO: Test socket/pipe approach as alternative to shared memory.
- * While shared memory is the only practical PostgreSQL IPC for metrics,
- * investigate if domain sockets could reduce synchronization complexity.
+/*
+ * TODO: Test socket/pipe approach as alternative to shared memory.
  */
 
 #define PWH_NODE_MAGIC 0xDEADBEEF
+
+extern shmem_startup_hook_type PREV_SHMEM_STARTUP_HOOK;
 
 typedef struct
 {
@@ -88,7 +90,7 @@ extern Size PWH_BACKEND_ENTRY_STRIDE;
 
 /* Can return NULL. */
 extern PwhSharedMemoryBackendEntry *pwh_get_or_create_my_backend_entry_impl(
-	bool should_create);
+	bool should_create, bool should_acquire_lock);
 
 forceinline bool
 pwh_is_backend_entry_active(const PwhSharedMemoryBackendEntry *be)
@@ -110,14 +112,21 @@ pwh_release_backend_entry_unlocked(PwhSharedMemoryBackendEntry *be)
 forceinline PwhSharedMemoryBackendEntry *
 pwh_get_or_create_my_backend_entry(void)
 {
-	return pwh_get_or_create_my_backend_entry_impl(true);
+	return pwh_get_or_create_my_backend_entry_impl(true, true);
 }
 
 /* Can return NULL. */
 forceinline PwhSharedMemoryBackendEntry *
 pwh_get_my_backend_entry(void)
 {
-	return pwh_get_or_create_my_backend_entry_impl(false);
+	return pwh_get_or_create_my_backend_entry_impl(false, true);
+}
+
+/* Can return NULL. */
+forceinline PwhSharedMemoryBackendEntry *
+pwh_get_my_backend_entry_unlocked(void)
+{
+	return pwh_get_or_create_my_backend_entry_impl(false, false);
 }
 
 extern void pwh_release_my_backend_entry(void);
