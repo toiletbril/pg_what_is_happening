@@ -25,7 +25,11 @@
 #include "executor/execdesc.h"
 #include "float.h"
 #include "nodes/nodes.h"
+#if PG_VERSION_NUM >= 100000 && PG_VERSION_NUM < 110000
+#include "port/atomics.h"
+#else
 #include "storage/barrier.h"
+#endif
 #include "storage/lwlock.h"
 #include "storage/shmem.h"
 #include "utils/timestamp.h"
@@ -65,6 +69,7 @@ typedef struct PlanState PlanState;
 
 #if PG_VERSION_NUM >= 190000
 typedef NodeInstrumentation PwhNodeInstrumentation;
+#define PWH_BASE_INSTRUMENTATION(node_instr) (&(node_instr)->instr)
 #define PWH_INSTR_TOTAL(node_instr) ((node_instr)->instr.total)
 #define PWH_INSTR_SHARED_HITS(node_instr) \
 	((node_instr)->instr.bufusage.shared_blks_hit)
@@ -74,6 +79,7 @@ typedef NodeInstrumentation PwhNodeInstrumentation;
 	(handler)(postgres_signal_arg, pg_siginfo)
 #else
 typedef Instrumentation PwhNodeInstrumentation;
+#define PWH_BASE_INSTRUMENTATION(node_instr) (node_instr)
 #define PWH_INSTR_TOTAL(node_instr) ((node_instr)->total)
 #define PWH_INSTR_SHARED_HITS(node_instr) \
 	((node_instr)->bufusage.shared_blks_hit)

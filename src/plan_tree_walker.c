@@ -53,6 +53,8 @@ typedef i32 (*PwhNodeVisitorFn)(PlanState *planstate, i32 parent_id,
 static i32 topology_visitor(PlanState *planstate, i32 parent_id, void *context);
 static bool walk_planstate_recursive(PlanState *planstate, i32 parent_id,
 									 PwhNodeVisitorFn visit_fn, void *ctx);
+static void copy_buffer_usage(PwhNodeMetrics		 *metric,
+							  PwhNodeInstrumentation *node_instr);
 
 static bool
 walk_planstate_recursive(PlanState *planstate, i32 parent_id,
@@ -295,6 +297,36 @@ pwh_collect_instrumentation_metrics(PwhNodeInstrumentation **instrumentation,
 			1000000.0;
 		metrics[i].execution.rows_filtered_by_joins = instr->nfiltered1;
 		metrics[i].execution.rows_filtered_by_expressions = instr->nfiltered2;
-		PWH_COPY_BUFUSAGE(metrics, instr, i);
+		copy_buffer_usage(&metrics[i], instr);
 	}
+}
+
+static void
+copy_buffer_usage(PwhNodeMetrics *metric, PwhNodeInstrumentation *node_instr)
+{
+	Instrumentation *instr = PWH_BASE_INSTRUMENTATION(node_instr);
+	BufferUsage		 usage = instr->bufusage;
+
+	if (instr->need_bufusage && !INSTR_TIME_IS_ZERO(instr->starttime))
+	{
+		usage.shared_blks_hit += pgBufferUsage.shared_blks_hit -
+								 instr->bufusage_start.shared_blks_hit;
+		usage.shared_blks_read += pgBufferUsage.shared_blks_read -
+								  instr->bufusage_start.shared_blks_read;
+		usage.local_blks_hit +=
+			pgBufferUsage.local_blks_hit - instr->bufusage_start.local_blks_hit;
+		usage.local_blks_read += pgBufferUsage.local_blks_read -
+								 instr->bufusage_start.local_blks_read;
+		usage.temp_blks_read +=
+			pgBufferUsage.temp_blks_read - instr->bufusage_start.temp_blks_read;
+		usage.temp_blks_written += pgBufferUsage.temp_blks_written -
+								   instr->bufusage_start.temp_blks_written;
+	}
+
+	metric->buffer_usage.cache_hits = usage.shared_blks_hit;
+	metric->buffer_usage.cache_misses = usage.shared_blks_read;
+	metric->buffer_usage.local_cache_hits = usage.local_blks_hit;
+	metric->buffer_usage.local_cache_misses = usage.local_blks_read;
+	metric->buffer_usage.spill_file_reads = usage.temp_blks_read;
+	metric->buffer_usage.spill_file_writes = usage.temp_blks_written;
 }

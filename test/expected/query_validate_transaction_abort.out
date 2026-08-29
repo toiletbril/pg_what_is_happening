@@ -1,6 +1,6 @@
 -- Test cleanup when transaction aborts.
 -- This test verifies that the extension properly cleans up metrics after abort.
-\! PGAPPNAME=pwh_caught_abort psql -X -d contrib_regression -c "BEGIN" -c "SAVEPOINT pwh_test" -c "SELECT COUNT(*) + 1 / CASE WHEN pg_sleep(0.3) IS NULL THEN 0 ELSE 0 END FROM orders o JOIN users u ON o.user_id = u.user_id" -c "ROLLBACK TO SAVEPOINT pwh_test" -c "SELECT pg_sleep(1)" -c "COMMIT" > /dev/null 2>&1 &
+\! PGAPPNAME=pwh_caught_abort psql -X -d contrib_regression -f test/sql/query_validate_transaction_abort_helper.sql > /dev/null 2>&1 &
 SELECT pg_sleep(0.05);
  pg_sleep 
 ----------
