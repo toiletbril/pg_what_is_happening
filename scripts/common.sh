@@ -82,6 +82,7 @@ edit_postgresql_conf()
     "shared_preload_libraries = 'pg_what_is_happening'" \
     "log_min_messages = debug4" \
     "what_is_happening.min_cost_to_track = 0" \
+    "what_is_happening.max_tracked_queries = 8" \
     >> "$PG_DATA_DIR/postgresql.conf"
 }
 

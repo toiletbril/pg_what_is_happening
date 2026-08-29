@@ -71,50 +71,11 @@ static void formatter_append_query_info(FormatterBuffer	 *buf,
 
 #endif /* WITH_BGWORKER */
 
-#define TupleDescInitEntryMetric(desc, att_num, metric_enum, type) \
-	TupleDescInitEntry(desc, att_num, metric_suffix(metric_enum), type, -1, 0);
-
-TupleDesc
-pwh_create_v1_status_tupdesc(void)
-{
-	AttrNumber n = 1;
-	TupleDesc  d = PWH_CREATE_TUPLE_DESC(PWH_V1_STATUS_TUPLE_COUNT);
-
-	/* Utility columns. */
-	TupleDescInitEntry(d, n++, "backend_pid", INT4OID, -1, 0);
-	TupleDescInitEntry(d, n++, "query_id", INT8OID, -1, 0);
-	TupleDescInitEntry(d, n++, "query_text", TEXTOID, -1, 0);
-	TupleDescInitEntry(d, n++, "node_id", INT4OID, -1, 0);
-	TupleDescInitEntry(d, n++, "parent_node_id", INT4OID, -1, 0);
-	TupleDescInitEntry(d, n++, "node_tag", TEXTOID, -1, 0);
-
-	/* Metrics. */
-	TupleDescInitEntryMetric(d, n++, METRIC_STARTUP_TIME_US, FLOAT8OID);
-	TupleDescInitEntryMetric(d, n++, METRIC_TOTAL_TIME_US, FLOAT8OID);
-	TupleDescInitEntryMetric(d, n++, METRIC_LOOPS_EXECUTED, FLOAT8OID);
-	TupleDescInitEntryMetric(d, n++, METRIC_TUPLES_RETURNED, FLOAT8OID);
-	TupleDescInitEntryMetric(d, n++, METRIC_TIME_SECONDS, FLOAT8OID);
-	TupleDescInitEntryMetric(d, n++, METRIC_TIME_PERCENT, FLOAT8OID);
-	TupleDescInitEntryMetric(d, n++, METRIC_CACHE_HITS, INT8OID);
-	TupleDescInitEntryMetric(d, n++, METRIC_CACHE_MISSES, INT8OID);
-	TupleDescInitEntryMetric(d, n++, METRIC_LOCAL_CACHE_HITS, INT8OID);
-	TupleDescInitEntryMetric(d, n++, METRIC_LOCAL_CACHE_MISSES, INT8OID);
-	TupleDescInitEntryMetric(d, n++, METRIC_SPILL_FILE_READS, INT8OID);
-	TupleDescInitEntryMetric(d, n++, METRIC_SPILL_FILE_WRITES, INT8OID);
-	TupleDescInitEntryMetric(d, n++, METRIC_ROWS_FILTERED_BY_JOINS, FLOAT8OID);
-	TupleDescInitEntryMetric(d, n++, METRIC_ROWS_FILTERED_BY_EXPRESSIONS,
-							 FLOAT8OID);
-
-	/* Column indexing starts from one. */
-	Assert(n == PWH_V1_STATUS_TUPLE_COUNT + 1);
-
-	return d;
-}
-
 void
 pwh_fill_v1_status_tuple(Datum *values, bool *nulls, i32 backend_pid,
 						 u64 query_id, const char *query_text,
-						 PwhNodeMetrics *node, double total_query_time)
+						 PwhNodeMetrics *node, double total_query_time,
+						 u32 output_count)
 {
 	double node_time_seconds = node->execution.total_time_us / 1000000.0;
 	double node_percent =
@@ -124,11 +85,32 @@ pwh_fill_v1_status_tuple(Datum *values, bool *nulls, i32 backend_pid,
 
 	u64 n = 0;
 
-	MemSet(nulls, 0, PWH_V1_STATUS_TUPLE_COUNT * sizeof(bool));
+	Assert(output_count == PWH_V1_STATUS_LEGACY_TUPLE_COUNT ||
+		   output_count == PWH_V1_STATUS_TUPLE_COUNT);
+	MemSet(nulls, 0, output_count * sizeof(bool));
 
 	values[n++] = Int32GetDatum(backend_pid);
 	values[n++] = Int64GetDatum(query_id);
 	values[n++] = CStringGetTextDatum(query_text);
+	if (output_count == PWH_V1_STATUS_LEGACY_TUPLE_COUNT)
+	{
+		values[n++] = BoolGetDatum(true);
+		values[n++] = Int32GetDatum(node->node_id);
+		values[n++] = Int32GetDatum(node->parent_node_id);
+		values[n++] = CStringGetTextDatum(pwh_node_tag_to_string(node->tag));
+		values[n++] = Float8GetDatum(node->execution.tuples_returned);
+		values[n++] = Float8GetDatum(node->execution.startup_time_us);
+		values[n++] = Float8GetDatum(node->execution.total_time_us);
+		values[n++] = Float8GetDatum(node->execution.loops_executed);
+		values[n++] = Int64GetDatum(node->buffer_usage.cache_hits);
+		values[n++] = Int64GetDatum(node->buffer_usage.cache_misses);
+		values[n++] = Int64GetDatum(node->buffer_usage.local_cache_hits);
+		values[n++] = Int64GetDatum(node->buffer_usage.local_cache_misses);
+		values[n++] = Int64GetDatum(node->buffer_usage.spill_file_reads);
+		values[n++] = Int64GetDatum(node->buffer_usage.spill_file_writes);
+		Assert(n == output_count);
+		return;
+	}
 	values[n++] = Int32GetDatum(node->node_id);
 	values[n++] = Int32GetDatum(node->parent_node_id);
 	values[n++] = CStringGetTextDatum(pwh_node_tag_to_string(node->tag));
@@ -147,7 +129,7 @@ pwh_fill_v1_status_tuple(Datum *values, bool *nulls, i32 backend_pid,
 	values[n++] = Float8GetDatum(node->execution.rows_filtered_by_joins);
 	values[n++] = Float8GetDatum(node->execution.rows_filtered_by_expressions);
 
-	Assert(n == PWH_V1_STATUS_TUPLE_COUNT);
+	Assert(n == output_count);
 }
 
 #ifdef WITH_BGWORKER
@@ -268,6 +250,12 @@ buffer_ensure_capacity(FormatterBuffer *buf, u64 needed)
 {
 	if (unlikely(needed > UINT64_MAX - buf->offset))
 		ereport(ERROR, (errmsg("PWH: Metrics response is too large")));
+	if (unlikely(buf->offset + needed >
+				 (u64) PWH_GUC_METRICS_MAX_RESPONSE_BYTES))
+		ereport(
+			ERROR,
+			(errmsg(
+				"PWH: Metrics response exceeds metrics_max_response_bytes")));
 
 	while (buf->offset + needed >= buf->size)
 	{
@@ -284,10 +272,13 @@ buffer_append(FormatterBuffer *buf, const char *fmt, ...)
 	va_list args;
 	va_list copy;
 	i32		written;
+	u64		available;
 
 	va_start(args, fmt);
+	buffer_ensure_capacity(buf, 1);
+	available = buf->size - buf->offset;
 	va_copy(copy, args);
-	written = vsnprintf(NULL, 0, fmt, copy);
+	written = vsnprintf(buf->data + buf->offset, available, fmt, copy);
 	va_end(copy);
 	if (written < 0)
 	{
@@ -295,7 +286,10 @@ buffer_append(FormatterBuffer *buf, const char *fmt, ...)
 		ereport(ERROR, (errmsg("PWH: Failed to format metrics response")));
 	}
 	buffer_ensure_capacity(buf, (u64) written + 1);
-	vsnprintf(buf->data + buf->offset, buf->size - buf->offset, fmt, args);
+	if ((u64) written >= available)
+	{
+		vsnprintf(buf->data + buf->offset, buf->size - buf->offset, fmt, args);
+	}
 	va_end(args);
 	buf->offset += written;
 }
@@ -354,7 +348,8 @@ buffer_append_escaped(FormatterBuffer *buf, const char *str)
 				break;
 			default:
 				buffer_ensure_capacity(buf, 1);
-				buf->data[buf->offset++] = *p;
+				buf->data[buf->offset++] =
+					((unsigned char) *p < 0x80) ? *p : '?';
 				buf->data[buf->offset] = '\0';
 				break;
 		}

@@ -84,8 +84,8 @@ pwh_http_server_backend_name(void)
 	return HTTP_BACKEND;
 }
 
-void
-pwh_http_response_set_text(HttpResponse *resp, u32 status_code, char *body)
+static void
+set_response_status(HttpResponse *resp, u32 status_code)
 {
 	resp->status_code = status_code;
 
@@ -108,16 +108,36 @@ pwh_http_response_set_text(HttpResponse *resp, u32 status_code, char *body)
 			break;
 	}
 
+	resp->headers = NULL;
+}
+
+void
+pwh_http_response_set_text(HttpResponse *resp, u32 status_code, char *body)
+{
+	set_response_status(resp, status_code);
 	resp->body = pstrdup(body ? body : "");
 	resp->body_len = body ? strlen(body) : 0;
-	resp->headers = NULL;
+	resp->body_owned = true;
+}
+
+void
+pwh_http_response_set_borrowed_text(HttpResponse *resp, u32 status_code,
+									char *body)
+{
+	set_response_status(resp, status_code);
+	resp->body = body ? body : "";
+	resp->body_len = body ? strlen(body) : 0;
+	resp->body_owned = false;
 }
 
 void
 pwh_http_response_destroy_body(HttpResponse *resp)
 {
-	if (resp->body != NULL)
+	if (resp->body_owned && resp->body != NULL)
 		pfree(resp->body);
+	resp->body = NULL;
+	resp->body_len = 0;
+	resp->body_owned = false;
 }
 
 static const HttpServerVtable *

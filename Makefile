@@ -7,7 +7,7 @@
 
 .DEFAULT_GOAL := all
 
-MODE ?= dbg
+MODE ?= rel
 
 WITH_BGWORKER ?= yes
 HTTP_BACKEND ?= mongoose
@@ -16,7 +16,7 @@ ifndef VERBOSE
 MAKEFLAGS += -s
 endif
 
-ifneq ($(filter fmt tidy reset validate-dashboard,$(MAKECMDGOALS)),)
+ifneq ($(filter fmt reset validate-dashboard,$(MAKECMDGOALS)),)
 # Utility targets don't need PGXS.
 PG_CONFIG ?= true
 PGXS := /dev/null
@@ -34,9 +34,17 @@ EXTRA_CLEAN = src/o/ pg_what_is_happening.dylib
 
 include src/Makefile
 
-ifeq ($(filter fmt tidy reset validate-dashboard,$(MAKECMDGOALS)),)
+ifeq ($(filter fmt reset validate-dashboard,$(MAKECMDGOALS)),)
 include $(PGXS)
 endif
+
+ACTIVE_BUILD_CONFIG := src/o/.active-build-config
+
+$(ACTIVE_BUILD_CONFIG): FORCE | dirs
+	printf '%s\n' '$(BUILD_KEY)' > $@.tmp
+	if ! cmp -s $@.tmp $@; then mv $@.tmp $@; else rm -f $@.tmp; fi
+
+pg_what_is_happening$(DLSUFFIX): $(ACTIVE_BUILD_CONFIG)
 
 CLANG_FORMAT ?= clang-format
 
@@ -47,8 +55,8 @@ fmt:
 CLANG_TIDY ?= clang-tidy
 
 tidy:
-	echo "    " CLANG_TIDY src/*/*.c src/*/*.h src/*.c src/*.h
-	$(CLANG_TIDY) src/*.c src/*.h src/*/*.c src/*/*.h --extra-arg=-std=c17
+	echo "    " CLANG_TIDY $(SOURCES)
+	$(CLANG_TIDY) $(filter src/%,$(SOURCES)) -- $(CPPFLAGS) $(CFLAGS2)
 
 reset:
 	echo "    " RM src/o pg_what_is_happening.so pg_what_is_happening.dylib

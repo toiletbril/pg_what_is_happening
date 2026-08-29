@@ -3384,20 +3384,16 @@
   "templating": {
     "list": [
       {
-        "current": {
-          "selected": true,
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "prometheus"
         },
         "definition": "label_values(pg_what_is_happening_query_info, query_id)",
         "hide": 0,
-        "includeAll": true,
+        "includeAll": false,
         "label": "Query ID",
-        "multi": true,
+        "multi": false,
         "name": "query_id",
         "options": [],
         "query": {
@@ -3411,20 +3407,16 @@
         "type": "query"
       },
       {
-        "current": {
-          "selected": true,
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "prometheus"
         },
         "definition": "label_values(pg_what_is_happening_query_info{query_id=~\"$query_id\"}, pid)",
         "hide": 0,
-        "includeAll": true,
+        "includeAll": false,
         "label": "Backend PID",
-        "multi": true,
+        "multi": false,
         "name": "pid",
         "options": [],
         "query": {
@@ -3438,20 +3430,16 @@
         "type": "query"
       },
       {
-        "current": {
-          "selected": true,
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "prometheus"
         },
         "definition": "label_values(pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",pid=~\"$pid\"}, node_id)",
         "hide": 0,
-        "includeAll": true,
+        "includeAll": false,
         "label": "Node ID",
-        "multi": true,
+        "multi": false,
         "name": "node_id",
         "options": [],
         "query": {

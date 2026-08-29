@@ -13,7 +13,7 @@ init_env
 build_postgresql_if_not_built
 
 echo "Installing extension from ./pg_what_is_happening.so..."
-make install -j"$(parallel_jobs)"
+make MODE=dbg install -j"$(parallel_jobs)"
 
 # Allow core files.
 ulimit -c unlimited 2>/dev/null || true

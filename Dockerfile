@@ -29,6 +29,7 @@ RUN apk add --no-cache \
     su-exec \
     icu-dev \
     diffutils \
+    clang-extra-tools \
     tmux \
     util-linux \
     ncurses

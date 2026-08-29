@@ -32,6 +32,7 @@
 #include "postmaster/bgworker.h"
 #include "shared_memory.h"
 #include "storage/ipc.h"
+#include "utils/memutils.h"
 
 static void metrics_handler(const HttpRequest *req, HttpResponse *resp,
 							void *user_data);
@@ -43,6 +44,7 @@ static HttpServer			*HTTP_SERVER_INSTANCE = NULL;
 static volatile sig_atomic_t GOT_SIGHUP = false;
 static char					*CACHED_METRICS = NULL;
 static TimestampTz			 CACHED_METRICS_TIME = 0;
+static MemoryContext		 METRICS_CACHE_CONTEXT = NULL;
 
 #define BG_WORKER_PROCESS_NAME "pg_what_is_happening openmetrics exporter"
 #define BG_WORKER_ENTRY_FUNCTION "pwh_bgworker_main"
@@ -76,6 +78,10 @@ pwh_bgworker_main(Datum main_arg)
 	BackgroundWorkerUnblockSignals();
 
 	PWH_SHMEM = pwh_get_shared_memory_ptr();
+	METRICS_CACHE_CONTEXT = AllocSetContextCreate(
+		TopMemoryContext, "pg_what_is_happening metrics cache",
+		ALLOCSET_DEFAULT_MINSIZE, ALLOCSET_DEFAULT_INITSIZE,
+		ALLOCSET_DEFAULT_MAXSIZE);
 	ereport(LOG, (errmsg("PWH: Background worker attached to shared memory")));
 
 	const char *listen_addr = PWH_GUC_METRICS_LISTEN_ADDRESS;
@@ -109,8 +115,9 @@ pwh_bgworker_main(Datum main_arg)
 						   pwh_http_server_backend_name(), listen_addr)));
 	pwh_http_server_destroy(HTTP_SERVER_INSTANCE);
 	HTTP_SERVER_INSTANCE = NULL;
-	if (CACHED_METRICS != NULL)
-		pfree(CACHED_METRICS);
+	MemoryContextDelete(METRICS_CACHE_CONTEXT);
+	METRICS_CACHE_CONTEXT = NULL;
+	CACHED_METRICS = NULL;
 
 	ereport(LOG, (errmsg("PWH: Metrics endpoint shutting down")));
 
@@ -136,41 +143,53 @@ metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 	}
 
 	TimestampTz now = GetCurrentTimestamp();
-	char	   *metrics;
 	if (CACHED_METRICS != NULL && CACHED_METRICS_TIME != 0 &&
 		now >= CACHED_METRICS_TIME &&
 		now - CACHED_METRICS_TIME <=
-			(TimestampTz) PWH_GUC_SIGNAL_TIMEOUT_MS * 1000)
+			(TimestampTz) PWH_GUC_SAMPLE_INTERVAL_MS * 1000)
 	{
-		metrics = pstrdup(CACHED_METRICS);
+		pwh_http_response_set_borrowed_text(resp, 200, CACHED_METRICS);
 	}
 	else
 	{
-		pwh_refresh_metrics();
-		PwhMetricsSnapshot *snapshot = pwh_take_metrics_snapshot();
-		metrics = pwh_format_openmetrics(snapshot);
-		pwh_free_metrics_snapshot(snapshot);
-		if (metrics != NULL)
+		MemoryContext old_context = CurrentMemoryContext;
+		MemoryContextReset(METRICS_CACHE_CONTEXT);
+		CACHED_METRICS = NULL;
+		CACHED_METRICS_TIME = 0;
+		MemoryContextSwitchTo(METRICS_CACHE_CONTEXT);
+		PG_TRY();
 		{
-			if (CACHED_METRICS != NULL)
-				pfree(CACHED_METRICS);
-			CACHED_METRICS = pstrdup(metrics);
+			pwh_refresh_metrics();
+			PwhMetricsSnapshot *snapshot = pwh_take_metrics_snapshot();
+			CACHED_METRICS = pwh_format_openmetrics(snapshot);
+			pwh_free_metrics_snapshot(snapshot);
 			CACHED_METRICS_TIME = GetCurrentTimestamp();
 		}
+		PG_CATCH();
+		{
+			MemoryContextSwitchTo(old_context);
+			EmitErrorReport();
+			FlushErrorState();
+			MemoryContextReset(METRICS_CACHE_CONTEXT);
+			CACHED_METRICS = NULL;
+			CACHED_METRICS_TIME = 0;
+			pwh_http_response_set_text(resp, 500, "Internal Server Error");
+			return;
+		}
+		PG_END_TRY();
+		MemoryContextSwitchTo(old_context);
+		pwh_http_response_set_borrowed_text(resp, 200, CACHED_METRICS);
 	}
 
-	if (metrics == NULL)
+	if (CACHED_METRICS == NULL)
 	{
 		ereport(WARNING, (errmsg("PWH: Failed to format metrics")));
 		pwh_http_response_set_text(resp, 500, "Internal Server Error");
 		return;
 	}
 
-	pwh_http_response_set_text(resp, 200, metrics);
 	resp->headers =
 		"Content-Type: application/openmetrics-text; version=1.0.0; charset=utf-8\r\n";
-
-	pfree(metrics);
 }
 
 static void

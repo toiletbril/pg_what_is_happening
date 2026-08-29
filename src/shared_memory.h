@@ -96,12 +96,15 @@ typedef struct
 	char		   *query_text;
 	PwhNodeMetrics *metrics;
 	double			total_query_time;
+	bool			query_text_visible;
 } PwhSnapshotEntry;
 
 typedef struct
 {
 	u32				  count;
 	PwhSnapshotEntry *entries;
+	char			 *query_text_storage;
+	PwhNodeMetrics	 *metrics_storage;
 } PwhMetricsSnapshot;
 
 #define PWH_GET_BACKEND_ENTRY_UNSAFE(idx)                                  \

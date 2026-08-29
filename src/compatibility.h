@@ -88,7 +88,7 @@ typedef Instrumentation PwhNodeInstrumentation;
 #define PWH_INSTR_TIME_MAYBE_GET_DOUBLE(n) (n)
 #endif
 
-#if PG_VERSION_NUM >= 90500
+#if PG_VERSION_NUM >= 100000
 typedef struct
 {
 	LWLock		entry_search_lock;

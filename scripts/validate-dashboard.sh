@@ -6,6 +6,8 @@ dashboard=${1:-example/grafana/provisioning/dashboards/pg_what_is_happening.json
 
 jq -e '
   ([.templating.list[].name] | index("pid") != null) and
+  ([.templating.list[] | select(.name == "query_id" or .name == "pid" or .name == "node_id")]
+    | all(.[]; .includeAll == false and .multi == false)) and
   ([.. | objects | .expr? // empty] | all(.[];
     ((split("query_id=~\"$query_id\"") | length) ==
      (split("query_id=~\"$query_id\",pid=~\"$pid\"") | length)))) and

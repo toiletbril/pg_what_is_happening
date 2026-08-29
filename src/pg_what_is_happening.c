@@ -28,6 +28,7 @@
 
 #include "postgres.h"
 
+#include "access/htup_details.h"
 #include "access/xact.h"
 #include "catalog/pg_authid.h"
 #include "common.h"
@@ -68,12 +69,18 @@ void _PG_fini(void);
 static void query_start_hook(QueryDesc *queryDesc, i32 eflags);
 static void query_end_hook(QueryDesc *queryDesc);
 static void query_cleanup_callback(XactEvent event, void *arg);
+static void query_subxact_cleanup_callback(SubXactEvent		event,
+										   SubTransactionId my_subid,
+										   SubTransactionId parent_subid,
+										   void			   *arg);
 static void backend_exit_callback(int code, Datum arg);
 static u64	get_query_id(const QueryDesc *qd);
+static void clear_tracked_query_state(void);
 
 PWH_SHMEM_REQUEST_HOOK_DECL;
 
-static volatile bool WAS_BACKEND_INITIALIZED = false;
+static volatile bool	WAS_BACKEND_INITIALIZED = false;
+static SubTransactionId CURRENT_QUERY_SUBXID = InvalidSubTransactionId;
 
 typedef struct
 {
@@ -156,23 +163,47 @@ get_query_id(const QueryDesc *qd)
  * called.
  */
 static void
+clear_tracked_query_state(void)
+{
+	pwh_set_current_query_desc(NULL);
+	pwh_set_signal_metrics(NULL, NULL, 0);
+	CURRENT_QUERY_SUBXID = InvalidSubTransactionId;
+	if (PWH_SHMEM != NULL)
+		pwh_release_my_backend_entry();
+}
+
+static void
 query_cleanup_callback(XactEvent event, void *arg)
 {
 	unused(arg);
 
-	/*
-	 * This functions fires either on ABORT or COMMIT. Only clean up on abort.
-	 */
 	if (!PWH_IS_ABORT_EVENT(event))
 		return;
 
-	/* Clear QueryDesc pointer to prevent dangling reference. */
-	pwh_set_current_query_desc(NULL);
-	pwh_set_signal_metrics(NULL, NULL, 0);
-	pwh_release_my_backend_entry();
+	clear_tracked_query_state();
 
 	ereport(DEBUG1, (errmsg("PWH: Cleaned up query state on abort for PID %d",
 							MyProcPid)));
+}
+
+static void
+query_subxact_cleanup_callback(SubXactEvent event, SubTransactionId my_subid,
+							   SubTransactionId parent_subid, void *arg)
+{
+	unused(parent_subid);
+	unused(arg);
+
+	if (event != SUBXACT_EVENT_ABORT_SUB ||
+		CURRENT_QUERY_SUBXID == InvalidSubTransactionId ||
+		CURRENT_QUERY_SUBXID != my_subid)
+		return;
+
+	clear_tracked_query_state();
+	ereport(
+		DEBUG1,
+		(errmsg(
+			"PWH: Cleaned up query state on subtransaction abort for PID %d",
+			MyProcPid)));
 }
 
 static void
@@ -216,6 +247,7 @@ initialize_state_once_per_backend(void)
 	PWH_SHMEM = pwh_get_shared_memory_ptr();
 	/* Query backend state on error. */
 	RegisterXactCallback(query_cleanup_callback, NULL);
+	RegisterSubXactCallback(query_subxact_cleanup_callback, NULL);
 	before_shmem_exit(backend_exit_callback, (Datum) 0);
 	/* Report metrics when signaled. */
 	pwh_install_signal_handler();
@@ -225,6 +257,7 @@ initialize_state_once_per_backend(void)
 static void
 query_start_hook(QueryDesc *queryDesc, i32 eflags)
 {
+	PwhSharedMemoryBackendEntry *volatile be = NULL;
 	bool should_track = PWH_GUC_IS_ENABLED && pwh_is_regular_backend() &&
 						pwh_get_current_query_desc() == NULL &&
 						queryDesc->plannedstmt != NULL &&
@@ -239,7 +272,19 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 					   queryDesc->instrument_options, eflags)));
 
 	if (should_track)
-		queryDesc->instrument_options |= INSTRUMENT_ALL;
+	{
+		if (unlikely(!WAS_BACKEND_INITIALIZED))
+			initialize_state_once_per_backend();
+		be = pwh_get_or_create_my_backend_entry();
+		if (be != NULL)
+		{
+			queryDesc->instrument_options |= INSTRUMENT_ALL;
+			pwh_set_current_query_desc(queryDesc);
+			CURRENT_QUERY_SUBXID = GetCurrentSubTransactionId();
+		}
+		else
+			should_track = false;
+	}
 
 	if (PREV_QUERY_START_HOOK)
 	{
@@ -258,42 +303,33 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 						   ? (void *) queryDesc->planstate->instrument
 						   : NULL)));
 
-	if (!should_track)
+	if (!should_track || be == NULL)
 		return;
-
-	/* Okay, we're tracking this query. */
-
-	if (unlikely(!WAS_BACKEND_INITIALIZED))
-	{
-		initialize_state_once_per_backend();
-	}
 
 	MemoryContext old_context = CurrentMemoryContext;
 
 	PG_TRY();
 	{
-		PwhSharedMemoryBackendEntry *be = pwh_get_or_create_my_backend_entry();
+		PwhNodeMetrics *metrics = pwh_get_backend_entry_metrics(be);
+		char		   *query_text = pwh_get_backend_entry_query_text(be);
+		PwhNodeInstrumentation **instrumentation = palloc0(
+			sizeof(PwhNodeInstrumentation *) * PWH_GUC_MAX_NODES_PER_QUERY);
 
-		if (unlikely(be == NULL))
+		/* Set initial backend state and prepare for metric collection. */
+		sig_atomic_t base_sequence;
+		if (!pwh_begin_metrics_write(be, &base_sequence))
+			ereport(ERROR, (errmsg("PWH: Backend entry is being written")));
+		u64 num_nodes = pwh_remember_planstate_tree_as_metric_structure(
+			queryDesc->planstate, metrics, instrumentation,
+			PWH_GUC_MAX_NODES_PER_QUERY);
+
+		if (num_nodes == 0)
 		{
-			ereport(LOG, (errmsg("PWH: Could not allocate backend entry"),
-						  errdetail("PID %d exhausted all slots", MyProcPid)));
+			pwh_end_metrics_write(be, base_sequence);
+			clear_tracked_query_state();
 		}
 		else
 		{
-			PwhNodeMetrics *metrics = pwh_get_backend_entry_metrics(be);
-			char		   *query_text = pwh_get_backend_entry_query_text(be);
-			PwhNodeInstrumentation **instrumentation = palloc0(
-				sizeof(PwhNodeInstrumentation *) * PWH_GUC_MAX_NODES_PER_QUERY);
-
-			/* Set initial backend state and prepare for metric collection. */
-			sig_atomic_t base_sequence;
-			if (!pwh_begin_metrics_write(be, &base_sequence))
-				ereport(ERROR, (errmsg("PWH: Backend entry is being written")));
-			u64 num_nodes = pwh_remember_planstate_tree_as_metric_structure(
-				queryDesc->planstate, metrics, instrumentation,
-				PWH_GUC_MAX_NODES_PER_QUERY);
-
 			ereport(DEBUG1, (errmsg("PWH: Tracking query with %llu nodes",
 									(unsigned long long) num_nodes),
 							 errdetail("PID %d", MyProcPid)));
@@ -326,7 +362,6 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 			pwh_end_metrics_write(be, base_sequence);
 
 			/* Store the precomputed instrumentation map for the handler. */
-			pwh_set_current_query_desc(queryDesc);
 			pwh_set_signal_metrics(be, instrumentation, (u32) num_nodes);
 		}
 	}
@@ -335,9 +370,7 @@ query_start_hook(QueryDesc *queryDesc, i32 eflags)
 		MemoryContextSwitchTo(old_context);
 
 		/* Clear our state to avoid dangling references. */
-		pwh_set_current_query_desc(NULL);
-		pwh_set_signal_metrics(NULL, NULL, 0);
-		pwh_release_my_backend_entry();
+		clear_tracked_query_state();
 
 		/* Log the error but don't propagate to user query. */
 		EmitErrorReport();
@@ -397,18 +430,14 @@ query_end_hook(QueryDesc *queryDesc)
 
 			/* Clear state even if an orphan cleanup already released the slot.
 			 */
-			pwh_set_current_query_desc(NULL);
-			pwh_set_signal_metrics(NULL, NULL, 0);
-			pwh_release_my_backend_entry();
+			clear_tracked_query_state();
 		}
 		PG_CATCH();
 		{
 			MemoryContextSwitchTo(old_context);
 
 			/* Clear our state to avoid dangling references. */
-			pwh_set_current_query_desc(NULL);
-			pwh_set_signal_metrics(NULL, NULL, 0);
-			pwh_release_my_backend_entry();
+			clear_tracked_query_state();
 
 			/* Log the error but don't propagate to user query. */
 			EmitErrorReport();
@@ -460,13 +489,22 @@ v1_status_f(PG_FUNCTION_ARGS)
 		MemoryContext	 oldcontext =
 			MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
-		TupleDesc td = pwh_create_v1_status_tupdesc();
-		PWH_TUPLE_DESC_FINALIZE(td);
+		TupleDesc td;
+		if (get_call_result_type(fcinfo, NULL, &td) != TYPEFUNC_COMPOSITE ||
+			(td->natts != PWH_V1_STATUS_LEGACY_TUPLE_COUNT &&
+			 td->natts != PWH_V1_STATUS_TUPLE_COUNT))
+			ereport(
+				ERROR,
+				(errmsg(
+					"PWH: v1_status_f has an unsupported output contract")));
 		funcctx->tuple_desc = BlessTupleDesc(td);
 
 		pwh_refresh_metrics();
 		PwhStatusState *state = palloc0(sizeof(PwhStatusState));
 		state->snapshot = pwh_take_metrics_snapshot();
+		for (u32 i = 0; i < state->snapshot->count; i++)
+			state->snapshot->entries[i].query_text_visible =
+				can_view_query_text(state->snapshot->entries[i].owner_oid);
 		funcctx->user_fctx = state;
 
 		MemoryContextSwitchTo(oldcontext);
@@ -482,7 +520,7 @@ v1_status_f(PG_FUNCTION_ARGS)
 		if (state->node_index < entry->count_of_metrics)
 		{
 			PwhNodeMetrics *node = &entry->metrics[state->node_index];
-			const char	   *query_text = can_view_query_text(entry->owner_oid)
+			const char	   *query_text = entry->query_text_visible
 											 ? entry->query_text
 											 : "<insufficient privilege>";
 
@@ -491,7 +529,8 @@ v1_status_f(PG_FUNCTION_ARGS)
 
 			pwh_fill_v1_status_tuple(values, nulls, entry->backend_pid,
 									 entry->query_id, query_text, node,
-									 entry->total_query_time);
+									 entry->total_query_time,
+									 (u32) funcctx->tuple_desc->natts);
 
 			HeapTuple tuple =
 				heap_form_tuple(funcctx->tuple_desc, values, nulls);

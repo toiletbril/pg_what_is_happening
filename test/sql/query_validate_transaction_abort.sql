@@ -1,8 +1,7 @@
 -- Test cleanup when transaction aborts.
 -- This test verifies that the extension properly cleans up metrics after abort.
 
--- Launch a query in a transaction that will abort.
-\! psql -d contrib_regression -c "BEGIN; SELECT pg_sleep(0.2), COUNT(*) FROM orders o JOIN users u ON o.user_id = u.user_id; SELECT 1 / 0;" > /dev/null 2>&1 &
+\! PGAPPNAME=pwh_caught_abort psql -X -d contrib_regression -c "BEGIN" -c "SAVEPOINT pwh_test" -c "SELECT COUNT(*) + 1 / CASE WHEN pg_sleep(0.3) IS NULL THEN 0 ELSE 0 END FROM orders o JOIN users u ON o.user_id = u.user_id" -c "ROLLBACK TO SAVEPOINT pwh_test" -c "SELECT pg_sleep(1)" -c "COMMIT" > /dev/null 2>&1 &
 
 SELECT pg_sleep(0.05);
 
@@ -10,15 +9,25 @@ SELECT pg_sleep(0.05);
 SELECT
   COUNT(*) > 0 AS query_tracked_during_execution
 FROM what_is_happening.v1_status
-WHERE backend_pid <> pg_backend_pid() AND query_text LIKE '%COUNT(*)%' AND query_text LIKE '%orders%' AND query_text LIKE '%users%';
+WHERE backend_pid IN (
+  SELECT pid FROM pg_stat_activity WHERE application_name = 'pwh_caught_abort'
+) AND query_text LIKE '%COUNT(*)%orders%users%';
 
 -- Wait for transaction to abort.
-SELECT pg_sleep(0.3);
+SELECT pg_sleep(0.4);
 
 -- Verify cleanup after abort - query should be gone from v1_status.
 SELECT
   COUNT(*) = 0 AS query_cleaned_up_after_abort
 FROM what_is_happening.v1_status
-WHERE backend_pid <> pg_backend_pid() AND query_text LIKE '%COUNT(*)%' AND query_text LIKE '%orders%' AND query_text LIKE '%users%';
+WHERE backend_pid IN (
+  SELECT pid FROM pg_stat_activity WHERE application_name = 'pwh_caught_abort'
+) AND query_text LIKE '%COUNT(*)%orders%users%';
+
+SELECT COUNT(*) = 1 AS backend_survived_caught_abort
+FROM pg_stat_activity
+WHERE application_name = 'pwh_caught_abort';
+
+SELECT pg_sleep(0.8);
 
 -- End.

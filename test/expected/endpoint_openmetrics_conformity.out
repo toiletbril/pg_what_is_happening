@@ -4,14 +4,31 @@ SELECT pg_advisory_lock(12351);
  
 (1 row)
 
-\! psql -d contrib_regression -c "SELECT pg_advisory_lock(12351), COUNT(*) FROM orders o JOIN users u ON o.user_id = u.user_id LIMIT 10; SELECT pg_advisory_unlock(12351);" > /dev/null 2>&1 &
+ALTER SYSTEM SET what_is_happening.signal_timeout_ms = 10000;
+ALTER SYSTEM SET what_is_happening.sample_interval_ms = 100;
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+(1 row)
+
+\! curl --silent --max-time 5 http://localhost:9187/metrics > /dev/null
+\! PGAPPNAME=pwh_cache_freshness psql -X -v ON_ERROR_STOP=1 -d contrib_regression -c "SELECT pg_advisory_lock(12351), COUNT(*) FROM orders o JOIN users u ON o.user_id = u.user_id LIMIT 10; SELECT pg_advisory_unlock(12351);" > /dev/null 2>&1 &
 SELECT pg_sleep(0.2);
  pg_sleep 
 ----------
  
 (1 row)
 
-\! curl -sD /tmp/pwh_openmetrics_headers.txt http://localhost:9187/metrics > /tmp/pwh_openmetrics.txt
+\! curl --fail --silent --show-error --max-time 5 -D /tmp/pwh_openmetrics_headers.txt http://localhost:9187/metrics > /tmp/pwh_openmetrics.txt
+\! pid=$(psql -X -At -d contrib_regression -c "SELECT pid FROM pg_stat_activity WHERE application_name = 'pwh_cache_freshness'"); grep -c "pid=\"$pid\"" /tmp/pwh_openmetrics.txt > /tmp/pwh_fresh_pid_count.txt
+SELECT (SELECT pg_read_file('/tmp/pwh_fresh_pid_count.txt')::text::int) > 0
+  AS cache_uses_sample_interval;
+ cache_uses_sample_interval 
+----------------------------
+ t
+(1 row)
+
 \! grep -c "^# HELP [a-zA-Z_:][a-zA-Z0-9_:]* " /tmp/pwh_openmetrics.txt > /tmp/pwh_help_count.txt
 \! grep -c "^# TYPE [a-zA-Z_:][a-zA-Z0-9_:]* " /tmp/pwh_openmetrics.txt > /tmp/pwh_type_count.txt
 SELECT
@@ -66,6 +83,62 @@ SELECT pg_sleep(2);
  pg_sleep 
 ----------
  
+(1 row)
+
+\! perl -MIO::Socket::INET -e '$s=IO::Socket::INET->new(PeerAddr=>"127.0.0.1",PeerPort=>9187,Proto=>"tcp") or exit 1; print $s "G"; sleep 2' &
+SELECT pg_sleep(0.1);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+\set slow_client_code `curl --silent --max-time 1.5 -o /dev/null -w "%{http_code}" http://localhost:9187/metrics`
+SELECT :'slow_client_code' = '200' AS slow_client_does_not_block_server;
+ slow_client_does_not_block_server 
+-----------------------------------
+ t
+(1 row)
+
+ALTER SYSTEM SET what_is_happening.metrics_max_response_bytes = 1024;
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+(1 row)
+
+SELECT pg_sleep(0.1);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+\set bounded_code `curl --silent --max-time 5 -o /dev/null -w "%{http_code}" http://localhost:9187/metrics`
+SELECT :'bounded_code' = '500' AS oversized_response_is_rejected;
+ oversized_response_is_rejected 
+--------------------------------
+ t
+(1 row)
+
+ALTER SYSTEM RESET what_is_happening.metrics_max_response_bytes;
+ALTER SYSTEM RESET what_is_happening.signal_timeout_ms;
+ALTER SYSTEM RESET what_is_happening.sample_interval_ms;
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+(1 row)
+
+SELECT pg_sleep(0.1);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+\set restored_code `curl --silent --max-time 5 -o /dev/null -w "%{http_code}" http://localhost:9187/metrics`
+SELECT :'restored_code' = '200' AS response_limit_is_reloadable;
+ response_limit_is_reloadable 
+------------------------------
+ t
 (1 row)
 
 \! rm -f /tmp/pwh_*.txt

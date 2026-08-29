@@ -137,3 +137,38 @@ jobs:
         env:
           WITH_BGWORKER: no
         run: POSTGRES_SOURCE=$(pwd)/postgres ./Shfile.sh build
+
+  compile-release:
+    name: Release build with ${{ matrix.http_backend }}
+    needs: build-image
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        http_backend: [mongoose, dumb]
+    environment:
+      name: testing
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Clone PostgreSQL
+        run: git clone --depth 1 --branch REL_17_STABLE https://github.com/postgres/postgres.git postgres
+
+      - name: Login to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull cached image
+        run: |
+          docker pull ${{ needs.build-image.outputs.image }}
+          docker tag ${{ needs.build-image.outputs.image }} pg-what-is-happening-test
+
+      - name: Compile optimized artifact with strict warnings
+        env:
+          CFLAGS: -Werror
+          HTTP_BACKEND: ${{ matrix.http_backend }}
+        run: POSTGRES_SOURCE=$(pwd)/postgres ./Shfile.sh build

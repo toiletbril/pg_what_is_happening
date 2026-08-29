@@ -27,7 +27,7 @@
 #define PWH_CREATE_TUPLE_DESC(natts) CreateTemplateTupleDesc(natts, false)
 #define PWH_TUPLE_DESC_FINALIZE(tupdesc) ((void) 0)
 
-#define PWH_BGWORKER_BYPASS_ALLOWCONN BGWORKER_BYPASS_ALLOWCONN
+#define PWH_BGWORKER_BYPASS_ALLOWCONN 0
 
 #define PWH_COPY_BUFUSAGE(metrics, instr, idx)           \
 	do                                                   \

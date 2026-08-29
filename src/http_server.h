@@ -43,6 +43,7 @@ typedef struct
 	char	   *headers;
 	char	   *body;
 	u64			body_len;
+	bool		body_owned;
 } HttpResponse;
 
 typedef struct HttpServer HttpServer;
@@ -81,6 +82,8 @@ extern const char *pwh_http_server_backend_name(void);
 
 extern void pwh_http_response_set_text(HttpResponse *resp, u32 status_code,
 									   char *body);
+extern void pwh_http_response_set_borrowed_text(HttpResponse *resp,
+												u32 status_code, char *body);
 extern void pwh_http_response_destroy_body(HttpResponse *resp);
 
 #endif /* PWH_HTTP_SERVER_H */

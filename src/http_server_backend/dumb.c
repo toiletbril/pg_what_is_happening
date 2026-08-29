@@ -29,8 +29,11 @@
 
 #include "../common.h"
 #include "../http_server.h"
+#include "utils/timestamp.h"
 
 #define DUMB_HTTP_BUFFER_SIZE 8192
+#define DUMB_HTTP_OPERATION_TIMEOUT_US 250000
+#define DUMB_HTTP_TOTAL_TIMEOUT_US 1000000
 
 typedef struct DumbHttpServer
 {
@@ -49,7 +52,9 @@ static void dumb_set_handler(HttpServer *server, HttpRequestHandlerFn handler,
 							 void *user_data);
 static i32	dumb_run(HttpServer *server);
 static void dumb_stop(HttpServer *server);
-static void send_all(i32 fd, const char *data, u64 length);
+static bool send_all(i32 fd, const char *data, u64 length,
+					 TimestampTz started_at);
+static bool deadline_expired(TimestampTz started_at);
 
 static const HttpServerVtable dumb_vtable = {
 	.createFn = dumb_create,
@@ -88,12 +93,26 @@ dumb_create(const char *listen_addr)
 		return NULL;
 	}
 
-	/* Parse port from address string (format: "host:port" or ":port"). */
-	colon = strrchr(listen_addr, ':');
+	/* Parse port from address string, including bracketed IPv6 hosts. */
+	const char *host_start = listen_addr;
+	if (listen_addr[0] == '[')
+	{
+		const char *close = strchr(listen_addr + 1, ']');
+		if (close == NULL || close[1] != ':')
+			goto invalid_address;
+		host_start = listen_addr + 1;
+		colon = close + 1;
+		host_len = close - host_start;
+	}
+	else
+	{
+		colon = strrchr(listen_addr, ':');
+		if (colon != NULL && strchr(listen_addr, ':') != colon)
+			goto invalid_address;
+		host_len = colon ? (u64) (colon - listen_addr) : strlen(listen_addr);
+	}
 	if (colon)
 	{
-		if (strchr(listen_addr, ':') != colon)
-			goto invalid_address;
 		port_text = colon + 1;
 		errno = 0;
 		parsed_port = strtol(port_text, &port_end, 10);
@@ -101,12 +120,10 @@ dumb_create(const char *listen_addr)
 			parsed_port < 1 || parsed_port > 65535)
 			goto invalid_address;
 		port = (i32) parsed_port;
-		host_len = colon - listen_addr;
 	}
 	else
 	{
 		port = 9187; /* Default port. */
-		host_len = strlen(listen_addr);
 	}
 
 	impl->port = port;
@@ -116,7 +133,7 @@ dumb_create(const char *listen_addr)
 		snprintf(impl->host, sizeof(impl->host), "0.0.0.0");
 	else
 	{
-		memcpy(impl->host, listen_addr, host_len);
+		memcpy(impl->host, host_start, host_len);
 		impl->host[host_len] = '\0';
 	}
 	impl->listen_fd = -1;
@@ -241,7 +258,7 @@ free_request(HttpRequest *req)
 }
 
 static void
-send_response(i32 client_fd, const HttpResponse *resp)
+send_response(i32 client_fd, const HttpResponse *resp, TimestampTz started_at)
 {
 	char response_buffer[1024];
 	i32	 response_len =
@@ -258,25 +275,41 @@ send_response(i32 client_fd, const HttpResponse *resp)
 
 	if (response_len > 0 && response_len < (i32) sizeof(response_buffer))
 	{
-		send_all(client_fd, response_buffer, (u64) response_len);
+		if (!send_all(client_fd, response_buffer, (u64) response_len,
+					  started_at))
+			return;
 		if (resp->body != NULL)
-			send_all(client_fd, resp->body, resp->body_len);
+			send_all(client_fd, resp->body, resp->body_len, started_at);
 	}
 }
 
-static void
-send_all(i32 fd, const char *data, u64 length)
+static bool
+deadline_expired(TimestampTz started_at)
+{
+	TimestampTz now = GetCurrentTimestamp();
+	return now >= started_at && now - started_at >= DUMB_HTTP_TOTAL_TIMEOUT_US;
+}
+
+static bool
+send_all(i32 fd, const char *data, u64 length, TimestampTz started_at)
 {
 	while (length > 0)
 	{
+		if (deadline_expired(started_at))
+			return false;
+#ifdef MSG_NOSIGNAL
+		ssize_t sent = send(fd, data, length, MSG_NOSIGNAL);
+#else
 		ssize_t sent = send(fd, data, length, 0);
+#endif
 		if (sent < 0 && errno == EINTR)
 			continue;
 		if (sent <= 0)
-			return;
+			return false;
 		data += sent;
 		length -= sent;
 	}
+	return true;
 }
 
 static void
@@ -286,15 +319,26 @@ handle_connection(DumbHttpServer *impl, i32 client_fd)
 	ssize_t		   bytes_read;
 	HttpRequest	   req;
 	HttpResponse   resp;
-	struct timeval timeout = {.tv_sec = 2, .tv_usec = 0};
-	u64			   offset = 0;
-	bool		   request_complete = false;
+	struct timeval timeout = {
+		.tv_sec = 0,
+		.tv_usec = DUMB_HTTP_OPERATION_TIMEOUT_US,
+	};
+	TimestampTz started_at = GetCurrentTimestamp();
+	u64			offset = 0;
+	bool		request_complete = false;
 
 	setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 	setsockopt(client_fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+#ifdef SO_NOSIGPIPE
+	i32 no_sigpipe = 1;
+	setsockopt(client_fd, SOL_SOCKET, SO_NOSIGPIPE, &no_sigpipe,
+			   sizeof(no_sigpipe));
+#endif
 
 	while (offset < sizeof(buffer) - 1)
 	{
+		if (deadline_expired(started_at))
+			break;
 		bytes_read =
 			recv(client_fd, buffer + offset, sizeof(buffer) - 1 - offset, 0);
 		if (bytes_read < 0 && errno == EINTR)
@@ -322,7 +366,7 @@ handle_connection(DumbHttpServer *impl, i32 client_fd)
 	{
 		memset(&resp, 0, sizeof(resp));
 		pwh_http_response_set_text(&resp, 400, "Bad Request");
-		send_response(client_fd, &resp);
+		send_response(client_fd, &resp, started_at);
 		pwh_http_response_destroy_body(&resp);
 		close(client_fd);
 		return;
@@ -344,7 +388,7 @@ handle_connection(DumbHttpServer *impl, i32 client_fd)
 		pwh_http_response_set_text(&resp, 404, "Not Found");
 	}
 
-	send_response(client_fd, &resp);
+	send_response(client_fd, &resp, started_at);
 
 	/* Cleanup. */
 	pwh_http_response_destroy_body(&resp);

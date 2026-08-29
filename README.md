@@ -36,7 +36,7 @@ SELECT * FROM what_is_happening.v1_status;
 |--------------------------------|----------|--------------------------------------------------------------|
 |  Identification                |          |                                                              |
 | `backend_pid`                  | `int4`   | Process ID of the backend executing the query.               |
-| `query_id`                     | `int8`   | Unique identifier for the query.                             |
+| `query_id`                     | `int8`   | Stable fingerprint of the statement. Use `backend_pid` to distinguish concurrent copies. |
 | `query_text`                   | `text`   | The SQL query text, subject to activity visibility rules.    |
 | `node_id`                      | `int4`   | Sequential ID of this plan node in the tree.                 |
 | `parent_node_id`               | `int4`   | ID of the parent node in the plan tree.                      |
@@ -133,7 +133,7 @@ $$
 
 Actual cardinality is typically much lower as most queries have fewer nodes.
 
-Each unique `query_id` creates new time series. The extension does not
+Each distinct combination of `query_id` and `pid` creates new time series. The extension does not
 normalize queries like `pg_stat_statements` does. Use `min_cost_to_track` to
 filter out cheap queries and reduce cardinality on busy systems.
 
@@ -153,6 +153,8 @@ visibility the Postgres executor can provide.
 | `what_is_happening.max_nodes_per_query`    | `128`            | 16-256           | Restart  | Maximum plan nodes tracked per query. Plans with more nodes get truncated.                          |
 | `what_is_happening.max_query_text_length`  | `1024`           | 64-8192          | Restart  | Maximum bytes of query text stored. Longer queries get truncated.                                   |
 | `what_is_happening.signal_timeout_ms`      | `32`             | 1-10000          | `SIGHUP` | Maximum time to wait for active backends to refresh metrics, in milliseconds.                       |
+| `what_is_happening.sample_interval_ms`     | `250`            | 100-60000        | `SIGHUP` | Minimum interval between shared metric samples and endpoint cache rebuilds, in milliseconds.        |
+| `what_is_happening.metrics_max_response_bytes` | `67108864`  | 1024-1073741824  | `SIGHUP` | Maximum formatted endpoint response size. Only available if compiled with `WITH_BGWORKER`.          |
 | `what_is_happening.min_cost_to_track`      | `50000.0`        | 0.0-inf          | `SIGHUP` | Minimum total cost of a query to get tracked by the extension.                                      |
 
 ## Performance

@@ -20,15 +20,8 @@ ifneq ($(filter $(HTTP_BACKEND),mongoose dumb),$(HTTP_BACKEND))
 $(error Invalid HTTP_BACKEND=$(HTTP_BACKEND). Available backends are "mongoose", "dumb")
 endif
 
-OS_INFO := $(shell uname -rvom || echo "<no uname>")
-COMMIT_HASH := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-
 DEFINES := \
-	-DCOMMIT_HASH="\"$(COMMIT_HASH)\"" \
-	-DOS_INFO="\"$(OS_INFO)\"" \
-	-DBUILD_MODE="\"$(MODE)\"" \
-	-DHTTP_BACKEND="\"$(HTTP_BACKEND)\"" \
-	-DENVCFLAGS="\"$(ENVCFLAGS)\""
+	-DHTTP_BACKEND="\"$(HTTP_BACKEND)\""
 
 WARNINGS := \
 	-Wall \

@@ -132,8 +132,16 @@ mongoose_create(const char *listen_addr)
 
 	/* Format listen address - if it doesn't start with http://, prepend it. */
 	if (strncmp(listen_addr, "http://", 7) == 0)
-		snprintf(impl->listen_address, sizeof(impl->listen_address), "%s",
-				 listen_addr);
+	{
+		if (snprintf(impl->listen_address, sizeof(impl->listen_address), "%s",
+					 listen_addr) >= (i32) sizeof(impl->listen_address))
+		{
+			mg_mgr_free(&impl->mgr);
+			free(impl);
+			free(server);
+			return NULL;
+		}
+	}
 	else
 	{
 		if (snprintf(impl->listen_address, sizeof(impl->listen_address),

@@ -201,7 +201,7 @@ pwh_get_or_create_my_backend_entry_impl(bool should_create,
 
 	if (should_create)
 	{
-		ereport(LOG,
+		ereport(DEBUG1,
 				(errmsg("PWH: All backend entries exhausted"),
 				 errdetail("All %d slots are in use, PID %d cannot be tracked",
 						   PWH_GUC_MAX_TRACKED_QUERIES, MyProcPid)));
@@ -331,10 +331,10 @@ pwh_cleanup_orphaned_slots(void)
 void
 pwh_refresh_metrics(void)
 {
-	TimestampTz	  now = GetCurrentTimestamp();
-	TimestampTz	  freshness_us = (TimestampTz) PWH_GUC_SIGNAL_TIMEOUT_MS * 1000;
-	u32			 *pids;
-	u32			 *slot_indexes;
+	TimestampTz now = GetCurrentTimestamp();
+	TimestampTz freshness_us = (TimestampTz) PWH_GUC_SAMPLE_INTERVAL_MS * 1000;
+	u32		   *pids;
+	u32		   *slot_indexes;
 	sig_atomic_t *generations;
 	u32			  count = 0;
 	u64			  observed_generation;
@@ -405,8 +405,7 @@ pwh_refresh_metrics(void)
 			PwhSharedMemoryBackendEntry *be =
 				PWH_GET_BACKEND_ENTRY_UNSAFE(slot_indexes[i]);
 			if (be->backend_pid != (sig_atomic_t) pids[i] ||
-				be->poll_generation != generations[i] ||
-				!is_postgres_backend(pids[i]))
+				be->poll_generation != generations[i])
 				generations[i] = -1;
 			else
 				pending++;
@@ -435,7 +434,19 @@ pwh_refresh_metrics(void)
 PwhMetricsSnapshot *
 pwh_take_metrics_snapshot(void)
 {
+	typedef struct
+	{
+		u32			 slot_index;
+		sig_atomic_t backend_pid;
+		u32			 count_of_metrics;
+	} SnapshotCandidate;
+
 	PwhMetricsSnapshot *snapshot = palloc0(sizeof(PwhMetricsSnapshot));
+	SnapshotCandidate  *candidates =
+		palloc(sizeof(SnapshotCandidate) * PWH_GUC_MAX_TRACKED_QUERIES);
+	u32 candidate_count = 0;
+	u32 metrics_count = 0;
+
 	snapshot->entries =
 		palloc0(sizeof(PwhSnapshotEntry) * PWH_GUC_MAX_TRACKED_QUERIES);
 
@@ -446,42 +457,74 @@ pwh_take_metrics_snapshot(void)
 		if (!pwh_is_backend_entry_active(be) || be->count_of_metrics == 0 ||
 			be->count_of_metrics > (u32) PWH_GUC_MAX_NODES_PER_QUERY)
 			continue;
+		candidates[candidate_count].slot_index = (u32) i;
+		candidates[candidate_count].backend_pid = be->backend_pid;
+		candidates[candidate_count].count_of_metrics = be->count_of_metrics;
+		metrics_count += be->count_of_metrics;
+		candidate_count++;
+	}
+	PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
 
+	if (candidate_count > 0)
+		snapshot->query_text_storage =
+			palloc((Size) candidate_count * PWH_GUC_MAX_QUERY_TEXT_LEN);
+	if (metrics_count > 0)
+		snapshot->metrics_storage =
+			palloc(sizeof(PwhNodeMetrics) * (Size) metrics_count);
+
+	u32 metrics_offset = 0;
+	for (u32 i = 0; i < candidate_count; i++)
+	{
+		SnapshotCandidate			*candidate = &candidates[i];
+		PwhSharedMemoryBackendEntry *be =
+			PWH_GET_BACKEND_ENTRY_UNSAFE(candidate->slot_index);
 		PwhSnapshotEntry *dst = &snapshot->entries[snapshot->count];
+		dst->query_text = snapshot->query_text_storage +
+						  ((Size) snapshot->count * PWH_GUC_MAX_QUERY_TEXT_LEN);
+		dst->metrics = snapshot->metrics_storage + metrics_offset;
+
 		for (u32 attempts = 0; attempts < 4; attempts++)
 		{
+			PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_SHARED);
+			if (be->backend_pid != candidate->backend_pid ||
+				be->count_of_metrics != candidate->count_of_metrics)
+			{
+				PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+				break;
+			}
 			sig_atomic_t before = be->write_sequence;
 			if ((before & 1) != 0)
+			{
+				PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
 				continue;
+			}
+			PWH_MEMORY_BARRIER();
 			dst->backend_pid = be->backend_pid;
 			dst->owner_oid = be->owner_oid;
 			dst->query_id = be->query_id;
 			dst->query_start_time = be->query_start_time;
 			dst->count_of_metrics = be->count_of_metrics;
-			dst->query_text = palloc(PWH_GUC_MAX_QUERY_TEXT_LEN);
-			dst->metrics =
-				palloc(sizeof(PwhNodeMetrics) * dst->count_of_metrics);
 			memcpy(dst->query_text, pwh_get_backend_entry_query_text(be),
 				   PWH_GUC_MAX_QUERY_TEXT_LEN);
 			memcpy(dst->metrics, pwh_get_backend_entry_metrics(be),
 				   sizeof(PwhNodeMetrics) * dst->count_of_metrics);
 			PWH_MEMORY_BARRIER();
-			if (before == be->write_sequence && (before & 1) == 0 &&
-				dst->backend_pid == be->backend_pid)
+			bool consistent = before == be->write_sequence &&
+							  (before & 1) == 0 &&
+							  dst->backend_pid == be->backend_pid;
+			PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+			if (consistent)
 			{
 				for (u32 j = 0; j < dst->count_of_metrics; j++)
 					dst->total_query_time +=
 						dst->metrics[j].execution.total_time_us;
 				snapshot->count++;
+				metrics_offset += dst->count_of_metrics;
 				break;
 			}
-			pfree(dst->metrics);
-			pfree(dst->query_text);
-			dst->metrics = NULL;
-			dst->query_text = NULL;
 		}
 	}
-	PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+	pfree(candidates);
 	return snapshot;
 }
 
@@ -491,11 +534,10 @@ pwh_free_metrics_snapshot(PwhMetricsSnapshot *snapshot)
 	if (snapshot == NULL)
 		return;
 
-	for (u32 i = 0; i < snapshot->count; i++)
-	{
-		pfree(snapshot->entries[i].metrics);
-		pfree(snapshot->entries[i].query_text);
-	}
+	if (snapshot->metrics_storage != NULL)
+		pfree(snapshot->metrics_storage);
+	if (snapshot->query_text_storage != NULL)
+		pfree(snapshot->query_text_storage);
 	pfree(snapshot->entries);
 	pfree(snapshot);
 }

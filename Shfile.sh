@@ -59,6 +59,7 @@ docker_run() {
              -e "PWH_HOST_GID=$host_gid" \
              -e "HTTP_BACKEND=${HTTP_BACKEND:-mongoose}" \
              -e "WITH_BGWORKER=${WITH_BGWORKER:-yes}" \
+             -e "CFLAGS=${CFLAGS:-}" \
              -v "$PWD:/pg_what_is_happening" \
              -v "$POSTGRES_SOURCE:/postgres:ro" "$@"
 }

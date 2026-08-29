@@ -38,6 +38,15 @@ extern i32 PWH_GUC_MAX_QUERY_TEXT_LEN;
 #define PWH_GUC_SIGNAL_TIMEOUT_MS_NAME (PWH_GUC_SCHEMA "signal_timeout_ms")
 extern i32 PWH_GUC_SIGNAL_TIMEOUT_MS;
 
+#define PWH_GUC_SAMPLE_INTERVAL_MS_NAME (PWH_GUC_SCHEMA "sample_interval_ms")
+extern i32 PWH_GUC_SAMPLE_INTERVAL_MS;
+
+#ifdef WITH_BGWORKER
+#define PWH_GUC_METRICS_MAX_RESPONSE_BYTES_NAME \
+	(PWH_GUC_SCHEMA "metrics_max_response_bytes")
+extern i32 PWH_GUC_METRICS_MAX_RESPONSE_BYTES;
+#endif
+
 #define PWH_GUC_MIN_COST_TO_TRACK_NAME (PWH_GUC_SCHEMA "min_cost_to_track")
 extern double PWH_GUC_MIN_COST_TO_TRACK;
 
