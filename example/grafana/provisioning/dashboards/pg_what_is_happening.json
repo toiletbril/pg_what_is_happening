@@ -175,7 +175,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max by (query_id) (pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\"}) * on(query_id) group_left(query_text, pid) pg_what_is_happening_query_info{query_id=~\"$query_id\"}",
+          "expr": "max by (query_id, pid) (pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",pid=~\"$pid\"}) * on(query_id, pid) group_left(query_text) pg_what_is_happening_query_info{query_id=~\"$query_id\",pid=~\"$pid\"}",
           "legendFormat": "q={{query_id}} PID={{pid}}",
           "refId": "A"
         }
@@ -252,7 +252,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count(pg_what_is_happening_active_query_node_spill_file_writes{query_id=~\"$query_id\",node_id=~\"$node_id\"} > 0) OR vector(0)",
+          "expr": "count(pg_what_is_happening_active_query_node_spill_file_writes{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"} > 0) OR vector(0)",
           "legendFormat": "Nodes Spilling",
           "refId": "A"
         }
@@ -367,7 +367,7 @@
               },
               {
                 "id": "unit",
-                "value": "µs"
+                "value": "us"
               }
             ]
           },
@@ -383,7 +383,7 @@
               },
               {
                 "id": "unit",
-                "value": "µs"
+                "value": "us"
               }
             ]
           },
@@ -517,7 +517,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_replace(label_replace(label_join(pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\"), \"title\", \"$1\", \"node_tag\", \"(.*)\"), \"subtitle\", \"n=$1\", \"node_id\", \"(.*)\")",
+          "expr": "label_replace(label_replace(label_join(pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",pid=~\"$pid\"}, \"id\", \":\", \"pid\", \"query_id\", \"node_id\"), \"title\", \"$1\", \"node_tag\", \"(.*)\"), \"subtitle\", \"n=$1\", \"node_id\", \"(.*)\")",
           "format": "table",
           "instant": true,
           "refId": "A"
@@ -527,7 +527,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "expr": "label_join(pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\",pid=~\"$pid\"}, \"id\", \":\", \"pid\", \"query_id\", \"node_id\")",
           "format": "table",
           "instant": true,
           "refId": "B"
@@ -537,7 +537,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(clamp_max(pg_what_is_happening_active_query_node_time_percent{query_id=~\"$query_id\"} / 100, 1), \"id\", \":\", \"query_id\", \"node_id\")",
+          "expr": "label_join(clamp_max(pg_what_is_happening_active_query_node_time_percent{query_id=~\"$query_id\",pid=~\"$pid\"} / 100, 1), \"id\", \":\", \"pid\", \"query_id\", \"node_id\")",
           "format": "table",
           "instant": true,
           "refId": "C"
@@ -547,7 +547,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(clamp_min(1 - pg_what_is_happening_active_query_node_time_percent{query_id=~\"$query_id\"} / 100, 0), \"id\", \":\", \"query_id\", \"node_id\")",
+          "expr": "label_join(clamp_min(1 - pg_what_is_happening_active_query_node_time_percent{query_id=~\"$query_id\",pid=~\"$pid\"} / 100, 0), \"id\", \":\", \"pid\", \"query_id\", \"node_id\")",
           "format": "table",
           "instant": true,
           "refId": "D"
@@ -557,7 +557,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(pg_what_is_happening_active_query_node_time_percent{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "expr": "label_join(pg_what_is_happening_active_query_node_time_percent{query_id=~\"$query_id\",pid=~\"$pid\"}, \"id\", \":\", \"pid\", \"query_id\", \"node_id\")",
           "format": "table",
           "instant": true,
           "refId": "E"
@@ -567,7 +567,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(pg_what_is_happening_active_query_node_startup_time_us{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "expr": "label_join(pg_what_is_happening_active_query_node_startup_time_us{query_id=~\"$query_id\",pid=~\"$pid\"}, \"id\", \":\", \"pid\", \"query_id\", \"node_id\")",
           "format": "table",
           "instant": true,
           "refId": "F"
@@ -577,7 +577,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(pg_what_is_happening_active_query_node_total_time_us{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "expr": "label_join(pg_what_is_happening_active_query_node_total_time_us{query_id=~\"$query_id\",pid=~\"$pid\"}, \"id\", \":\", \"pid\", \"query_id\", \"node_id\")",
           "format": "table",
           "instant": true,
           "refId": "G"
@@ -587,7 +587,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(pg_what_is_happening_active_query_node_loops_executed{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "expr": "label_join(pg_what_is_happening_active_query_node_loops_executed{query_id=~\"$query_id\",pid=~\"$pid\"}, \"id\", \":\", \"pid\", \"query_id\", \"node_id\")",
           "format": "table",
           "instant": true,
           "refId": "H"
@@ -597,7 +597,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "expr": "label_join(pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\",pid=~\"$pid\"}, \"id\", \":\", \"pid\", \"query_id\", \"node_id\")",
           "format": "table",
           "instant": true,
           "refId": "I"
@@ -607,7 +607,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "expr": "label_join(pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\",pid=~\"$pid\"}, \"id\", \":\", \"pid\", \"query_id\", \"node_id\")",
           "format": "table",
           "instant": true,
           "refId": "J"
@@ -617,7 +617,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(pg_what_is_happening_active_query_node_local_cache_hits{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "expr": "label_join(pg_what_is_happening_active_query_node_local_cache_hits{query_id=~\"$query_id\",pid=~\"$pid\"}, \"id\", \":\", \"pid\", \"query_id\", \"node_id\")",
           "format": "table",
           "instant": true,
           "refId": "K"
@@ -627,7 +627,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(pg_what_is_happening_active_query_node_local_cache_misses{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "expr": "label_join(pg_what_is_happening_active_query_node_local_cache_misses{query_id=~\"$query_id\",pid=~\"$pid\"}, \"id\", \":\", \"pid\", \"query_id\", \"node_id\")",
           "format": "table",
           "instant": true,
           "refId": "L"
@@ -637,7 +637,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(pg_what_is_happening_active_query_node_spill_file_reads{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "expr": "label_join(pg_what_is_happening_active_query_node_spill_file_reads{query_id=~\"$query_id\",pid=~\"$pid\"}, \"id\", \":\", \"pid\", \"query_id\", \"node_id\")",
           "format": "table",
           "instant": true,
           "refId": "M"
@@ -647,7 +647,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(pg_what_is_happening_active_query_node_spill_file_writes{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "expr": "label_join(pg_what_is_happening_active_query_node_spill_file_writes{query_id=~\"$query_id\",pid=~\"$pid\"}, \"id\", \":\", \"pid\", \"query_id\", \"node_id\")",
           "format": "table",
           "instant": true,
           "refId": "N"
@@ -657,7 +657,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(pg_what_is_happening_active_query_node_rows_filtered_by_joins{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "expr": "label_join(pg_what_is_happening_active_query_node_rows_filtered_by_joins{query_id=~\"$query_id\",pid=~\"$pid\"}, \"id\", \":\", \"pid\", \"query_id\", \"node_id\")",
           "format": "table",
           "instant": true,
           "refId": "O"
@@ -667,7 +667,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(pg_what_is_happening_active_query_node_rows_filtered_by_expressions{query_id=~\"$query_id\"}, \"id\", \":\", \"query_id\", \"node_id\")",
+          "expr": "label_join(pg_what_is_happening_active_query_node_rows_filtered_by_expressions{query_id=~\"$query_id\",pid=~\"$pid\"}, \"id\", \":\", \"pid\", \"query_id\", \"node_id\")",
           "format": "table",
           "instant": true,
           "refId": "P"
@@ -677,7 +677,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_join(label_join(label_join(pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",parent_node_id!=\"-1\"}, \"source\", \":\", \"query_id\", \"parent_node_id\"), \"target\", \":\", \"query_id\", \"node_id\"), \"id\", \"->\", \"query_id\", \"parent_node_id\", \"node_id\")",
+          "expr": "label_join(label_join(label_join(pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",pid=~\"$pid\",parent_node_id!=\"-1\"}, \"source\", \":\", \"pid\", \"query_id\", \"parent_node_id\"), \"target\", \":\", \"pid\", \"query_id\", \"node_id\"), \"id\", \"->\", \"pid\", \"query_id\", \"parent_node_id\", \"node_id\")",
           "format": "table",
           "instant": true,
           "refId": "edges"
@@ -885,7 +885,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "format": "table",
           "instant": true,
           "refId": "A"
@@ -895,7 +895,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_time_percent{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_time_percent{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "format": "table",
           "instant": true,
           "refId": "B"
@@ -905,7 +905,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_startup_time_us{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_startup_time_us{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "format": "table",
           "instant": true,
           "refId": "C"
@@ -915,7 +915,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_total_time_us{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_total_time_us{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "format": "table",
           "instant": true,
           "refId": "D"
@@ -925,7 +925,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_loops_executed{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_loops_executed{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "format": "table",
           "instant": true,
           "refId": "E"
@@ -935,7 +935,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "format": "table",
           "instant": true,
           "refId": "F"
@@ -945,7 +945,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "format": "table",
           "instant": true,
           "refId": "G"
@@ -955,7 +955,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "format": "table",
           "instant": true,
           "refId": "H"
@@ -965,7 +965,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_local_cache_hits{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_local_cache_hits{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "format": "table",
           "instant": true,
           "refId": "I"
@@ -975,7 +975,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_local_cache_misses{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_local_cache_misses{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "format": "table",
           "instant": true,
           "refId": "J"
@@ -985,7 +985,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_spill_file_reads{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_spill_file_reads{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "format": "table",
           "instant": true,
           "refId": "K"
@@ -995,7 +995,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_spill_file_writes{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_spill_file_writes{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "format": "table",
           "instant": true,
           "refId": "L"
@@ -1005,7 +1005,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_joins{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_joins{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "format": "table",
           "instant": true,
           "refId": "M"
@@ -1015,7 +1015,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_expressions{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_expressions{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "format": "table",
           "instant": true,
           "refId": "N"
@@ -1180,7 +1180,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
           "refId": "A"
         }
@@ -1273,7 +1273,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_time_percent{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_time_percent{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
           "refId": "A"
         }
@@ -1366,7 +1366,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",node_id=~\"$node_id\",parent_node_id!=\"-1\"} / on(query_id, parent_node_id) group_left label_replace(pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\"}, \"parent_node_id\", \"$1\", \"node_id\", \"(.*)\")",
+          "expr": "pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\",parent_node_id!=\"-1\"} / on(pid, query_id, parent_node_id) group_left label_replace(pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",pid=~\"$pid\"}, \"parent_node_id\", \"$1\", \"node_id\", \"(.*)\")",
           "legendFormat": "{{node_tag}} n={{node_id}} -> parent={{parent_node_id}}",
           "refId": "A"
         }
@@ -1470,7 +1470,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
           "refId": "A"
         }
@@ -1562,7 +1562,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\",node_id=~\"$node_id\",parent_node_id!=\"-1\"} / on(query_id, parent_node_id) group_left clamp_min(label_replace(pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\"}, \"parent_node_id\", \"$1\", \"node_id\", \"(.*)\"), 1)",
+          "expr": "pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\",parent_node_id!=\"-1\"} / on(pid, query_id, parent_node_id) group_left clamp_min(label_replace(pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\",pid=~\"$pid\"}, \"parent_node_id\", \"$1\", \"node_id\", \"(.*)\"), 1)",
           "legendFormat": "{{node_tag}} n={{node_id}} -> parent={{parent_node_id}}",
           "refId": "A"
         }
@@ -1653,7 +1653,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_expressions{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_expressions{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "legendFormat": "Expressions: {{node_tag}} q={{query_id}} n={{node_id}}",
           "refId": "A"
         },
@@ -1662,7 +1662,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_joins{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_joins{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "legendFormat": "Joins: {{node_tag}} q={{query_id}} n={{node_id}}",
           "refId": "B"
         }
@@ -1768,7 +1768,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_expressions{query_id=~\"$query_id\",node_id=~\"$node_id\"} / clamp_min(pg_what_is_happening_active_query_node_rows_filtered_by_expressions{query_id=~\"$query_id\",node_id=~\"$node_id\"} + pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\",node_id=~\"$node_id\"}, 1)",
+          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_expressions{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"} / clamp_min(pg_what_is_happening_active_query_node_rows_filtered_by_expressions{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"} + pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}, 1)",
           "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
           "refId": "A"
         }
@@ -1861,7 +1861,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_joins{query_id=~\"$query_id\",node_id=~\"$node_id\",node_tag=~\"HashJoin|MergeJoin|NestLoop\"} / clamp_min(pg_what_is_happening_active_query_node_rows_filtered_by_joins{query_id=~\"$query_id\",node_id=~\"$node_id\",node_tag=~\"HashJoin|MergeJoin|NestLoop\"} + pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\",node_id=~\"$node_id\",node_tag=~\"HashJoin|MergeJoin|NestLoop\"}, 1)",
+          "expr": "pg_what_is_happening_active_query_node_rows_filtered_by_joins{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\",node_tag=~\"HashJoin|MergeJoin|NestLoop\"} / clamp_min(pg_what_is_happening_active_query_node_rows_filtered_by_joins{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\",node_tag=~\"HashJoin|MergeJoin|NestLoop\"} + pg_what_is_happening_active_query_node_tuples_returned{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\",node_tag=~\"HashJoin|MergeJoin|NestLoop\"}, 1)",
           "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
           "refId": "A"
         }
@@ -1953,7 +1953,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_loops_executed{query_id=~\"$query_id\",node_id=~\"$node_id\"} * on(query_id, parent_node_id) group_left label_replace(pg_what_is_happening_active_query_node_loops_executed{query_id=~\"$query_id\",node_tag=\"NestLoop\"} * 0 + 1, \"parent_node_id\", \"$1\", \"node_id\", \"(.*)\")",
+          "expr": "pg_what_is_happening_active_query_node_loops_executed{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"} * on(pid, query_id, parent_node_id) group_left label_replace(pg_what_is_happening_active_query_node_loops_executed{query_id=~\"$query_id\",pid=~\"$pid\",node_tag=\"NestLoop\"} * 0 + 1, \"parent_node_id\", \"$1\", \"node_id\", \"(.*)\")",
           "legendFormat": "{{node_tag}} n={{node_id}} (inner of NestLoop)",
           "refId": "A"
         }
@@ -2025,7 +2025,7 @@
               }
             ]
           },
-          "unit": "µs"
+          "unit": "us"
         }
       },
       "gridPos": {
@@ -2057,7 +2057,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_total_time_us{query_id=~\"$query_id\",node_id=~\"$node_id\"} / clamp_min(pg_what_is_happening_active_query_node_loops_executed{query_id=~\"$query_id\",node_id=~\"$node_id\"}, 1)",
+          "expr": "pg_what_is_happening_active_query_node_total_time_us{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"} / clamp_min(pg_what_is_happening_active_query_node_loops_executed{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}, 1)",
           "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
           "refId": "A"
         }
@@ -2148,7 +2148,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_loops_executed{query_id=~\"$query_id\",node_id=~\"$node_id\"} > 1",
+          "expr": "pg_what_is_happening_active_query_node_loops_executed{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"} > 1",
           "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
           "refId": "A"
         }
@@ -2207,7 +2207,7 @@
               }
             ]
           },
-          "unit": "µs"
+          "unit": "us"
         }
       },
       "gridPos": {
@@ -2238,7 +2238,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_startup_time_us{query_id=~\"$query_id\",parent_node_id=\"-1\"} * on(query_id) group_left(query_text, pid) pg_what_is_happening_query_info",
+          "expr": "pg_what_is_happening_active_query_node_startup_time_us{query_id=~\"$query_id\",pid=~\"$pid\",parent_node_id=\"-1\"} * on(query_id, pid) group_left(query_text) pg_what_is_happening_query_info",
           "legendFormat": "First tuple: q={{query_id}}",
           "refId": "A"
         },
@@ -2247,7 +2247,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_total_time_us{query_id=~\"$query_id\",parent_node_id=\"-1\"} * on(query_id) group_left(query_text, pid) pg_what_is_happening_query_info",
+          "expr": "pg_what_is_happening_active_query_node_total_time_us{query_id=~\"$query_id\",pid=~\"$pid\",parent_node_id=\"-1\"} * on(query_id, pid) group_left(query_text) pg_what_is_happening_query_info",
           "legendFormat": "Last tuple: q={{query_id}}",
           "refId": "B"
         }
@@ -2382,7 +2382,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\",node_id=~\"$node_id\"})",
+          "expr": "sum(pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"})",
           "legendFormat": "Cache Hits",
           "refId": "A"
         },
@@ -2391,7 +2391,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\",node_id=~\"$node_id\"})",
+          "expr": "sum(pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"})",
           "legendFormat": "Cache Misses",
           "refId": "B"
         }
@@ -2484,7 +2484,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 * sum(pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\",node_id=~\"$node_id\"}) / clamp_min(sum(pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\",node_id=~\"$node_id\"}) + sum(pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\",node_id=~\"$node_id\"}), 1)",
+          "expr": "100 * sum(pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}) / clamp_min(sum(pg_what_is_happening_active_query_node_cache_hits{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}) + sum(pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}), 1)",
           "legendFormat": "Cache Hit Ratio",
           "refId": "A"
         }
@@ -2606,7 +2606,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(pg_what_is_happening_active_query_node_local_cache_hits{query_id=~\"$query_id\",node_id=~\"$node_id\"})",
+          "expr": "sum(pg_what_is_happening_active_query_node_local_cache_hits{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"})",
           "legendFormat": "Local Cache Hits",
           "refId": "A"
         },
@@ -2615,7 +2615,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(pg_what_is_happening_active_query_node_local_cache_misses{query_id=~\"$query_id\",node_id=~\"$node_id\"})",
+          "expr": "sum(pg_what_is_happening_active_query_node_local_cache_misses{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"})",
           "legendFormat": "Local Cache Misses",
           "refId": "B"
         }
@@ -2719,7 +2719,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (node_tag) (pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\",node_id=~\"$node_id\"})",
+          "expr": "sum by (node_tag) (pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"})",
           "legendFormat": "{{node_tag}}",
           "refId": "A"
         }
@@ -2810,7 +2810,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (query_id, parent_node_id) (pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\",node_id=~\"$node_id\"})",
+          "expr": "sum by (pid, query_id, parent_node_id) (pg_what_is_happening_active_query_node_cache_misses{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"})",
           "legendFormat": "Children of node {{parent_node_id}} q={{query_id}}",
           "refId": "A"
         }
@@ -2869,7 +2869,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (node_tag) (pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",node_id=~\"$node_id\"})",
+          "expr": "sum by (node_tag) (pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"})",
           "legendFormat": "{{node_tag}}",
           "refId": "A"
         }
@@ -3004,7 +3004,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_spill_file_writes{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_spill_file_writes{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "legendFormat": "Writes: {{node_tag}} q={{query_id}} n={{node_id}}",
           "refId": "A"
         },
@@ -3013,7 +3013,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_spill_file_reads{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_spill_file_reads{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "legendFormat": "Reads: {{node_tag}} q={{query_id}} n={{node_id}}",
           "refId": "B"
         }
@@ -3072,7 +3072,7 @@
               }
             ]
           },
-          "unit": "µs"
+          "unit": "us"
         }
       },
       "gridPos": {
@@ -3104,7 +3104,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_startup_time_us{query_id=~\"$query_id\",node_id=~\"$node_id\"}",
+          "expr": "pg_what_is_happening_active_query_node_startup_time_us{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}",
           "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
           "refId": "A"
         }
@@ -3211,7 +3211,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_startup_time_us{query_id=~\"$query_id\",node_id=~\"$node_id\"} / clamp_min(pg_what_is_happening_active_query_node_total_time_us{query_id=~\"$query_id\",node_id=~\"$node_id\"}, 1)",
+          "expr": "pg_what_is_happening_active_query_node_startup_time_us{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"} / clamp_min(pg_what_is_happening_active_query_node_total_time_us{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"}, 1)",
           "legendFormat": "{{node_tag}} q={{query_id}} n={{node_id}}",
           "refId": "A"
         }
@@ -3335,7 +3335,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "topk(10, pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",node_id=~\"$node_id\"} * on(query_id) group_left(query_text, pid) pg_what_is_happening_query_info)",
+          "expr": "topk(10, pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",pid=~\"$pid\",node_id=~\"$node_id\"} * on(query_id, pid) group_left(query_text) pg_what_is_happening_query_info)",
           "format": "table",
           "instant": true,
           "refId": "A"
@@ -3384,20 +3384,16 @@
   "templating": {
     "list": [
       {
-        "current": {
-          "selected": true,
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "prometheus"
         },
         "definition": "label_values(pg_what_is_happening_query_info, query_id)",
         "hide": 0,
-        "includeAll": true,
+        "includeAll": false,
         "label": "Query ID",
-        "multi": true,
+        "multi": false,
         "name": "query_id",
         "options": [],
         "query": {
@@ -3411,24 +3407,43 @@
         "type": "query"
       },
       {
-        "current": {
-          "selected": true,
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\"}, node_id)",
+        "definition": "label_values(pg_what_is_happening_query_info{query_id=~\"$query_id\"}, pid)",
         "hide": 0,
-        "includeAll": true,
+        "includeAll": false,
+        "label": "Backend PID",
+        "multi": false,
+        "name": "pid",
+        "options": [],
+        "query": {
+          "query": "label_values(pg_what_is_happening_query_info{query_id=~\"$query_id\"}, pid)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",pid=~\"$pid\"}, node_id)",
+        "hide": 0,
+        "includeAll": false,
         "label": "Node ID",
-        "multi": true,
+        "multi": false,
         "name": "node_id",
         "options": [],
         "query": {
-          "query": "label_values(pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\"}, node_id)",
+          "query": "label_values(pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",pid=~\"$pid\"}, node_id)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,

@@ -5,18 +5,13 @@
 
 #define PWH_GET_QUERY_ID(plannedstmt) 0
 
-#define PWH_LWLOCK_ACQUIRE(lock, mode) LWLockAcquire(&(lock), mode)
-#define PWH_LWLOCK_RELEASE(lock) LWLockRelease(&(lock))
-#define PWH_LWLOCK_INITIALIZE(lock, tranche_id) \
-	LWLockInitialize(&(lock), tranche_id)
+#define PWH_LWLOCK_ACQUIRE(lock, mode) LWLockAcquire(lock, mode)
+#define PWH_LWLOCK_RELEASE(lock) LWLockRelease(lock)
+#define PWH_LWLOCK_INITIALIZE(target, tranche_id) \
+	((target) = &GetNamedLWLockTranche("pg_what_is_happening")[0].lock)
 #define PWH_REQUEST_LWLOCKS(name, count) RequestNamedLWLockTranche(name, count)
-#define PWH_LWLOCK_TRANCHE_ID_DECL static i32 PWH_LWLOCK_TRANCHE_ID = 0
-#define PWH_LWLOCK_SETUP_TRANCHE(var, name)   \
-	do                                        \
-	{                                         \
-		(var) = LWLockNewTrancheId();         \
-		LWLockRegisterTranche((var), (name)); \
-	} while (0)
+#define PWH_LWLOCK_TRANCHE_ID_DECL
+#define PWH_LWLOCK_SETUP_TRANCHE(var, name) ((void) 0)
 
 #define PWH_GET_GUC(name) GetConfigOptionByName(name, NULL, false)
 

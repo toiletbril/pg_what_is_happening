@@ -36,8 +36,8 @@ SELECT * FROM what_is_happening.v1_status;
 |--------------------------------|----------|--------------------------------------------------------------|
 |  Identification                |          |                                                              |
 | `backend_pid`                  | `int4`   | Process ID of the backend executing the query.               |
-| `query_id`                     | `int8`   | Unique identifier for the query.                             |
-| `query_text`                   | `text`   | The SQL query text (truncated to `query_text_len`).          |
+| `query_id`                     | `int8`   | Stable fingerprint of the statement. Use `backend_pid` to distinguish concurrent copies. |
+| `query_text`                   | `text`   | The SQL query text, subject to activity visibility rules.    |
 | `node_id`                      | `int4`   | Sequential ID of this plan node in the tree.                 |
 | `parent_node_id`               | `int4`   | ID of the parent node in the plan tree.                      |
 | `node_tag`                     | `text`   | PostgreSQL plan node type (e.g., `SeqScan`, `HashJoin`).     |
@@ -61,7 +61,7 @@ SELECT * FROM what_is_happening.v1_status;
 ### HTTP metrics endpoint
 
 When compiled with `WITH_BGWORKER=yes` (the default), the extension starts a
-background worker that listens on `what_is_happening.metrics_listen_address`` by
+background worker that listens on `what_is_happening.metrics_listen_address` by
 default. Hit `/metrics` for [OpenMetrics](https://openmetrics.io/) formatted
 output compatible with Prometheus, VictoriaMetrics, or et cetera.
 
@@ -71,18 +71,20 @@ $ curl localhost:9187/metrics
 
 The HTTP endpoint exposes the same execution and buffer usage metrics from the
 SQL view, prefixed with `pg_what_is_happening_active_query_node_`. Each metric
-includes labels for `query_id`, `node_id`, and `node_tag`.
+includes labels for `query_id`, `pid`, `node_id`, `parent_node_id`, and
+`node_tag`.
 
 Additionally, the endpoint exposes a `pg_what_is_happening_query_info` metric
 with labels `query_id`, `pid`, and `query_text`. The value is always `1`. This
-info metric allows correlating query_id to metadata like PID and SQL text in
-PromQL using `group_left`:
+info metric allows correlating a query ID to metadata like PID and SQL text in
+PromQL using `group_left`. Query text is empty unless
+`what_is_happening.metrics_expose_query_text` is enabled:
 
 ```promql
 # Get slowest nodes with query text and PID attached
 topk(10,
   pg_what_is_happening_active_query_node_time_seconds
-    * on(query_id) group_left(query_text, pid)
+    * on(query_id, pid) group_left(query_text)
     pg_what_is_happening_query_info
 )
 ```
@@ -131,7 +133,7 @@ $$
 
 Actual cardinality is typically much lower as most queries have fewer nodes.
 
-Each unique `query_id` creates new time series. The extension does not
+Each distinct combination of `query_id` and `pid` creates new time series. The extension does not
 normalize queries like `pg_stat_statements` does. Use `min_cost_to_track` to
 filter out cheap queries and reduce cardinality on busy systems.
 
@@ -144,12 +146,15 @@ visibility the Postgres executor can provide.
 
 | Setting                                    | Default          | Sensible range   | Reload   | Description                                                                                         |
 |--------------------------------------------|------------------|------------------|----------|-----------------------------------------------------------------------------------------------------|
-| `what_is_happening.is_enabled`             | `true`           | —                | `SIGHUP` | Enable or disable the extension without unloading it.                                               |
-| `what_is_happening.metrics_listen_address` | `127.0.0.1:9187` | —                | Restart  | Address and port for the `/metrics` HTTP endpoint. Only available if compiled with `WITH_BGWORKER`. |
-| `what_is_happening.max_tracked_queries`    | `32`             | 2–256            | Restart  | Number of concurrent query slots allocated in shared memory. Each slot holds one backend's metrics. |
-| `what_is_happening.max_nodes_per_query`    | `128`            | 16–256           | Restart  | Maximum plan nodes tracked per query. Plans with more nodes get truncated.                          |
-| `what_is_happening.max_query_text_length`  | `1024`           | 64–8192          | Restart  | Maximum bytes of query text stored. Longer queries get truncated.                                   |
-| `what_is_happening.signal_timeout_ms`      | `32`             | 8–10000          | `SIGHUP` | How long to wait for each backend to respond to metrics requests before giving up (milliseconds).   |
+| `what_is_happening.is_enabled`             | `true`           | -                | `SIGHUP` | Enable or disable the extension without unloading it.                                               |
+| `what_is_happening.metrics_expose_query_text` | `false`        | -                | `SIGHUP` | Include query text in the unauthenticated metrics endpoint.                                         |
+| `what_is_happening.metrics_listen_address` | `127.0.0.1:9187` | -                | Restart  | Address and port for the `/metrics` HTTP endpoint. Only available if compiled with `WITH_BGWORKER`. |
+| `what_is_happening.max_tracked_queries`    | `32`             | 2-256            | Restart  | Number of concurrent query slots allocated in shared memory. Each slot holds one backend's metrics. |
+| `what_is_happening.max_nodes_per_query`    | `128`            | 16-256           | Restart  | Maximum plan nodes tracked per query. Plans with more nodes get truncated.                          |
+| `what_is_happening.max_query_text_length`  | `1024`           | 64-8192          | Restart  | Maximum bytes of query text stored. Longer queries get truncated.                                   |
+| `what_is_happening.signal_timeout_ms`      | `32`             | 1-10000          | `SIGHUP` | Maximum time to wait for active backends to refresh metrics, in milliseconds.                       |
+| `what_is_happening.sample_interval_ms`     | `250`            | 100-60000        | `SIGHUP` | Minimum interval between shared metric samples and endpoint cache rebuilds, in milliseconds.        |
+| `what_is_happening.metrics_max_response_bytes` | `67108864`  | 1024-1073741824  | `SIGHUP` | Maximum formatted endpoint response size. Only available if compiled with `WITH_BGWORKER`.          |
 | `what_is_happening.min_cost_to_track`      | `50000.0`        | 0.0-inf          | `SIGHUP` | Minimum total cost of a query to get tracked by the extension.                                      |
 
 ## Performance

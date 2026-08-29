@@ -1,7 +1,9 @@
-\echo Use "CREATE EXTENSION pg_what_is_happening" to load this file. \quit
+\echo Use "ALTER EXTENSION pg_what_is_happening UPDATE TO '1.2'" to load this file. \quit
 
-CREATE SCHEMA what_is_happening;
 GRANT USAGE ON SCHEMA what_is_happening TO PUBLIC;
+
+DROP VIEW IF EXISTS what_is_happening.v1_status;
+DROP FUNCTION IF EXISTS what_is_happening.v1_status_f();
 CREATE FUNCTION what_is_happening.v1_status_f(
 	OUT backend_pid int4,
 	OUT query_id int8,

@@ -1,8 +1,9 @@
 -- Test HTTP server resilience and edge case handling.
 -- This test stresses the HTTP server without querying actual metrics.
 -- Test 1: Verify server responds to basic GET request.
-\! curl -s -o /dev/null -w "%{http_code}" http://localhost:9187/metrics > /data/pwh_test_basic.txt
-SELECT regexp_replace(pg_read_file('pwh_test_basic.txt')::text, E'[\\n\\r]+', '', 'g') = '200' AS basic_get_works;
+\! curl -s -o /dev/null -w "%{http_code}" http://localhost:9187/metrics > /tmp/pwh_test_basic.txt
+\set basic_code `tr -d '[:space:]' < /tmp/pwh_test_basic.txt`
+SELECT :'basic_code' = '200' AS basic_get_works;
  basic_get_works 
 -----------------
  t
@@ -10,60 +11,86 @@ SELECT regexp_replace(pg_read_file('pwh_test_basic.txt')::text, E'[\\n\\r]+', ''
 
 -- Test 2: Concurrent requests - spawn 50 requests in parallel.
 -- Server should handle concurrent load gracefully.
-\! for i in {1..50}; do curl -s -o /dev/null http://localhost:9187/metrics & done; wait
-SELECT true AS concurrent_requests_completed;
+\! rm -f /tmp/pwh_test_parallel.txt /tmp/pwh_test_failures.txt; for i in $(seq 1 50); do (curl -fsS -o /dev/null http://localhost:9187/metrics || echo fail >> /tmp/pwh_test_failures.txt) & done; wait; test ! -s /tmp/pwh_test_failures.txt && echo ok > /tmp/pwh_test_parallel.txt
+\set parallel_result `tr -d '[:space:]' < /tmp/pwh_test_parallel.txt`
+SELECT :'parallel_result' = 'ok' AS concurrent_requests_completed;
  concurrent_requests_completed 
 -------------------------------
  t
 (1 row)
 
 -- Test 3: Invalid HTTP method - POST to /metrics should return 404.
-\! curl -s -X POST -o /dev/null -w "%{http_code}" http://localhost:9187/metrics > /data/pwh_test_post.txt
-SELECT regexp_replace(pg_read_file('pwh_test_post.txt')::text, E'[\\n\\r]+', '', 'g') = '404' AS post_returns_404;
+\! curl -s -X POST -o /dev/null -w "%{http_code}" http://localhost:9187/metrics > /tmp/pwh_test_post.txt
+\set post_code `tr -d '[:space:]' < /tmp/pwh_test_post.txt`
+SELECT :'post_code' = '404' AS post_returns_404;
  post_returns_404 
 ------------------
  t
 (1 row)
 
 -- Test 4: Invalid HTTP method - PUT to /metrics should return 404.
-\! curl -s -X PUT -o /dev/null -w "%{http_code}" http://localhost:9187/metrics > /data/pwh_test_put.txt
-SELECT regexp_replace(pg_read_file('pwh_test_put.txt')::text, E'[\\n\\r]+', '', 'g') = '404' AS put_returns_404;
+\! curl -s -X PUT -o /dev/null -w "%{http_code}" http://localhost:9187/metrics > /tmp/pwh_test_put.txt
+\set put_code `tr -d '[:space:]' < /tmp/pwh_test_put.txt`
+SELECT :'put_code' = '404' AS put_returns_404;
  put_returns_404 
 -----------------
  t
 (1 row)
 
 -- Test 5: Invalid HTTP method - DELETE to /metrics should return 404.
-\! curl -s -X DELETE -o /dev/null -w "%{http_code}" http://localhost:9187/metrics > /data/pwh_test_delete.txt
-SELECT regexp_replace(pg_read_file('pwh_test_delete.txt')::text, E'[\\n\\r]+', '', 'g') = '404' AS delete_returns_404;
+\! curl -s -X DELETE -o /dev/null -w "%{http_code}" http://localhost:9187/metrics > /tmp/pwh_test_delete.txt
+\set delete_code `tr -d '[:space:]' < /tmp/pwh_test_delete.txt`
+SELECT :'delete_code' = '404' AS delete_returns_404;
  delete_returns_404 
 --------------------
  t
 (1 row)
 
 -- Test 6: Invalid path - /notfound should return 404.
-\! curl -s -o /dev/null -w "%{http_code}" http://localhost:9187/notfound > /data/pwh_test_notfound.txt
-SELECT regexp_replace(pg_read_file('pwh_test_notfound.txt')::text, E'[\\n\\r]+', '', 'g') = '404' AS invalid_path_returns_404;
+\! curl -s -o /dev/null -w "%{http_code}" http://localhost:9187/notfound > /tmp/pwh_test_notfound.txt
+\set notfound_code `tr -d '[:space:]' < /tmp/pwh_test_notfound.txt`
+SELECT :'notfound_code' = '404' AS invalid_path_returns_404;
  invalid_path_returns_404 
 --------------------------
  t
 (1 row)
 
 -- Test 7: Invalid path - /metrics/foo should return 404.
-\! curl -s -o /dev/null -w "%{http_code}" http://localhost:9187/metrics/foo > /data/pwh_test_subpath.txt
-SELECT regexp_replace(pg_read_file('pwh_test_subpath.txt')::text, E'[\\n\\r]+', '', 'g') = '404' AS subpath_returns_404;
+\! curl -s -o /dev/null -w "%{http_code}" http://localhost:9187/metrics/foo > /tmp/pwh_test_subpath.txt
+\set subpath_code `tr -d '[:space:]' < /tmp/pwh_test_subpath.txt`
+SELECT :'subpath_code' = '404' AS subpath_returns_404;
  subpath_returns_404 
 ---------------------
  t
 (1 row)
 
 -- Test 8: Verify server still responds after stress.
-\! curl -s -o /dev/null -w "%{http_code}" http://localhost:9187/metrics > /data/pwh_test_final.txt
-SELECT regexp_replace(pg_read_file('pwh_test_final.txt')::text, E'[\\n\\r]+', '', 'g') = '200' AS server_still_healthy;
+\! curl -s -o /dev/null -w "%{http_code}" http://localhost:9187/metrics > /tmp/pwh_test_final.txt
+\set final_code `tr -d '[:space:]' < /tmp/pwh_test_final.txt`
+SELECT :'final_code' = '200' AS server_still_healthy;
  server_still_healthy 
 ----------------------
  t
 (1 row)
 
+-- Test 9: Query parameters do not change endpoint routing.
+\! curl -s -o /dev/null -w "%{http_code}" 'http://localhost:9187/metrics?probe=1' > /tmp/pwh_test_query.txt
+\set query_code `tr -d '[:space:]' < /tmp/pwh_test_query.txt`
+SELECT :'query_code' = '200' AS query_parameters_work;
+ query_parameters_work 
+-----------------------
+ t
+(1 row)
+
+-- Test 10: An incomplete request line does not damage the server.
+\! printf 'GET /metrics\r\n\r\n' | nc -w 2 localhost 9187 > /dev/null || true
+\! curl -s -o /dev/null -w "%{http_code}" http://localhost:9187/metrics > /tmp/pwh_test_malformed.txt
+\set malformed_code `tr -d '[:space:]' < /tmp/pwh_test_malformed.txt`
+SELECT :'malformed_code' = '200' AS malformed_request_survived;
+ malformed_request_survived 
+----------------------------
+ t
+(1 row)
+
 -- Cleanup temp files.
-\! rm -f /data/pwh_test_*.txt
+\! rm -f /tmp/pwh_test_*.txt

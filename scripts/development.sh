@@ -13,10 +13,10 @@ init_env
 build_postgresql_if_not_built
 
 echo "Installing extension from ./pg_what_is_happening.so..."
-make install -j"$(nproc)"
+make MODE=dbg install -j"$(parallel_jobs)"
 
 # Allow core files.
-sudo prlimit --pid $$ --core=unlimited
+ulimit -c unlimited 2>/dev/null || true
 
 init_postgresql_data_dir
 edit_postgresql_conf

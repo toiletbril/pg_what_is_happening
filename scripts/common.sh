@@ -5,10 +5,11 @@
 #
 
 export PG_SOURCE="/postgres"
+export PG_BUILD_DIR="/postgres-build"
 export PG_PWH_SOURCE='/pg_what_is_happening'
 export PG_DATA_DIR='/data'
 export PG_BIN_DIR='/postgres-bin'
-export PG_LOG_FILE='/tmp/postgresql.log'
+export PG_LOG_FILE='/pg_what_is_happening/test/postgresql.log'
 
 export PGDATA="$PG_DATA_DIR"
 export PATH="$PATH:$PG_BIN_DIR/bin"
@@ -31,32 +32,41 @@ _log_bold()
 
 log()
 {
-  _log_bold "$(printf "$(_log_date) [LOG] %s\n" "$@")" >&2
+  _log_bold "$(printf '%s [LOG] %s\n' "$(_log_date)" "$*")" >&2
 }
 
 log_err_and_die()
 {
-  _log_red "$(printf """$(_log_date) [ERR] %s\n" "$@")" >&2
+  _log_red "$(printf '%s [ERR] %s\n' "$(_log_date)" "$*")" >&2
   exit 1
 }
 
 init_env()
 {
   log "initializing env"
-  sudo chown -R postgres:postgres $PWH_PERMIT_DIRS
+  mkdir -p "$PG_BUILD_DIR" "$PG_BIN_DIR" "$PG_DATA_DIR"
+}
+
+parallel_jobs()
+{
+  jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)
+  case $jobs in
+  "" | 0 | *[!0-9]*) echo 1 ;;
+  *) echo "$jobs" ;;
+  esac
 }
 
 build_postgresql_if_not_built()
 {
-  if ! test -f "$PG_SOURCE/config.status"; then
+  if ! test -f "$PG_BUILD_DIR/config.status"; then
     log "configuring PostgreSQL..."
-    cd "$PG_SOURCE" || return
+    cd "$PG_BUILD_DIR" || return
     PG_CFLAGS="-std=gnu11 -g3 -O0 -Wno-error=incompatible-pointer-types"
-    ./configure --prefix="$PG_BIN_DIR" --enable-debug --enable-cassert CFLAGS="$PG_CFLAGS" >/dev/null
+    "$PG_SOURCE/configure" --prefix="$PG_BIN_DIR" --enable-debug --enable-cassert CFLAGS="$PG_CFLAGS" >/dev/null
     cd - || return
   fi
   log "building PostgreSQL from source..."
-  make -C /postgres -s -j"$(nproc)" install
+  make -C "$PG_BUILD_DIR" -s -j"$(parallel_jobs)" install
 }
 
 init_postgresql_data_dir()
@@ -68,16 +78,18 @@ init_postgresql_data_dir()
 edit_postgresql_conf()
 {
   log "editing postgresql.conf..."
-  cat >> "$PG_DATA_DIR/postgresql.conf" <<EOF
-shared_preload_libraries = 'pg_what_is_happening'
-log_min_messages = debug4
-what_is_happening.min_cost_to_track = 0
-EOF
+  printf '%s\n' \
+    "shared_preload_libraries = 'pg_what_is_happening'" \
+    "log_min_messages = debug4" \
+    "what_is_happening.min_cost_to_track = 0" \
+    "what_is_happening.max_tracked_queries = 8" \
+    >> "$PG_DATA_DIR/postgresql.conf"
 }
 
 start_postgresql()
 {
   log "starting PostgreSQL..."
+  : > "$PG_LOG_FILE"
   if ! pg_ctl -D "$PG_DATA_DIR" -l "$PG_LOG_FILE" -w start; then
     cat -n "$PG_LOG_FILE"
     log_err_and_die "PostgreSQL failed to start"

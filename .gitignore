@@ -6,6 +6,7 @@
 .claude/
 CLAUDE.md
 .clangd
+.tmux.conf
 
 results/
 tmp_check/
@@ -13,5 +14,6 @@ log/
 garbage/
 
 test/results/
+test/postgresql.log
 test/regression.diffs
 test/regression.out

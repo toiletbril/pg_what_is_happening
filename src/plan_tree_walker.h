@@ -31,11 +31,11 @@ extern const char *pwh_node_tag_to_string(NodeTag tag);
 
 /* Walk plan tree and populate topology (node_id, parent_id, node_type). */
 extern u64 pwh_remember_planstate_tree_as_metric_structure(
-	PlanState *planstate, PwhNodeMetrics *metrics, u64 max_nodes);
+	PlanState *planstate, PwhNodeMetrics *metrics,
+	PwhNodeInstrumentation **instrumentation, u64 max_nodes);
 
-/* Walk plan tree and read Instrumentation data. */
-extern void pwh_collect_planstate_metrics(PlanState		 *planstate,
-										  PwhNodeMetrics *metrics,
-										  u64			  max_nodes);
+extern void pwh_collect_instrumentation_metrics(
+	PwhNodeInstrumentation **instrumentation, PwhNodeMetrics *metrics,
+	u64 count);
 
 #endif /* PWH_PLAN_TREE_WALKER_H */

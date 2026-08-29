@@ -2,12 +2,11 @@
 # Docker image for pg_what_is_happening tests.
 #
 
-FROM docker.io/library/alpine:latest
+FROM docker.io/library/alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
 
 SHELL ["sh", "-eu", "-c"]
 
-RUN apk update
-RUN apk add \
+RUN apk add --no-cache \
     build-base \
     musl-dev \
     linux-headers \
@@ -27,18 +26,20 @@ RUN apk add \
     libgcc \
     gdb \
     curl \
-    sudo \
+    su-exec \
     icu-dev \
     diffutils \
+    clang-extra-tools \
     tmux \
     util-linux \
     ncurses
 
-RUN adduser -D -u 1000 "postgres" && \
-    echo "postgres ALL=(ALL) NOPASSWD: ALL" >> "/etc/sudoers"
+RUN mkdir -p /postgres /postgres-build /postgres-bin /data /pg_what_is_happening
 
-ENV PWH_PERMIT_DIRS="/postgres /postgres-bin /data /pg_what_is_happening"
-RUN mkdir -p $PWH_PERMIT_DIRS # Permissions will be set at runtime.
+# Steal host's tmux.conf for the container.
+COPY .tmux.conf /etc/tmux.conf
+COPY scripts/container-entrypoint.sh /usr/local/bin/pwh-container-entrypoint
+RUN chmod 0755 /usr/local/bin/pwh-container-entrypoint
 
-USER postgres
+ENTRYPOINT ["/usr/local/bin/pwh-container-entrypoint"]
 WORKDIR "/pg_what_is_happening"

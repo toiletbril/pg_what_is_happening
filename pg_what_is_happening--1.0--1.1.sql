@@ -1,4 +1,6 @@
-\echo Use "CREATE EXTENSION pg_what_is_happening" to load this file. \quit
+\echo Use "ALTER EXTENSION pg_what_is_happening UPDATE TO '1.1'" to load this file. \quit
+
+GRANT USAGE ON SCHEMA what_is_happening TO PUBLIC;
 
 DROP VIEW IF EXISTS what_is_happening.v1_status;
 DROP FUNCTION IF EXISTS what_is_happening.v1_status_f();
@@ -9,11 +11,10 @@ CREATE FUNCTION what_is_happening.v1_status_f(
 	OUT node_id int4,
 	OUT parent_node_id int4,
 	OUT node_tag text,
-	OUT tuples_returned float8,
 	OUT startup_time_us float8,
 	OUT total_time_us float8,
 	OUT loops_executed float8,
-	OUT rows float8,
+	OUT tuples_returned float8,
 	OUT time_seconds float8,
 	OUT time_percent float8,
 	OUT cache_hits int8,
@@ -21,7 +22,9 @@ CREATE FUNCTION what_is_happening.v1_status_f(
 	OUT local_cache_hits int8,
 	OUT local_cache_misses int8,
 	OUT spill_file_reads int8,
-	OUT spill_file_writes int8
+	OUT spill_file_writes int8,
+	OUT rows_filtered_by_joins float8,
+	OUT rows_filtered_by_expressions float8
 )
 RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'v1_status_f'

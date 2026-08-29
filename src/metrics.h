@@ -26,6 +26,7 @@
 #include "shared_memory.h"
 
 #define PWH_V1_STATUS_TUPLE_COUNT 20
+#define PWH_V1_STATUS_LEGACY_TUPLE_COUNT 17
 
 typedef enum
 {
@@ -127,11 +128,11 @@ metric_help(MetricType type)
 	unreachable;
 }
 
-TupleDesc pwh_create_v1_status_tupdesc(void);
-void pwh_fill_v1_status_tuple(Datum *values, bool *nulls,
-							  PwhSharedMemoryBackendEntry *entry,
-							  PwhNodeMetrics *node, double total_query_time);
+void pwh_fill_v1_status_tuple(Datum *values, bool *nulls, i32 backend_pid,
+							  u64 query_id, const char *query_text,
+							  PwhNodeMetrics *node, double total_query_time,
+							  u32 output_count);
 
-char *pwh_format_openmetrics(void);
+char *pwh_format_openmetrics(PwhMetricsSnapshot *snapshot);
 
 #endif

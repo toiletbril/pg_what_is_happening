@@ -3,7 +3,7 @@
 set -eu
 
 #
-# Containerized makefile. Used to create containers and invoke Nakefile
+# Containerized makefile. Used to create containers and invoke Makefile
 # commands inside.
 #
 # Usage:
@@ -25,6 +25,16 @@ clean_docker_target() {
   fi
 }
 
+steal_tmux_conf() {
+  if test -f "$HOME/.tmux.conf"; then
+    cp -Ln "$HOME/.tmux.conf" "./.tmux.conf" || true
+  elif test -f "/etc/tmux.conf"; then
+    cp -Ln "/etc/tmux.conf" "./.tmux.conf" || true
+  else
+    touch "./.tmux.conf"
+  fi
+}
+
 make_sure_postgres_source_is_available() {
   if test -z "${POSTGRES_SOURCE:-}"; then
     echo "ERROR: POSTGRES_SOURCE environment variable must be set to postgres source directory." >&2
@@ -38,37 +48,45 @@ make_sure_postgres_source_is_available() {
 C="${1:-}"
 
 docker_run() {
-docker run --pull=never --rm --network=host -v "$PWD:/pg_what_is_happening" \
-           -v "$POSTGRES_SOURCE:/postgres" --privileged "$@"
+  host_uid=$(id -u)
+  host_gid=$(id -g)
+  docker run --pull=never --rm --network=host \
+             --tmpfs "/postgres-build:rw,exec,uid=$host_uid,gid=$host_gid" \
+             --tmpfs "/postgres-bin:rw,exec,uid=$host_uid,gid=$host_gid" \
+             --tmpfs "/data:uid=$host_uid,gid=$host_gid" \
+             -e HOME=/tmp \
+             -e "PWH_HOST_UID=$host_uid" \
+             -e "PWH_HOST_GID=$host_gid" \
+             -e "HTTP_BACKEND=${HTTP_BACKEND:-mongoose}" \
+             -e "WITH_BGWORKER=${WITH_BGWORKER:-yes}" \
+             -e "CFLAGS=${CFLAGS:-}" \
+             -v "$PWD:/pg_what_is_happening" \
+             -v "$POSTGRES_SOURCE:/postgres:ro" "$@"
 }
 
 case $C in
 "make-image")
   clean_docker_target
+  steal_tmux_conf
+  dirname "$(realpath "$0")"
   docker build --network=host --progress=plain -f Dockerfile \
-               -t "$IMG" "$(dirname "$0")"
+               -t "$IMG" "$(dirname "$(realpath "$0")")"
   ;;
 "build")
   make_sure_postgres_source_is_available
-  BUILD_CMD=$(cat "$(dirname "$0")/scripts/build.sh")
-  docker_run "$IMG" sh -c "$BUILD_CMD"
+  docker_run "$IMG" bash scripts/build.sh
   ;;
 "test")
   make_sure_postgres_source_is_available
-  TEST_CMD=$(cat "$(dirname "$0")/scripts/test.sh")
-  docker_run "$IMG" sh -c "$TEST_CMD"
+  docker_run "$IMG" bash scripts/test.sh
   ;;
 "dev")
   make_sure_postgres_source_is_available
-  DEVELOPMENT_CMD=$(cat "$(dirname "$0")/scripts/development.sh")
-  docker_run -it "$IMG" sh -c "$DEVELOPMENT_CMD"
+  docker_run -it "$IMG" bash scripts/development.sh
   ;;
 "reset")
   echo "Cleaning extension build artifacts..."
   make reset
-  if test -n "${POSTGRES_SOURCE:-}" && test -d "$POSTGRES_SOURCE"; then
-    make -C "$POSTGRES_SOURCE" -s distclean >/dev/null 2>&1 || true
-  fi
   clean_docker_target
   ;;
 *)

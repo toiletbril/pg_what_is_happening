@@ -10,24 +10,47 @@ SELECT
   COUNT(DISTINCT backend_pid) >= 2 AS has_multiple_pids,
   COUNT(DISTINCT query_id) >= 2 AS has_multiple_query_ids
 FROM what_is_happening.v1_status
-WHERE query_text LIKE '%JOIN%' AND (query_text LIKE '%orders%' OR query_text LIKE '%products%');
+WHERE backend_pid <> pg_backend_pid()
+  AND query_text LIKE '%JOIN%' AND (query_text LIKE '%orders%' OR query_text LIKE '%products%');
 
 SELECT
   COUNT(*) = COUNT(DISTINCT backend_pid || '-' || query_id || '-' || node_id) AS no_duplicate_nodes
 FROM what_is_happening.v1_status
-WHERE query_text LIKE '%JOIN%' AND (query_text LIKE '%orders%' OR query_text LIKE '%products%');
+WHERE backend_pid <> pg_backend_pid()
+  AND query_text LIKE '%JOIN%' AND (query_text LIKE '%orders%' OR query_text LIKE '%products%');
 
 WITH orders_query AS (
-  SELECT DISTINCT backend_pid FROM what_is_happening.v1_status WHERE query_text LIKE '%orders%' AND query_text LIKE '%JOIN%'
+  SELECT DISTINCT backend_pid FROM what_is_happening.v1_status WHERE backend_pid <> pg_backend_pid() AND query_text LIKE '%orders%' AND query_text LIKE '%JOIN%'
 ), products_query AS (
-  SELECT DISTINCT backend_pid FROM what_is_happening.v1_status WHERE query_text LIKE '%products%' AND query_text LIKE '%JOIN%'
+  SELECT DISTINCT backend_pid FROM what_is_happening.v1_status WHERE backend_pid <> pg_backend_pid() AND query_text LIKE '%products%' AND query_text LIKE '%JOIN%'
 )
 SELECT
   COUNT(*) FILTER (WHERE backend_pid IN (SELECT backend_pid FROM orders_query) AND query_text LIKE '%products%') = 0 AS orders_backend_has_no_products_metrics,
   COUNT(*) FILTER (WHERE backend_pid IN (SELECT backend_pid FROM products_query) AND query_text LIKE '%orders%') = 0 AS products_backend_has_no_orders_metrics
 FROM what_is_happening.v1_status
-WHERE query_text LIKE '%JOIN%';
+WHERE backend_pid <> pg_backend_pid() AND query_text LIKE '%JOIN%';
 
 SELECT pg_advisory_unlock(12349);
 SELECT pg_advisory_unlock(12350);
 SELECT pg_sleep(0.5);
+
+SELECT pg_advisory_lock(12352);
+\! for i in 1 2; do PGAPPNAME="pwh_same_query_$i" psql -X -v ON_ERROR_STOP=1 -d contrib_regression -c "SELECT pg_advisory_lock(12352), COUNT(*) FROM orders o JOIN users u ON o.user_id = u.user_id; SELECT pg_advisory_unlock(12352);" > /dev/null 2>&1 & done
+
+SELECT pg_sleep(0.2);
+
+SELECT
+  COUNT(DISTINCT backend_pid) = 2 AS identical_query_has_two_backends,
+  COUNT(DISTINCT query_id) = 1 AS identical_query_has_one_fingerprint,
+  COUNT(*) = COUNT(DISTINCT backend_pid || '-' || query_id || '-' || node_id)
+    AS identical_query_series_are_unique
+FROM what_is_happening.v1_status
+WHERE backend_pid IN (
+  SELECT pid FROM pg_stat_activity
+  WHERE application_name LIKE 'pwh_same_query_%'
+);
+
+SELECT pg_advisory_unlock(12352);
+SELECT pg_sleep(0.5);
+
+-- End.

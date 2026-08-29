@@ -19,7 +19,9 @@
 #include "postgres.h"
 
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <netinet/in.h>
+#include <poll.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -27,12 +29,16 @@
 
 #include "../common.h"
 #include "../http_server.h"
+#include "utils/timestamp.h"
 
 #define DUMB_HTTP_BUFFER_SIZE 8192
+#define DUMB_HTTP_OPERATION_TIMEOUT_US 250000
+#define DUMB_HTTP_TOTAL_TIMEOUT_US 1000000
 
 typedef struct DumbHttpServer
 {
 	i32					 port;
+	char				 host[256];
 	i32					 listen_fd;
 	volatile bool		 is_running;
 	HttpRequestHandlerFn handler_fn;
@@ -46,6 +52,9 @@ static void dumb_set_handler(HttpServer *server, HttpRequestHandlerFn handler,
 							 void *user_data);
 static i32	dumb_run(HttpServer *server);
 static void dumb_stop(HttpServer *server);
+static bool send_all(i32 fd, const char *data, u64 length,
+					 TimestampTz started_at);
+static bool deadline_expired(TimestampTz started_at);
 
 static const HttpServerVtable dumb_vtable = {
 	.createFn = dumb_create,
@@ -67,7 +76,11 @@ dumb_create(const char *listen_addr)
 	HttpServer	   *server;
 	DumbHttpServer *impl;
 	const char	   *colon;
+	const char	   *port_text;
+	char		   *port_end;
+	long			parsed_port;
 	i32				port;
+	u64				host_len;
 
 	server = (HttpServer *) malloc(sizeof(HttpServer));
 	if (server == NULL)
@@ -80,14 +93,49 @@ dumb_create(const char *listen_addr)
 		return NULL;
 	}
 
-	/* Parse port from address string (format: "host:port" or ":port"). */
-	colon = strrchr(listen_addr, ':');
-	if (colon)
-		port = atoi(colon + 1);
+	/* Parse port from address string, including bracketed IPv6 hosts. */
+	const char *host_start = listen_addr;
+	if (listen_addr[0] == '[')
+	{
+		const char *close = strchr(listen_addr + 1, ']');
+		if (close == NULL || close[1] != ':')
+			goto invalid_address;
+		host_start = listen_addr + 1;
+		colon = close + 1;
+		host_len = close - host_start;
+	}
 	else
+	{
+		colon = strrchr(listen_addr, ':');
+		if (colon != NULL && strchr(listen_addr, ':') != colon)
+			goto invalid_address;
+		host_len = colon ? (u64) (colon - listen_addr) : strlen(listen_addr);
+	}
+	if (colon)
+	{
+		port_text = colon + 1;
+		errno = 0;
+		parsed_port = strtol(port_text, &port_end, 10);
+		if (errno != 0 || port_end == port_text || *port_end != '\0' ||
+			parsed_port < 1 || parsed_port > 65535)
+			goto invalid_address;
+		port = (i32) parsed_port;
+	}
+	else
+	{
 		port = 9187; /* Default port. */
+	}
 
 	impl->port = port;
+	if (host_len >= sizeof(impl->host))
+		goto invalid_address;
+	if (host_len == 0)
+		snprintf(impl->host, sizeof(impl->host), "0.0.0.0");
+	else
+	{
+		memcpy(impl->host, host_start, host_len);
+		impl->host[host_len] = '\0';
+	}
 	impl->listen_fd = -1;
 	impl->is_running = false;
 	impl->handler_fn = NULL;
@@ -97,6 +145,11 @@ dumb_create(const char *listen_addr)
 	server->impl = impl;
 
 	return server;
+
+invalid_address:
+	free(impl);
+	free(server);
+	return NULL;
 }
 
 static void
@@ -149,19 +202,36 @@ parse_request(const char *buffer, HttpRequest *req)
 	space2 = memchr(space1 + 1, ' ', line_len - (space1 - buffer + 1));
 	if (space2 == NULL)
 		return false;
+	if (space1 == buffer || space2 == space1 + 1 || *(space1 + 1) != '/' ||
+		!((line_end - space2 == 9 && memeq(space2 + 1, "HTTP/1.0", 8)) ||
+		  (line_end - space2 == 9 && memeq(space2 + 1, "HTTP/1.1", 8))))
+		return false;
 
 	/* Allocate and copy method. */
 	req->method = (char *) malloc(space1 - buffer + 1);
+	if (req->method == NULL)
+		return false;
 	memcpy(req->method, buffer, space1 - buffer);
 	req->method[space1 - buffer] = '\0';
 
 	/* Allocate and copy path. */
 	req->path = (char *) malloc(space2 - space1);
+	if (req->path == NULL)
+	{
+		free(req->method);
+		return false;
+	}
 	memcpy(req->path, space1 + 1, space2 - space1 - 1);
 	req->path[space2 - space1 - 1] = '\0';
 
 	/* Allocate and copy version. */
 	req->version = (char *) malloc(line_end - space2);
+	if (req->version == NULL)
+	{
+		free(req->path);
+		free(req->method);
+		return false;
+	}
 	memcpy(req->version, space2 + 1, line_end - space2 - 1);
 	req->version[line_end - space2 - 1] = '\0';
 
@@ -188,31 +258,122 @@ free_request(HttpRequest *req)
 }
 
 static void
+send_response(i32 client_fd, const HttpResponse *resp, TimestampTz started_at)
+{
+	char response_buffer[1024];
+	i32	 response_len =
+		snprintf(response_buffer, sizeof(response_buffer),
+				 "HTTP/1.1 %d %s\r\n"
+				 "%s"
+				 "Content-Length: %llu\r\n"
+				 "Connection: close\r\n"
+				 "\r\n",
+				 resp->status_code, resp->status_text,
+				 resp->headers ? resp->headers
+							   : "Content-Type: text/plain; charset=utf-8\r\n",
+				 (unsigned long long) resp->body_len);
+
+	if (response_len > 0 && response_len < (i32) sizeof(response_buffer))
+	{
+		if (!send_all(client_fd, response_buffer, (u64) response_len,
+					  started_at))
+			return;
+		if (resp->body != NULL)
+			send_all(client_fd, resp->body, resp->body_len, started_at);
+	}
+}
+
+static bool
+deadline_expired(TimestampTz started_at)
+{
+	TimestampTz now = GetCurrentTimestamp();
+	return now >= started_at && now - started_at >= DUMB_HTTP_TOTAL_TIMEOUT_US;
+}
+
+static bool
+send_all(i32 fd, const char *data, u64 length, TimestampTz started_at)
+{
+	while (length > 0)
+	{
+		if (deadline_expired(started_at))
+			return false;
+#ifdef MSG_NOSIGNAL
+		ssize_t sent = send(fd, data, length, MSG_NOSIGNAL);
+#else
+		ssize_t sent = send(fd, data, length, 0);
+#endif
+		if (sent < 0 && errno == EINTR)
+			continue;
+		if (sent <= 0)
+			return false;
+		data += sent;
+		length -= sent;
+	}
+	return true;
+}
+
+static void
 handle_connection(DumbHttpServer *impl, i32 client_fd)
 {
-	char		 buffer[DUMB_HTTP_BUFFER_SIZE];
-	ssize_t		 bytes_read;
-	HttpRequest	 req;
-	HttpResponse resp;
-	char		 response_buffer[DUMB_HTTP_BUFFER_SIZE];
-	i32			 response_len;
+	char		   buffer[DUMB_HTTP_BUFFER_SIZE];
+	ssize_t		   bytes_read;
+	HttpRequest	   req;
+	HttpResponse   resp;
+	struct timeval timeout = {
+		.tv_sec = 0,
+		.tv_usec = DUMB_HTTP_OPERATION_TIMEOUT_US,
+	};
+	TimestampTz started_at = GetCurrentTimestamp();
+	u64			offset = 0;
+	bool		request_complete = false;
 
-	/* Read request. */
-	bytes_read = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
-	if (bytes_read <= 0)
+	setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+	setsockopt(client_fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+#ifdef SO_NOSIGPIPE
+	i32 no_sigpipe = 1;
+	setsockopt(client_fd, SOL_SOCKET, SO_NOSIGPIPE, &no_sigpipe,
+			   sizeof(no_sigpipe));
+#endif
+
+	while (offset < sizeof(buffer) - 1)
+	{
+		if (deadline_expired(started_at))
+			break;
+		bytes_read =
+			recv(client_fd, buffer + offset, sizeof(buffer) - 1 - offset, 0);
+		if (bytes_read < 0 && errno == EINTR)
+			continue;
+		if (bytes_read <= 0)
+			break;
+		offset += bytes_read;
+		buffer[offset] = '\0';
+		if (strstr(buffer, "\r\n\r\n") != NULL ||
+			strstr(buffer, "\n\n") != NULL)
+		{
+			request_complete = true;
+			break;
+		}
+	}
+	if (offset == 0)
 	{
 		close(client_fd);
 		return;
 	}
-
-	buffer[bytes_read] = '\0';
+	buffer[offset] = '\0';
 
 	/* Parse request. */
-	if (!parse_request(buffer, &req))
+	if (!request_complete || !parse_request(buffer, &req))
 	{
+		memset(&resp, 0, sizeof(resp));
+		pwh_http_response_set_text(&resp, 400, "Bad Request");
+		send_response(client_fd, &resp, started_at);
+		pwh_http_response_destroy_body(&resp);
 		close(client_fd);
 		return;
 	}
+	char *query = strchr(req.path, '?');
+	if (query != NULL)
+		*query = '\0';
 
 	/* Initialize response. */
 	memset(&resp, 0, sizeof(resp));
@@ -227,21 +388,10 @@ handle_connection(DumbHttpServer *impl, i32 client_fd)
 		pwh_http_response_set_text(&resp, 404, "Not Found");
 	}
 
-	/* Build response. */
-	response_len = snprintf(response_buffer, sizeof(response_buffer),
-							"HTTP/1.1 %d %s\r\n"
-							"Content-Type: text/plain; version=0.0.4\r\n"
-							"Content-Length: %zu\r\n"
-							"Connection: close\r\n"
-							"\r\n"
-							"%s",
-							resp.status_code, resp.status_text, resp.body_len,
-							resp.body ? resp.body : "");
-
-	/* Send response. */
-	send(client_fd, response_buffer, response_len, 0);
+	send_response(client_fd, &resp, started_at);
 
 	/* Cleanup. */
+	pwh_http_response_destroy_body(&resp);
 	free_request(&req);
 	close(client_fd);
 }
@@ -249,34 +399,40 @@ handle_connection(DumbHttpServer *impl, i32 client_fd)
 static i32
 dumb_run(HttpServer *server)
 {
-	DumbHttpServer	  *impl = (DumbHttpServer *) server->impl;
-	struct sockaddr_in addr;
-	i32				   client_fd;
-	i32				   opt = 1;
+	DumbHttpServer	*impl = (DumbHttpServer *) server->impl;
+	struct addrinfo	 hints;
+	struct addrinfo *addresses = NULL;
+	struct addrinfo *address;
+	char			 port[16];
+	i32				 client_fd;
+	i32				 opt = 1;
 
-	/* Create socket. */
-	impl->listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	snprintf(port, sizeof(port), "%d", impl->port);
+	if (getaddrinfo(impl->host, port, &hints, &addresses) != 0)
+		return -1;
+
+	for (address = addresses; address != NULL; address = address->ai_next)
+	{
+		impl->listen_fd = socket(address->ai_family, address->ai_socktype,
+								 address->ai_protocol);
+		if (impl->listen_fd < 0)
+			continue;
+		if (setsockopt(impl->listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt,
+					   sizeof(opt)) == 0 &&
+			bind(impl->listen_fd, address->ai_addr, address->ai_addrlen) == 0)
+			break;
+		close(impl->listen_fd);
+		impl->listen_fd = -1;
+	}
+	freeaddrinfo(addresses);
 	if (impl->listen_fd < 0)
 		return -1;
 
-	/* Set socket options. */
-	setsockopt(impl->listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-
-	/* Bind. */
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = INADDR_ANY;
-	addr.sin_port = htons(impl->port);
-
-	if (bind(impl->listen_fd, (struct sockaddr *) &addr, sizeof(addr)) < 0)
-	{
-		close(impl->listen_fd);
-		impl->listen_fd = -1;
-		return -1;
-	}
-
 	/* Listen. */
-	if (listen(impl->listen_fd, 5) < 0)
+	if (listen(impl->listen_fd, SOMAXCONN) < 0)
 	{
 		close(impl->listen_fd);
 		impl->listen_fd = -1;
@@ -286,8 +442,20 @@ dumb_run(HttpServer *server)
 	impl->is_running = true;
 
 	/* Accept loop. */
-	while (impl->is_running)
+	while (impl->is_running && !PWH_HTTP_STOP_REQUESTED)
 	{
+		struct pollfd poll_fd = {
+			.fd = impl->listen_fd,
+			.events = POLLIN,
+		};
+		i32 poll_status = poll(&poll_fd, 1, 1000);
+		if (poll_status < 0 && errno == EINTR)
+			continue;
+		if (poll_status < 0)
+			return -1;
+		if (poll_status == 0)
+			continue;
+
 		client_fd = accept(impl->listen_fd, NULL, NULL);
 		if (client_fd < 0)
 		{

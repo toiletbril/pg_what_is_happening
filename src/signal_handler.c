@@ -16,6 +16,14 @@
  * See top-level LICENSE file.
  */
 
+/*
+ * Lazy-async approach of collection backend metrics. All backends have a
+ * SIGUSR2 signal installed, which forces the backends to write the metrics to
+ * the shared memory. We send a SIGUSR2 signal to all backends, all of which
+ * provides us the ability to interrupt the queries whenever we want in an
+ * totally asynchronous way.
+ */
+
 #include "postgres.h"
 
 #include "signal_handler.h"
@@ -29,7 +37,10 @@
 #include "shared_memory.h"
 
 /* Static storage for current QueryDesc pointer. */
-static volatile QueryDesc *CURRENT_QUERY_DESC = NULL;
+static QueryDesc *volatile CURRENT_QUERY_DESC = NULL;
+static PwhSharedMemoryBackendEntry *volatile CURRENT_ENTRY = NULL;
+static PwhNodeInstrumentation **volatile CURRENT_INSTRUMENTATION = NULL;
+static volatile sig_atomic_t CURRENT_INSTRUMENTATION_COUNT = 0;
 
 /* Previous SIGUSR2 handler for chaining. */
 static pqsigfunc PREV_SIGUSR2_HANDLER = NULL;
@@ -45,6 +56,36 @@ void
 pwh_set_current_query_desc(QueryDesc *queryDesc)
 {
 	CURRENT_QUERY_DESC = queryDesc;
+}
+
+void
+pwh_set_signal_metrics(PwhSharedMemoryBackendEntry *entry,
+					   PwhNodeInstrumentation **instrumentation, u32 count)
+{
+	if (entry == NULL)
+	{
+		CURRENT_ENTRY = NULL;
+		PWH_MEMORY_BARRIER();
+		CURRENT_INSTRUMENTATION = NULL;
+		CURRENT_INSTRUMENTATION_COUNT = 0;
+		return;
+	}
+
+	CURRENT_INSTRUMENTATION = instrumentation;
+	CURRENT_INSTRUMENTATION_COUNT = (sig_atomic_t) count;
+	PWH_MEMORY_BARRIER();
+	CURRENT_ENTRY = entry;
+}
+
+void
+pwh_collect_current_metrics(PwhNodeMetrics *metrics)
+{
+	PwhNodeInstrumentation **instrumentation = CURRENT_INSTRUMENTATION;
+	sig_atomic_t			 count = CURRENT_INSTRUMENTATION_COUNT;
+	PWH_MEMORY_BARRIER();
+	if (instrumentation != NULL && count > 0)
+		pwh_collect_instrumentation_metrics(instrumentation, metrics,
+											(u64) count);
 }
 
 QueryDesc *
@@ -67,78 +108,57 @@ void
 pwh_sigusr2_handler(SIGNAL_ARGS)
 {
 	int save_errno = errno;
-	SIGNAL_HANDLER_CALL_COUNT++;
+	if (SIGNAL_HANDLER_CALL_COUNT < SIG_ATOMIC_MAX)
+		SIGNAL_HANDLER_CALL_COUNT++;
 
-	/* Check if we have an active query. */
-	QueryDesc *queryDesc = (QueryDesc *) CURRENT_QUERY_DESC;
+	PwhSharedMemoryBackendEntry *entry =
+		(PwhSharedMemoryBackendEntry *) CURRENT_ENTRY;
+	PwhNodeInstrumentation **instrumentation = CURRENT_INSTRUMENTATION;
+	sig_atomic_t			 count = CURRENT_INSTRUMENTATION_COUNT;
 
-	ereport(DEBUG2, (errmsg("PWH: SIGUSR2 handler called"),
-					 errdetail("queryDesc=%p calls=%d", (void *) queryDesc,
-							   (int) SIGNAL_HANDLER_CALL_COUNT)));
-
-	if (queryDesc == NULL || queryDesc->planstate == NULL)
+	if (entry == NULL || instrumentation == NULL || count <= 0)
 	{
-		SIGNAL_HANDLER_NO_QUERYDESC++;
-		ereport(DEBUG2, (errmsg("PWH: No QueryDesc in signal handler"),
-						 errdetail("queryDesc=%p", (void *) queryDesc)));
+		if (SIGNAL_HANDLER_NO_QUERYDESC < SIG_ATOMIC_MAX)
+			SIGNAL_HANDLER_NO_QUERYDESC++;
 		goto chain;
 	}
 
 	if (PWH_SHMEM == NULL)
 	{
-		SIGNAL_HANDLER_SHMEM_NULL++;
+		if (SIGNAL_HANDLER_SHMEM_NULL < SIG_ATOMIC_MAX)
+			SIGNAL_HANDLER_SHMEM_NULL++;
 		goto chain;
 	}
 
-	PwhSharedMemoryBackendEntry *shmem_be_entry = NULL;
-	for (u64 i = 0; i < (u64) PWH_GUC_MAX_TRACKED_QUERIES; i++)
+	if (entry->backend_pid != MyProcPid)
 	{
-		PwhSharedMemoryBackendEntry *be = PWH_GET_BACKEND_ENTRY_UNSAFE(i);
-
-		if (be->backend_pid == MyProcPid)
-		{
-			shmem_be_entry = be;
-			break;
-		}
-	}
-
-	if (shmem_be_entry == NULL)
-	{
-		SIGNAL_HANDLER_NO_SLOT++;
+		if (SIGNAL_HANDLER_NO_SLOT < SIG_ATOMIC_MAX)
+			SIGNAL_HANDLER_NO_SLOT++;
 		goto chain;
 	}
 
 	/* Refresh instrumentation data. */
-	PwhNodeMetrics *metrics = pwh_get_backend_entry_metrics(shmem_be_entry);
-
-	ereport(DEBUG2,
-			(errmsg("PWH: Refreshing instrumentation in signal handler"),
-			 errdetail("shmem_be_entry=%p metrics=%p num_nodes=%u",
-					   (void *) shmem_be_entry, (void *) metrics,
-					   shmem_be_entry->count_of_metrics)));
-
-	pwh_collect_planstate_metrics(queryDesc->planstate, metrics,
-								  PWH_GUC_MAX_NODES_PER_QUERY);
+	PwhNodeMetrics *metrics = pwh_get_backend_entry_metrics(entry);
+	sig_atomic_t	base_sequence;
+	if (!pwh_begin_metrics_write(entry, &base_sequence))
+		goto chain;
+	pwh_collect_instrumentation_metrics(instrumentation, metrics, (u64) count);
+	pwh_end_metrics_write(entry, base_sequence);
 
 	/* Increment generation counter to signal completion. */
-	shmem_be_entry->poll_generation++;
-	PWH_MEMORY_BARRIER();
+	pwh_advance_poll_generation(entry);
 
-	SIGNAL_HANDLER_SUCCESS_COUNT++;
-
-	ereport(DEBUG2, (errmsg("PWH: Signal handler completed successfully"),
-					 errdetail("generation=%lu success_count=%d",
-							   (unsigned long) shmem_be_entry->poll_generation,
-							   (int) SIGNAL_HANDLER_SUCCESS_COUNT)));
+	if (SIGNAL_HANDLER_SUCCESS_COUNT < SIG_ATOMIC_MAX)
+		SIGNAL_HANDLER_SUCCESS_COUNT++;
 
 chain:
 	errno = save_errno;
 
 	/* Chain to previous handler if it's a valid function pointer. */
-	if (PREV_SIGUSR2_HANDLER && PREV_SIGUSR2_HANDLER != SIG_IGN &&
-		PREV_SIGUSR2_HANDLER != SIG_DFL)
+	if (PREV_SIGUSR2_HANDLER && PREV_SIGUSR2_HANDLER != PWH_SIG_IGN &&
+		PREV_SIGUSR2_HANDLER != PWH_SIG_DFL)
 	{
-		(*PREV_SIGUSR2_HANDLER)(postgres_signal_arg);
+		PWH_CALL_SIGNAL_HANDLER(PREV_SIGUSR2_HANDLER);
 	}
 }
 

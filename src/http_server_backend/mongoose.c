@@ -31,7 +31,7 @@ typedef struct MongooseHttpServer
 {
 	struct mg_mgr		  mgr;
 	struct mg_connection *connection;
-	char				  listen_address[128];
+	char				  listen_address[272];
 	volatile bool		  is_running;
 	HttpRequestHandlerFn  handler_fn;
 	void				 *custom_context;
@@ -40,10 +40,10 @@ typedef struct MongooseHttpServer
 /* Forward declarations. */
 static HttpServer *mongoose_create(const char *listen_addr);
 static void		   mongoose_destroy(HttpServer *server);
-static void mongoose_set_handler(HttpServer			 *server,
-								 HttpRequestHandlerFn handler, void *user_data);
-static i32	mongoose_run(HttpServer *server);
-static void mongoose_stop(HttpServer *server);
+static void		   mongoose_set_handler(HttpServer			*server,
+										HttpRequestHandlerFn handler, void *user_data);
+static i32		   mongoose_run(HttpServer *server);
+static void		   mongoose_stop(HttpServer *server);
 
 /* Vtable. */
 static const HttpServerVtable mongoose_vtable = {
@@ -100,10 +100,11 @@ mongoose_event_handler(struct mg_connection *c, int ev, void *ev_data)
 		}
 
 		/* Send response. */
-		mg_http_reply(
-			c, (int) resp.status_code,
-			resp.headers ? resp.headers : "Content-Type: text/plain\r\n", "%s",
-			resp.body ? resp.body : "");
+		mg_http_reply(c, (int) resp.status_code,
+					  resp.headers
+						  ? resp.headers
+						  : "Content-Type: text/plain; charset=utf-8\r\n",
+					  "%.*s", (int) resp.body_len, resp.body ? resp.body : "");
 
 		pwh_http_response_destroy_body(&resp);
 	}
@@ -131,11 +132,28 @@ mongoose_create(const char *listen_addr)
 
 	/* Format listen address - if it doesn't start with http://, prepend it. */
 	if (strncmp(listen_addr, "http://", 7) == 0)
-		snprintf(impl->listen_address, sizeof(impl->listen_address), "%s",
-				 listen_addr);
+	{
+		if (snprintf(impl->listen_address, sizeof(impl->listen_address), "%s",
+					 listen_addr) >= (i32) sizeof(impl->listen_address))
+		{
+			mg_mgr_free(&impl->mgr);
+			free(impl);
+			free(server);
+			return NULL;
+		}
+	}
 	else
-		snprintf(impl->listen_address, sizeof(impl->listen_address),
-				 "http://%s", listen_addr);
+	{
+		if (snprintf(impl->listen_address, sizeof(impl->listen_address),
+					 "http://%s",
+					 listen_addr) >= (i32) sizeof(impl->listen_address))
+		{
+			mg_mgr_free(&impl->mgr);
+			free(impl);
+			free(server);
+			return NULL;
+		}
+	}
 
 	impl->connection = NULL;
 	impl->is_running = false;
@@ -189,7 +207,7 @@ mongoose_run(HttpServer *server)
 	impl->is_running = true;
 
 	/* Event loop. */
-	while (impl->is_running)
+	while (impl->is_running && !PWH_HTTP_STOP_REQUESTED)
 	{
 		mg_mgr_poll(&impl->mgr, 1000); /* Poll with 1 second timeout. */
 	}
