@@ -37,10 +37,10 @@
 #include "shared_memory.h"
 
 /* Static storage for current QueryDesc pointer. */
-static volatile QueryDesc					*CURRENT_QUERY_DESC = NULL;
-static volatile PwhSharedMemoryBackendEntry *CURRENT_ENTRY = NULL;
-static PwhNodeInstrumentation			   **CURRENT_INSTRUMENTATION = NULL;
-static volatile sig_atomic_t				 CURRENT_INSTRUMENTATION_COUNT = 0;
+static QueryDesc *volatile CURRENT_QUERY_DESC = NULL;
+static PwhSharedMemoryBackendEntry *volatile CURRENT_ENTRY = NULL;
+static PwhNodeInstrumentation **volatile CURRENT_INSTRUMENTATION = NULL;
+static volatile sig_atomic_t CURRENT_INSTRUMENTATION_COUNT = 0;
 
 /* Previous SIGUSR2 handler for chaining. */
 static pqsigfunc PREV_SIGUSR2_HANDLER = NULL;
@@ -62,10 +62,30 @@ void
 pwh_set_signal_metrics(PwhSharedMemoryBackendEntry *entry,
 					   PwhNodeInstrumentation **instrumentation, u32 count)
 {
+	if (entry == NULL)
+	{
+		CURRENT_ENTRY = NULL;
+		PWH_MEMORY_BARRIER();
+		CURRENT_INSTRUMENTATION = NULL;
+		CURRENT_INSTRUMENTATION_COUNT = 0;
+		return;
+	}
+
 	CURRENT_INSTRUMENTATION = instrumentation;
 	CURRENT_INSTRUMENTATION_COUNT = (sig_atomic_t) count;
 	PWH_MEMORY_BARRIER();
 	CURRENT_ENTRY = entry;
+}
+
+void
+pwh_collect_current_metrics(PwhNodeMetrics *metrics)
+{
+	PwhNodeInstrumentation **instrumentation = CURRENT_INSTRUMENTATION;
+	sig_atomic_t			 count = CURRENT_INSTRUMENTATION_COUNT;
+	PWH_MEMORY_BARRIER();
+	if (instrumentation != NULL && count > 0)
+		pwh_collect_instrumentation_metrics(instrumentation, metrics,
+											(u64) count);
 }
 
 QueryDesc *

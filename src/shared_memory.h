@@ -44,7 +44,7 @@ typedef struct
 {
 	NodeTag tag;
 	u32		node_id;
-	u32		parent_node_id;
+	i32		parent_node_id;
 
 	struct
 	{

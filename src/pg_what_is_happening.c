@@ -212,21 +212,20 @@ backend_exit_callback(int code, Datum arg)
 static void
 initialize_state_once_per_backend(void)
 {
+	/* Attach before callbacks can observe partially initialized state. */
+	PWH_SHMEM = pwh_get_shared_memory_ptr();
 	/* Query backend state on error. */
 	RegisterXactCallback(query_cleanup_callback, NULL);
 	before_shmem_exit(backend_exit_callback, (Datum) 0);
 	/* Report metrics when signaled. */
 	pwh_install_signal_handler();
-	/* Communicate with BG worker. */
-	PWH_SHMEM = pwh_get_shared_memory_ptr();
-
 	WAS_BACKEND_INITIALIZED = true;
 }
 
 static void
 query_start_hook(QueryDesc *queryDesc, i32 eflags)
 {
-	bool should_track = PWH_GUC_IS_ENABLED &&
+	bool should_track = PWH_GUC_IS_ENABLED && pwh_is_regular_backend() &&
 						pwh_get_current_query_desc() == NULL &&
 						queryDesc->plannedstmt != NULL &&
 						queryDesc->plannedstmt->planTree != NULL &&
@@ -384,9 +383,7 @@ query_end_hook(QueryDesc *queryDesc)
 					sig_atomic_t base_sequence;
 					if (pwh_begin_metrics_write(be, &base_sequence))
 					{
-						pwh_collect_planstate_metrics(
-							queryDesc->planstate, metrics,
-							PWH_GUC_MAX_NODES_PER_QUERY);
+						pwh_collect_current_metrics(metrics);
 						pwh_end_metrics_write(be, base_sequence);
 					}
 

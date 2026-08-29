@@ -5,6 +5,8 @@
 # For development, please use Shfile.sh wrapper.
 #
 
+.DEFAULT_GOAL := all
+
 MODE ?= dbg
 
 WITH_BGWORKER ?= yes
@@ -14,7 +16,7 @@ ifndef VERBOSE
 MAKEFLAGS += -s
 endif
 
-ifneq ($(filter fmt tidy reset manual-install,$(MAKECMDGOALS)),)
+ifneq ($(filter fmt tidy reset validate-dashboard,$(MAKECMDGOALS)),)
 # Utility targets don't need PGXS.
 PG_CONFIG ?= true
 PGXS := /dev/null
@@ -32,7 +34,7 @@ EXTRA_CLEAN = src/o/ pg_what_is_happening.dylib
 
 include src/Makefile
 
-ifeq ($(filter fmt tidy reset manual-install,$(MAKECMDGOALS)),)
+ifeq ($(filter fmt tidy reset validate-dashboard,$(MAKECMDGOALS)),)
 include $(PGXS)
 endif
 
@@ -52,9 +54,12 @@ reset:
 	echo "    " RM src/o pg_what_is_happening.so pg_what_is_happening.dylib
 	rm -rf src/o pg_what_is_happening.so pg_what_is_happening.dylib
 
+validate-dashboard:
+	sh scripts/validate-dashboard.sh
+
 dev-reset:
 	$(MAKE) reset
 	$(MAKE) install -j$(shell getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
 	pg_ctl -D /data -l /tmp/postgresql.log restart
 
-.PHONY: fmt tidy reset relaunch dirs
+.PHONY: fmt tidy reset validate-dashboard dev-reset dirs

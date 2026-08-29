@@ -1,4 +1,4 @@
-\echo Use "CREATE EXTENSION pg_what_is_happening" to load this file. \quit
+\echo Use "ALTER EXTENSION pg_what_is_happening UPDATE TO '1.1'" to load this file. \quit
 
 GRANT USAGE ON SCHEMA what_is_happening TO PUBLIC;
 

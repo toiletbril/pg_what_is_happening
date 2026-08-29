@@ -199,7 +199,7 @@ mongoose_run(HttpServer *server)
 	impl->is_running = true;
 
 	/* Event loop. */
-	while (impl->is_running)
+	while (impl->is_running && !PWH_HTTP_STOP_REQUESTED)
 	{
 		mg_mgr_poll(&impl->mgr, 1000); /* Poll with 1 second timeout. */
 	}

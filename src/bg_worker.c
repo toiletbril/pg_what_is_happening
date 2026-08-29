@@ -70,6 +70,7 @@ pwh_bgworker_main(Datum main_arg)
 {
 	unused(main_arg);
 
+	PWH_HTTP_STOP_REQUESTED = false;
 	pqsignal(SIGTERM, handle_sigterm);
 	pqsignal(SIGHUP, handle_sighup);
 	BackgroundWorkerUnblockSignals();
@@ -93,17 +94,23 @@ pwh_bgworker_main(Datum main_arg)
 
 	if (HTTP_SERVER_INSTANCE == NULL)
 	{
-		ereport(FATAL,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("PWH: No HTTP backend compiled in"),
-				 errdetail("Recompile with HTTP_BACKEND=mongoose or similar")));
+		ereport(FATAL, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						errmsg("PWH: Could not initialize HTTP backend %s",
+							   pwh_http_server_backend_name()),
+						errdetail("Listen address: %s", listen_addr)));
 	}
 
 	pwh_http_server_set_handler(HTTP_SERVER_INSTANCE, metrics_handler, NULL);
-	if (pwh_http_server_run(HTTP_SERVER_INSTANCE) != 0)
-		ereport(FATAL, (errmsg("PWH: Metrics endpoint failed"),
-						errdetail("Could not listen on %s", listen_addr)));
+	i32 server_status = pwh_http_server_run(HTTP_SERVER_INSTANCE);
+	if (server_status != 0)
+		ereport(FATAL,
+				(errmsg("PWH: Metrics endpoint failed"),
+				 errdetail("Backend %s could not listen on %s",
+						   pwh_http_server_backend_name(), listen_addr)));
 	pwh_http_server_destroy(HTTP_SERVER_INSTANCE);
+	HTTP_SERVER_INSTANCE = NULL;
+	if (CACHED_METRICS != NULL)
+		pfree(CACHED_METRICS);
 
 	ereport(LOG, (errmsg("PWH: Metrics endpoint shutting down")));
 
@@ -131,6 +138,7 @@ metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 	TimestampTz now = GetCurrentTimestamp();
 	char	   *metrics;
 	if (CACHED_METRICS != NULL && CACHED_METRICS_TIME != 0 &&
+		now >= CACHED_METRICS_TIME &&
 		now - CACHED_METRICS_TIME <=
 			(TimestampTz) PWH_GUC_SIGNAL_TIMEOUT_MS * 1000)
 	{
@@ -165,15 +173,12 @@ metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 	pfree(metrics);
 }
 
-wontreturn static void
+static void
 handle_sigterm(SIGNAL_ARGS)
 {
-	if (HTTP_SERVER_INSTANCE != NULL)
-	{
-		pwh_http_server_stop(HTTP_SERVER_INSTANCE);
-	}
-
-	proc_exit(0);
+	int save_errno = errno;
+	PWH_HTTP_STOP_REQUESTED = true;
+	errno = save_errno;
 }
 
 static void

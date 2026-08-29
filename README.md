@@ -146,12 +146,12 @@ visibility the Postgres executor can provide.
 
 | Setting                                    | Default          | Sensible range   | Reload   | Description                                                                                         |
 |--------------------------------------------|------------------|------------------|----------|-----------------------------------------------------------------------------------------------------|
-| `what_is_happening.is_enabled`             | `true`           | —                | `SIGHUP` | Enable or disable the extension without unloading it.                                               |
+| `what_is_happening.is_enabled`             | `true`           | -                | `SIGHUP` | Enable or disable the extension without unloading it.                                               |
 | `what_is_happening.metrics_expose_query_text` | `false`        | -                | `SIGHUP` | Include query text in the unauthenticated metrics endpoint.                                         |
-| `what_is_happening.metrics_listen_address` | `127.0.0.1:9187` | —                | Restart  | Address and port for the `/metrics` HTTP endpoint. Only available if compiled with `WITH_BGWORKER`. |
-| `what_is_happening.max_tracked_queries`    | `32`             | 2–256            | Restart  | Number of concurrent query slots allocated in shared memory. Each slot holds one backend's metrics. |
-| `what_is_happening.max_nodes_per_query`    | `128`            | 16–256           | Restart  | Maximum plan nodes tracked per query. Plans with more nodes get truncated.                          |
-| `what_is_happening.max_query_text_length`  | `1024`           | 64–8192          | Restart  | Maximum bytes of query text stored. Longer queries get truncated.                                   |
+| `what_is_happening.metrics_listen_address` | `127.0.0.1:9187` | -                | Restart  | Address and port for the `/metrics` HTTP endpoint. Only available if compiled with `WITH_BGWORKER`. |
+| `what_is_happening.max_tracked_queries`    | `32`             | 2-256            | Restart  | Number of concurrent query slots allocated in shared memory. Each slot holds one backend's metrics. |
+| `what_is_happening.max_nodes_per_query`    | `128`            | 16-256           | Restart  | Maximum plan nodes tracked per query. Plans with more nodes get truncated.                          |
+| `what_is_happening.max_query_text_length`  | `1024`           | 64-8192          | Restart  | Maximum bytes of query text stored. Longer queries get truncated.                                   |
 | `what_is_happening.signal_timeout_ms`      | `32`             | 1-10000          | `SIGHUP` | Maximum time to wait for active backends to refresh metrics, in milliseconds.                       |
 | `what_is_happening.min_cost_to_track`      | `50000.0`        | 0.0-inf          | `SIGHUP` | Minimum total cost of a query to get tracked by the extension.                                      |
 

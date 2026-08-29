@@ -21,20 +21,23 @@ jobs:
       packages: write
     outputs:
       image: ${{ steps.result.outputs.image }}
-      cache_hit: ${{ steps.check.outputs.cache_hit }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      - name: Validate dashboard
+        run: sh scripts/validate-dashboard.sh
+
       - name: Calculate content hash
         id: meta
         run: |
-          CONTENT_HASH=$(cat Dockerfile 2>/dev/null | sha256sum | cut -c1-16)
+          test -f .tmux.conf || : > .tmux.conf
+          CONTENT_HASH=$(sha256sum Dockerfile .tmux.conf scripts/container-entrypoint.sh | sha256sum | cut -c1-16)
           IMAGE_BASE="${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME }}"
 
-          echo "image_cached=${IMAGE_BASE}:${CONTENT_HASH}" >> $GITHUB_OUTPUT
-          echo "image_base=$IMAGE_BASE" >> $GITHUB_OUTPUT
+          echo "image_cached=${IMAGE_BASE}:${CONTENT_HASH}" >> "$GITHUB_OUTPUT"
+          echo "image_base=$IMAGE_BASE" >> "$GITHUB_OUTPUT"
 
       - name: Log in to registry
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
@@ -47,9 +50,9 @@ jobs:
         id: check
         run: |
           if docker manifest inspect ${{ steps.meta.outputs.image_cached }} > /dev/null 2>&1; then
-            echo "cache_hit=true" >> $GITHUB_OUTPUT
+            echo "cache_hit=true" >> "$GITHUB_OUTPUT"
           else
-            echo "cache_hit=false" >> $GITHUB_OUTPUT
+            echo "cache_hit=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build image
@@ -68,4 +71,4 @@ jobs:
       - name: Set outputs
         id: result
         run: |
-          echo "image=${{ steps.meta.outputs.image_cached }}" >> $GITHUB_OUTPUT
+          echo "image=${{ steps.meta.outputs.image_cached }}" >> "$GITHUB_OUTPUT"

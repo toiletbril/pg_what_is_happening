@@ -34,10 +34,6 @@ extern u64 pwh_remember_planstate_tree_as_metric_structure(
 	PlanState *planstate, PwhNodeMetrics *metrics,
 	PwhNodeInstrumentation **instrumentation, u64 max_nodes);
 
-/* Walk plan tree and read Instrumentation data. */
-extern void pwh_collect_planstate_metrics(PlanState		 *planstate,
-										  PwhNodeMetrics *metrics,
-										  u64			  max_nodes);
 extern void pwh_collect_instrumentation_metrics(
 	PwhNodeInstrumentation **instrumentation, PwhNodeMetrics *metrics,
 	u64 count);

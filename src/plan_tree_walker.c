@@ -42,6 +42,8 @@ typedef struct
 	PwhNodeInstrumentation **instrumentation;
 	u64						 max_nodes;
 	u64						*node_counter;
+	PlanState			   **visited;
+	u64						 visited_count;
 } WalkerContext;
 
 /* Returns assigned node id, or -1 to stop traversal. */
@@ -49,8 +51,6 @@ typedef i32 (*PwhNodeVisitorFn)(PlanState *planstate, i32 parent_id,
 								void *context);
 
 static i32 topology_visitor(PlanState *planstate, i32 parent_id, void *context);
-static i32 instrumentation_visitor(PlanState *planstate, i32 parent_id,
-								   void *context);
 static bool walk_planstate_recursive(PlanState *planstate, i32 parent_id,
 									 PwhNodeVisitorFn visit_fn, void *ctx);
 
@@ -62,6 +62,14 @@ walk_planstate_recursive(PlanState *planstate, i32 parent_id,
 
 	if (planstate == NULL || planstate->plan == NULL)
 		return true;
+
+	WalkerContext *walker = (WalkerContext *) ctx;
+	for (u64 i = 0; i < walker->visited_count; i++)
+		if (walker->visited[i] == planstate)
+			return true;
+	if (walker->visited_count >= walker->max_nodes)
+		return false;
+	walker->visited[walker->visited_count++] = planstate;
 
 	i32 current_id = visit_fn(planstate, parent_id, ctx);
 	if (current_id < 0)
@@ -132,6 +140,17 @@ walk_planstate_recursive(PlanState *planstate, i32 parent_id,
 					return false;
 			break;
 		}
+#if PG_VERSION_NUM < 140000
+		case T_ModifyTableState:
+		{
+			ModifyTableState *mt = (ModifyTableState *) planstate;
+			for (u64 i = 0; i < (u64) mt->mt_nplans; i++)
+				if (!walk_planstate_recursive(mt->mt_plans[i], current_id,
+											  visit_fn, ctx))
+					return false;
+			break;
+		}
+#endif
 		case T_MergeAppendState:
 		{
 			MergeAppendState *mas = (MergeAppendState *) planstate;
@@ -206,9 +225,11 @@ pwh_remember_planstate_tree_as_metric_structure(
 		.instrumentation = instrumentation,
 		.max_nodes = max_nodes,
 		.node_counter = &node_counter,
+		.visited = palloc0(sizeof(PlanState *) * max_nodes),
 	};
 
 	walk_planstate_recursive(planstate, -1, topology_visitor, &ctx);
+	pfree(ctx.visited);
 
 	return node_counter;
 }
@@ -247,29 +268,6 @@ topology_visitor(PlanState *planstate, i32 parent_id, void *context)
 	return id;
 }
 
-/*
- * Walk plan tree and read Instrumentation data.
- * Must match the same traversal order as topology walk.
- */
-void
-pwh_collect_planstate_metrics(PlanState *planstate, PwhNodeMetrics *metrics,
-							  u64 max_nodes)
-{
-	u64 node_counter = 0;
-
-	if (unlikely(planstate == NULL || metrics == NULL))
-		return;
-
-	WalkerContext ctx = {
-		.metrics = metrics,
-		.instrumentation = NULL,
-		.max_nodes = max_nodes,
-		.node_counter = &node_counter,
-	};
-
-	walk_planstate_recursive(planstate, -1, instrumentation_visitor, &ctx);
-}
-
 void
 pwh_collect_instrumentation_metrics(PwhNodeInstrumentation **instrumentation,
 									PwhNodeMetrics *metrics, u64 count)
@@ -280,7 +278,7 @@ pwh_collect_instrumentation_metrics(PwhNodeInstrumentation **instrumentation,
 	for (u64 i = 0; i < count; i++)
 	{
 		PwhNodeInstrumentation *instr = instrumentation[i];
-		if (instr == NULL)
+		if (instr == NULL || metrics[i].magic != PWH_NODE_MAGIC)
 			continue;
 
 		metrics[i].execution.tuples_returned =
@@ -299,59 +297,4 @@ pwh_collect_instrumentation_metrics(PwhNodeInstrumentation **instrumentation,
 		metrics[i].execution.rows_filtered_by_expressions = instr->nfiltered2;
 		PWH_COPY_BUFUSAGE(metrics, instr, i);
 	}
-}
-
-static i32
-instrumentation_visitor(PlanState *planstate, i32 parent_id, void *context)
-{
-	WalkerContext *ctx = (WalkerContext *) context;
-	(void) parent_id;
-
-	if (*ctx->node_counter >= ctx->max_nodes)
-		return -1;
-
-	i32						current_id = (i32) (*ctx->node_counter)++;
-	PwhNodeInstrumentation *instr = planstate->instrument;
-
-	/* Validate node magic before writing. */
-	if (!pwh_validate_node_magic(&ctx->metrics[current_id], (u32) current_id))
-		return -1;
-
-	if (likely(instr != NULL))
-	{
-		ereport(DEBUG2,
-				(errmsg("PWH: Reading instrumentation for node %d", current_id),
-				 errdetail(
-					 "ntuples=%.0f nloops=%.0f total_time=%.6f cache_hits=%lld",
-					 instr->ntuples, instr->nloops,
-					 PWH_INSTR_TIME_MAYBE_GET_DOUBLE(PWH_INSTR_TOTAL(instr)),
-					 (long long) PWH_INSTR_SHARED_HITS(instr))));
-
-		ctx->metrics[current_id].execution.tuples_returned =
-			instr->ntuples + instr->tuplecount;
-		ctx->metrics[current_id].execution.loops_executed =
-			instr->nloops + (instr->running ? 1.0 : 0.0);
-		ctx->metrics[current_id].execution.startup_time_us =
-			(PWH_INSTR_TIME_MAYBE_GET_DOUBLE(instr->startup) +
-			 PWH_INSTR_TIME_MAYBE_GET_DOUBLE(instr->firsttuple)) *
-			1000000.0;
-		ctx->metrics[current_id].execution.total_time_us =
-			(PWH_INSTR_TIME_MAYBE_GET_DOUBLE(PWH_INSTR_TOTAL(instr)) +
-			 INSTR_TIME_GET_DOUBLE(instr->counter)) *
-			1000000.0;
-		ctx->metrics[current_id].execution.rows_filtered_by_joins =
-			instr->nfiltered1;
-		ctx->metrics[current_id].execution.rows_filtered_by_expressions =
-			instr->nfiltered2;
-
-		PWH_COPY_BUFUSAGE(ctx->metrics, instr, current_id);
-	}
-	else
-	{
-		ereport(LOG,
-				(errmsg("PWH: Node %d has NULL instrumentation", current_id),
-				 errdetail("planstate=%p", (void *) planstate)));
-	}
-
-	return current_id;
 }

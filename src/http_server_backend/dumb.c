@@ -21,6 +21,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <poll.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -48,6 +49,7 @@ static void dumb_set_handler(HttpServer *server, HttpRequestHandlerFn handler,
 							 void *user_data);
 static i32	dumb_run(HttpServer *server);
 static void dumb_stop(HttpServer *server);
+static void send_all(i32 fd, const char *data, u64 length);
 
 static const HttpServerVtable dumb_vtable = {
 	.createFn = dumb_create,
@@ -183,6 +185,10 @@ parse_request(const char *buffer, HttpRequest *req)
 	space2 = memchr(space1 + 1, ' ', line_len - (space1 - buffer + 1));
 	if (space2 == NULL)
 		return false;
+	if (space1 == buffer || space2 == space1 + 1 || *(space1 + 1) != '/' ||
+		!((line_end - space2 == 9 && memeq(space2 + 1, "HTTP/1.0", 8)) ||
+		  (line_end - space2 == 9 && memeq(space2 + 1, "HTTP/1.1", 8))))
+		return false;
 
 	/* Allocate and copy method. */
 	req->method = (char *) malloc(space1 - buffer + 1);
@@ -235,6 +241,30 @@ free_request(HttpRequest *req)
 }
 
 static void
+send_response(i32 client_fd, const HttpResponse *resp)
+{
+	char response_buffer[1024];
+	i32	 response_len =
+		snprintf(response_buffer, sizeof(response_buffer),
+				 "HTTP/1.1 %d %s\r\n"
+				 "%s"
+				 "Content-Length: %llu\r\n"
+				 "Connection: close\r\n"
+				 "\r\n",
+				 resp->status_code, resp->status_text,
+				 resp->headers ? resp->headers
+							   : "Content-Type: text/plain; charset=utf-8\r\n",
+				 (unsigned long long) resp->body_len);
+
+	if (response_len > 0 && response_len < (i32) sizeof(response_buffer))
+	{
+		send_all(client_fd, response_buffer, (u64) response_len);
+		if (resp->body != NULL)
+			send_all(client_fd, resp->body, resp->body_len);
+	}
+}
+
+static void
 send_all(i32 fd, const char *data, u64 length)
 {
 	while (length > 0)
@@ -256,10 +286,9 @@ handle_connection(DumbHttpServer *impl, i32 client_fd)
 	ssize_t		   bytes_read;
 	HttpRequest	   req;
 	HttpResponse   resp;
-	char		   response_buffer[1024];
-	i32			   response_len;
 	struct timeval timeout = {.tv_sec = 2, .tv_usec = 0};
 	u64			   offset = 0;
+	bool		   request_complete = false;
 
 	setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 	setsockopt(client_fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
@@ -276,7 +305,10 @@ handle_connection(DumbHttpServer *impl, i32 client_fd)
 		buffer[offset] = '\0';
 		if (strstr(buffer, "\r\n\r\n") != NULL ||
 			strstr(buffer, "\n\n") != NULL)
+		{
+			request_complete = true;
 			break;
+		}
 	}
 	if (offset == 0)
 	{
@@ -286,11 +318,18 @@ handle_connection(DumbHttpServer *impl, i32 client_fd)
 	buffer[offset] = '\0';
 
 	/* Parse request. */
-	if (!parse_request(buffer, &req))
+	if (!request_complete || !parse_request(buffer, &req))
 	{
+		memset(&resp, 0, sizeof(resp));
+		pwh_http_response_set_text(&resp, 400, "Bad Request");
+		send_response(client_fd, &resp);
+		pwh_http_response_destroy_body(&resp);
 		close(client_fd);
 		return;
 	}
+	char *query = strchr(req.path, '?');
+	if (query != NULL)
+		*query = '\0';
 
 	/* Initialize response. */
 	memset(&resp, 0, sizeof(resp));
@@ -305,25 +344,7 @@ handle_connection(DumbHttpServer *impl, i32 client_fd)
 		pwh_http_response_set_text(&resp, 404, "Not Found");
 	}
 
-	/* Build response. */
-	response_len =
-		snprintf(response_buffer, sizeof(response_buffer),
-				 "HTTP/1.1 %d %s\r\n"
-				 "%s"
-				 "Content-Length: %llu\r\n"
-				 "Connection: close\r\n"
-				 "\r\n",
-				 resp.status_code, resp.status_text,
-				 resp.headers ? resp.headers
-							  : "Content-Type: text/plain; charset=utf-8\r\n",
-				 (unsigned long long) resp.body_len);
-
-	if (response_len > 0 && response_len < (i32) sizeof(response_buffer))
-	{
-		send_all(client_fd, response_buffer, response_len);
-		if (resp.body != NULL)
-			send_all(client_fd, resp.body, resp.body_len);
-	}
+	send_response(client_fd, &resp);
 
 	/* Cleanup. */
 	pwh_http_response_destroy_body(&resp);
@@ -337,36 +358,37 @@ dumb_run(HttpServer *server)
 	DumbHttpServer	*impl = (DumbHttpServer *) server->impl;
 	struct addrinfo	 hints;
 	struct addrinfo *addresses = NULL;
+	struct addrinfo *address;
 	char			 port[16];
 	i32				 client_fd;
 	i32				 opt = 1;
 
-	/* Create socket. */
-	impl->listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	snprintf(port, sizeof(port), "%d", impl->port);
+	if (getaddrinfo(impl->host, port, &hints, &addresses) != 0)
+		return -1;
+
+	for (address = addresses; address != NULL; address = address->ai_next)
+	{
+		impl->listen_fd = socket(address->ai_family, address->ai_socktype,
+								 address->ai_protocol);
+		if (impl->listen_fd < 0)
+			continue;
+		if (setsockopt(impl->listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt,
+					   sizeof(opt)) == 0 &&
+			bind(impl->listen_fd, address->ai_addr, address->ai_addrlen) == 0)
+			break;
+		close(impl->listen_fd);
+		impl->listen_fd = -1;
+	}
+	freeaddrinfo(addresses);
 	if (impl->listen_fd < 0)
 		return -1;
 
-	/* Set socket options. */
-	setsockopt(impl->listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_STREAM;
-	snprintf(port, sizeof(port), "%d", impl->port);
-	if (getaddrinfo(impl->host, port, &hints, &addresses) != 0 ||
-		addresses == NULL ||
-		bind(impl->listen_fd, addresses->ai_addr, addresses->ai_addrlen) < 0)
-	{
-		if (addresses != NULL)
-			freeaddrinfo(addresses);
-		close(impl->listen_fd);
-		impl->listen_fd = -1;
-		return -1;
-	}
-	freeaddrinfo(addresses);
-
 	/* Listen. */
-	if (listen(impl->listen_fd, 5) < 0)
+	if (listen(impl->listen_fd, SOMAXCONN) < 0)
 	{
 		close(impl->listen_fd);
 		impl->listen_fd = -1;
@@ -376,8 +398,20 @@ dumb_run(HttpServer *server)
 	impl->is_running = true;
 
 	/* Accept loop. */
-	while (impl->is_running)
+	while (impl->is_running && !PWH_HTTP_STOP_REQUESTED)
 	{
+		struct pollfd poll_fd = {
+			.fd = impl->listen_fd,
+			.events = POLLIN,
+		};
+		i32 poll_status = poll(&poll_fd, 1, 1000);
+		if (poll_status < 0 && errno == EINTR)
+			continue;
+		if (poll_status < 0)
+			return -1;
+		if (poll_status == 0)
+			continue;
+
 		client_fd = accept(impl->listen_fd, NULL, NULL);
 		if (client_fd < 0)
 		{

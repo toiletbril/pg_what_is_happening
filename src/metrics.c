@@ -230,18 +230,23 @@ formatter_append_all_node_metrics(Formatter *fmt, PwhNodeMetrics *node,
 							node_time_seconds);
 	formatter_append_metric(fmt, node, METRIC_TIME_PERCENT, "%.2f",
 							node_percent);
-	formatter_append_metric(fmt, node, METRIC_CACHE_HITS, "%ld",
-							(long) node->buffer_usage.cache_hits);
-	formatter_append_metric(fmt, node, METRIC_CACHE_MISSES, "%ld",
-							(long) node->buffer_usage.cache_misses);
-	formatter_append_metric(fmt, node, METRIC_LOCAL_CACHE_HITS, "%ld",
-							(long) node->buffer_usage.local_cache_hits);
-	formatter_append_metric(fmt, node, METRIC_LOCAL_CACHE_MISSES, "%ld",
-							(long) node->buffer_usage.local_cache_misses);
-	formatter_append_metric(fmt, node, METRIC_SPILL_FILE_READS, "%ld",
-							(long) node->buffer_usage.spill_file_reads);
-	formatter_append_metric(fmt, node, METRIC_SPILL_FILE_WRITES, "%ld",
-							(long) node->buffer_usage.spill_file_writes);
+	formatter_append_metric(fmt, node, METRIC_CACHE_HITS, "%llu",
+							(unsigned long long) node->buffer_usage.cache_hits);
+	formatter_append_metric(
+		fmt, node, METRIC_CACHE_MISSES, "%llu",
+		(unsigned long long) node->buffer_usage.cache_misses);
+	formatter_append_metric(
+		fmt, node, METRIC_LOCAL_CACHE_HITS, "%llu",
+		(unsigned long long) node->buffer_usage.local_cache_hits);
+	formatter_append_metric(
+		fmt, node, METRIC_LOCAL_CACHE_MISSES, "%llu",
+		(unsigned long long) node->buffer_usage.local_cache_misses);
+	formatter_append_metric(
+		fmt, node, METRIC_SPILL_FILE_READS, "%llu",
+		(unsigned long long) node->buffer_usage.spill_file_reads);
+	formatter_append_metric(
+		fmt, node, METRIC_SPILL_FILE_WRITES, "%llu",
+		(unsigned long long) node->buffer_usage.spill_file_writes);
 	formatter_append_metric(fmt, node, METRIC_ROWS_FILTERED_BY_JOINS, "%.0f",
 							node->execution.rows_filtered_by_joins);
 	formatter_append_metric(fmt, node, METRIC_ROWS_FILTERED_BY_EXPRESSIONS,

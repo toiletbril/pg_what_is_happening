@@ -33,6 +33,7 @@ extern void pwh_set_signal_metrics(PwhSharedMemoryBackendEntry *entry,
 
 /* Get the current QueryDesc. */
 extern QueryDesc *pwh_get_current_query_desc(void);
+extern void		  pwh_collect_current_metrics(PwhNodeMetrics *metrics);
 
 /* SIGUSR2 signal handler. */
 extern void pwh_sigusr2_handler(SIGNAL_ARGS);

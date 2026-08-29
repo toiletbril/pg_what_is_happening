@@ -8,10 +8,16 @@ SOURCES = \
 	src/metrics.c
 
 ENVCFLAGS := $(CFLAGS)
-BUILD_KEY := $(MODE)-bg$(WITH_BGWORKER)-$(HTTP_BACKEND)
+PG_BUILD_ID := $(shell "$(PG_CONFIG)" --version 2>/dev/null | tr -cs 'A-Za-z0-9.' '_')
+BUILD_KEY := $(MODE)-bg$(WITH_BGWORKER)-$(HTTP_BACKEND)-$(PG_BUILD_ID)
+BUILD_CONFIG := src/o/$(BUILD_KEY)/.build-config
 
 ifneq ($(filter $(WITH_BGWORKER),yes no),$(WITH_BGWORKER))
 $(error Invalid WITH_BGWORKER=$(WITH_BGWORKER). Available values are "yes", "no")
+endif
+
+ifneq ($(filter $(HTTP_BACKEND),mongoose dumb),$(HTTP_BACKEND))
+$(error Invalid HTTP_BACKEND=$(HTTP_BACKEND). Available backends are "mongoose", "dumb")
 endif
 
 OS_INFO := $(shell uname -rvom || echo "<no uname>")
@@ -55,8 +61,6 @@ CFLAGS2 += -DMG_ENABLE_LOG=0 -DMG_ENABLE_PACKED_FS=0 -DMG_ENABLE_LINES=0
 SOURCES += src/http_server_backend/mongoose.c vendor/mongoose.c
 else ifeq ($(HTTP_BACKEND), dumb)
 SOURCES += src/http_server_backend/dumb.c
-else
-$(error Invalid HTTP_BACKEND=$(HTTP_BACKEND). Available backends are "mongoose", "dumb")
 endif
 endif
 
@@ -80,8 +84,15 @@ dirs:
 	mkdir -p src/o/$(BUILD_KEY)/src/compatibility
 	mkdir -p src/o/$(BUILD_KEY)/vendor
 
-src/o/$(BUILD_KEY)/%.o: %.c | dirs
+$(BUILD_CONFIG): FORCE | dirs
+	printf '%s\n' 'PG_CONFIG=$(PG_CONFIG)' 'CC=$(CC)' 'CPPFLAGS=$(CPPFLAGS)' 'CFLAGS2=$(CFLAGS2)' 'LDFLAGS=$(LDFLAGS)' > $@.tmp
+	if ! cmp -s $@.tmp $@; then mv $@.tmp $@; else rm -f $@.tmp; fi
+
+src/o/$(BUILD_KEY)/%.o: %.c $(BUILD_CONFIG) | dirs
 	printf "\t%-42s $@\n" $<
 	$(CC) $(CPPFLAGS) $(CFLAGS2) -MMD -MP -c $< -o $@
+
+.PHONY: FORCE
+FORCE:
 
 -include $(wildcard $(DEPS))

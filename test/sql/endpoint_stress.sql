@@ -34,5 +34,14 @@ SELECT regexp_replace(pg_read_file('/tmp/pwh_test_subpath.txt')::text, E'[\\n\\r
 \! curl -s -o /dev/null -w "%{http_code}" http://localhost:9187/metrics > /tmp/pwh_test_final.txt
 SELECT regexp_replace(pg_read_file('/tmp/pwh_test_final.txt')::text, E'[\\n\\r]+', '', 'g') = '200' AS server_still_healthy;
 
+-- Test 9: Query parameters do not change endpoint routing.
+\! curl -s -o /dev/null -w "%{http_code}" 'http://localhost:9187/metrics?probe=1' > /tmp/pwh_test_query.txt
+SELECT regexp_replace(pg_read_file('/tmp/pwh_test_query.txt')::text, E'[\\n\\r]+', '', 'g') = '200' AS query_parameters_work;
+
+-- Test 10: An incomplete request line does not damage the server.
+\! printf 'GET /metrics\r\n\r\n' | nc -w 2 localhost 9187 > /dev/null || true
+\! curl -s -o /dev/null -w "%{http_code}" http://localhost:9187/metrics > /tmp/pwh_test_malformed.txt
+SELECT regexp_replace(pg_read_file('/tmp/pwh_test_malformed.txt')::text, E'[\\n\\r]+', '', 'g') = '200' AS malformed_request_survived;
+
 -- Cleanup temp files.
 \! rm -f /tmp/pwh_test_*.txt

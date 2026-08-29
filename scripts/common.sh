@@ -32,12 +32,12 @@ _log_bold()
 
 log()
 {
-  _log_bold "$(printf "$(_log_date) [LOG] %s\n" "$@")" >&2
+  _log_bold "$(printf '%s [LOG] %s\n' "$(_log_date)" "$*")" >&2
 }
 
 log_err_and_die()
 {
-  _log_red "$(printf """$(_log_date) [ERR] %s\n" "$@")" >&2
+  _log_red "$(printf '%s [ERR] %s\n' "$(_log_date)" "$*")" >&2
   exit 1
 }
 
@@ -49,7 +49,11 @@ init_env()
 
 parallel_jobs()
 {
-  getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1
+  jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)
+  case $jobs in
+  "" | 0 | *[!0-9]*) echo 1 ;;
+  *) echo "$jobs" ;;
+  esac
 }
 
 build_postgresql_if_not_built()
@@ -74,16 +78,17 @@ init_postgresql_data_dir()
 edit_postgresql_conf()
 {
   log "editing postgresql.conf..."
-  cat >> "$PG_DATA_DIR/postgresql.conf" <<EOF
-shared_preload_libraries = 'pg_what_is_happening'
-log_min_messages = debug4
-what_is_happening.min_cost_to_track = 0
-EOF
+  printf '%s\n' \
+    "shared_preload_libraries = 'pg_what_is_happening'" \
+    "log_min_messages = debug4" \
+    "what_is_happening.min_cost_to_track = 0" \
+    >> "$PG_DATA_DIR/postgresql.conf"
 }
 
 start_postgresql()
 {
   log "starting PostgreSQL..."
+  : > "$PG_LOG_FILE"
   if ! pg_ctl -D "$PG_DATA_DIR" -l "$PG_LOG_FILE" -w start; then
     cat -n "$PG_LOG_FILE"
     log_err_and_die "PostgreSQL failed to start"

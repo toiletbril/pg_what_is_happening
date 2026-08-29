@@ -28,6 +28,9 @@
 #include "miscadmin.h"
 #include "nodes/execnodes.h"
 #include "nodes/nodes.h"
+#include "postmaster/autovacuum.h"
+#include "postmaster/bgworker.h"
+#include "replication/walsender.h"
 #include "utils/timestamp.h"
 
 /*
@@ -67,6 +70,14 @@ general_tag_to_string(NodeTag tag)
 			return "BitmapHeapScan";
 		case T_TidScan:
 			return "TidScan";
+#if PG_VERSION_NUM >= 140000
+		case T_TidRangeScan:
+			return "TidRangeScan";
+#endif
+#if PG_VERSION_NUM >= 90500
+		case T_SampleScan:
+			return "SampleScan";
+#endif
 		case T_SubqueryScan:
 			return "SubqueryScan";
 		case T_FunctionScan:
@@ -108,6 +119,17 @@ general_tag_to_string(NodeTag tag)
 		default:
 			return NULL;
 	}
+}
+
+bool
+pwh_is_regular_backend(void)
+{
+#if PG_VERSION_NUM >= 170000
+	return AmRegularBackendProcess();
+#else
+	return IsUnderPostmaster && !IsBackgroundWorker &&
+		   !IsAutoVacuumWorkerProcess() && !am_walsender;
+#endif
 }
 
 const char *

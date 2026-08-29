@@ -8,6 +8,8 @@ test: query_validate_spill_metrics
 test: query_validate_nested_loop
 test: query_validate_query_concurrency
 test: query_validate_transaction_abort
+test: query_validate_shared_cte
+test: query_validate_modify_table
 test: query_validate_slot_exhaustion
 test: smoke_endpoint_metrics
 test: endpoint_query_text_visibility

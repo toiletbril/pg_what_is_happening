@@ -34,6 +34,7 @@
 #include "miscadmin.h"
 #include "storage/ipc.h"
 #include "storage/lwlock.h"
+#include "storage/procarray.h"
 #include "storage/shmem.h"
 #include "utils/timestamp.h"
 
@@ -50,7 +51,9 @@ shmem_startup_hook_type PREV_SHMEM_STARTUP_HOOK = NULL;
 
 PWH_LWLOCK_TRANCHE_ID_DECL;
 
-static bool check_if_process_exists(u32 pid);
+static bool is_postgres_backend(u32 pid);
+static bool timestamp_is_fresh(TimestampTz now, TimestampTz then,
+							   TimestampTz freshness_us);
 static bool signal_process(u32 pid, int sig);
 
 static Size
@@ -89,7 +92,12 @@ pwh_get_shared_memory_ptr(void)
 	bool  was_found;
 	void *p =
 		ShmemInitStruct("pg_what_is_happening", PWH_SHMEM_SIZE, &was_found);
-	Assert(was_found);
+	if (p == NULL || !was_found)
+		ereport(
+			ERROR,
+			(errmsg("PWH: Shared memory is not initialized"),
+			 errhint(
+				 "Add pg_what_is_happening to shared_preload_libraries and restart PostgreSQL.")));
 	return p;
 }
 
@@ -130,6 +138,8 @@ pwh_shared_memory_startup_hook(void)
 		PWH_LWLOCK_INITIALIZE(PWH_SHMEM->entry_search_lock,
 							  PWH_LWLOCK_TRANCHE_ID);
 		PWH_SHMEM->refresh_in_progress = false;
+		PWH_SHMEM->refresh_owner_pid = 0;
+		PWH_SHMEM->refresh_token = 0;
 		PWH_SHMEM->refresh_generation = 0;
 		PWH_SHMEM->last_refresh_time = 0;
 	}
@@ -176,6 +186,7 @@ pwh_get_or_create_my_backend_entry_impl(bool should_create,
 		be->query_start_time = 0;
 		be->count_of_metrics = 0;
 		be->write_sequence = 0;
+		pwh_get_backend_entry_query_text(be)[0] = '\0';
 		PWH_MEMORY_BARRIER();
 		be->backend_pid = MyProcPid;
 
@@ -272,30 +283,47 @@ pwh_validate_node_magic(PwhNodeMetrics *node, u32 node_id)
 u32
 pwh_cleanup_orphaned_slots(void)
 {
-	u32 n_cleaned = 0;
-	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_EXCLUSIVE);
+	u32	 n_cleaned = 0;
+	u32	 count = 0;
+	u32 *pids = palloc(sizeof(u32) * PWH_GUC_MAX_TRACKED_QUERIES);
+	u32 *slot_indexes = palloc(sizeof(u32) * PWH_GUC_MAX_TRACKED_QUERIES);
+
+	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_SHARED);
 
 	for (u64 i = 0; i < (u64) PWH_GUC_MAX_TRACKED_QUERIES; i++)
 	{
 		PwhSharedMemoryBackendEntry *be = PWH_GET_BACKEND_ENTRY_UNSAFE(i);
-
 		if (pwh_is_backend_entry_active(be))
 		{
-			if (!check_if_process_exists(be->backend_pid))
-			{
-				ereport(DEBUG1, (errmsg("PWH: Cleaning up orphaned slot %llu",
-										(unsigned long long) i),
-								 errdetail("Backend PID %u no longer exists",
-										   be->backend_pid)));
-
-				/* No one should be reading that memory anyway. */
-				pwh_release_backend_entry_unlocked(be);
-
-				n_cleaned++;
-			}
+			pids[count] = (u32) be->backend_pid;
+			slot_indexes[count] = (u32) i;
+			count++;
 		}
 	}
 	PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+
+	for (u32 i = 0; i < count; i++)
+	{
+		if (is_postgres_backend(pids[i]))
+			continue;
+
+		PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_EXCLUSIVE);
+		PwhSharedMemoryBackendEntry *be =
+			PWH_GET_BACKEND_ENTRY_UNSAFE(slot_indexes[i]);
+		if (be->backend_pid == (sig_atomic_t) pids[i])
+		{
+			ereport(
+				DEBUG1,
+				(errmsg("PWH: Cleaning up orphaned slot %u", slot_indexes[i]),
+				 errdetail("PID %u is not a PostgreSQL backend", pids[i])));
+			pwh_release_backend_entry_unlocked(be);
+			n_cleaned++;
+		}
+		PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+	}
+
+	pfree(slot_indexes);
+	pfree(pids);
 
 	return n_cleaned;
 }
@@ -310,13 +338,14 @@ pwh_refresh_metrics(void)
 	sig_atomic_t *generations;
 	u32			  count = 0;
 	u64			  observed_generation;
+	u64			  refresh_token;
 
 	pwh_cleanup_orphaned_slots();
 
 	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_EXCLUSIVE);
 	observed_generation = PWH_SHMEM->refresh_generation;
 	if (PWH_SHMEM->refresh_in_progress &&
-		now - PWH_SHMEM->last_refresh_time <= freshness_us)
+		timestamp_is_fresh(now, PWH_SHMEM->last_refresh_time, freshness_us))
 	{
 		PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
 		for (i32 waited = 0; waited < PWH_GUC_SIGNAL_TIMEOUT_MS; waited++)
@@ -331,14 +360,18 @@ pwh_refresh_metrics(void)
 		}
 		return;
 	}
-	if (PWH_SHMEM->last_refresh_time != 0 &&
-		now - PWH_SHMEM->last_refresh_time <= freshness_us)
+	if (timestamp_is_fresh(now, PWH_SHMEM->last_refresh_time, freshness_us))
 	{
 		PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
 		return;
 	}
 
 	PWH_SHMEM->refresh_in_progress = true;
+	PWH_SHMEM->refresh_owner_pid = MyProcPid;
+	PWH_SHMEM->refresh_token = PWH_SHMEM->refresh_token == UINT64_MAX
+								   ? 1
+								   : PWH_SHMEM->refresh_token + 1;
+	refresh_token = PWH_SHMEM->refresh_token;
 	PWH_SHMEM->last_refresh_time = now;
 	pids = palloc(sizeof(u32) * PWH_GUC_MAX_TRACKED_QUERIES);
 	slot_indexes = palloc(sizeof(u32) * PWH_GUC_MAX_TRACKED_QUERIES);
@@ -357,7 +390,7 @@ pwh_refresh_metrics(void)
 	PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
 
 	for (u32 i = 0; i < count; i++)
-		if (!signal_process(pids[i], SIGUSR2))
+		if (!is_postgres_backend(pids[i]) || !signal_process(pids[i], SIGUSR2))
 			generations[i] = -1;
 
 	for (i32 waited = 0; count > 0 && waited < PWH_GUC_SIGNAL_TIMEOUT_MS;
@@ -373,7 +406,7 @@ pwh_refresh_metrics(void)
 				PWH_GET_BACKEND_ENTRY_UNSAFE(slot_indexes[i]);
 			if (be->backend_pid != (sig_atomic_t) pids[i] ||
 				be->poll_generation != generations[i] ||
-				!check_if_process_exists(pids[i]))
+				!is_postgres_backend(pids[i]))
 				generations[i] = -1;
 			else
 				pending++;
@@ -387,9 +420,15 @@ pwh_refresh_metrics(void)
 	pfree(slot_indexes);
 	pfree(pids);
 	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_EXCLUSIVE);
-	PWH_SHMEM->last_refresh_time = GetCurrentTimestamp();
-	PWH_SHMEM->refresh_in_progress = false;
-	PWH_SHMEM->refresh_generation++;
+	if (PWH_SHMEM->refresh_in_progress &&
+		PWH_SHMEM->refresh_owner_pid == MyProcPid &&
+		PWH_SHMEM->refresh_token == refresh_token)
+	{
+		PWH_SHMEM->last_refresh_time = GetCurrentTimestamp();
+		PWH_SHMEM->refresh_in_progress = false;
+		PWH_SHMEM->refresh_owner_pid = 0;
+		PWH_SHMEM->refresh_generation++;
+	}
 	PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
 }
 
@@ -404,7 +443,7 @@ pwh_take_metrics_snapshot(void)
 	for (u64 i = 0; i < (u64) PWH_GUC_MAX_TRACKED_QUERIES; i++)
 	{
 		PwhSharedMemoryBackendEntry *be = PWH_GET_BACKEND_ENTRY_UNSAFE(i);
-		if (!pwh_is_backend_entry_active(be) ||
+		if (!pwh_is_backend_entry_active(be) || be->count_of_metrics == 0 ||
 			be->count_of_metrics > (u32) PWH_GUC_MAX_NODES_PER_QUERY)
 			continue;
 
@@ -462,9 +501,15 @@ pwh_free_metrics_snapshot(PwhMetricsSnapshot *snapshot)
 }
 
 static bool
-check_if_process_exists(u32 pid)
+is_postgres_backend(u32 pid)
 {
-	return kill((pid_t) pid, 0) == 0 || errno != ESRCH;
+	return BackendPidGetProc((int) pid) != NULL;
+}
+
+static bool
+timestamp_is_fresh(TimestampTz now, TimestampTz then, TimestampTz freshness_us)
+{
+	return then != 0 && now >= then && now - then <= freshness_us;
 }
 
 static bool

@@ -25,6 +25,7 @@
 #include "executor/execdesc.h"
 #include "float.h"
 #include "nodes/nodes.h"
+#include "storage/barrier.h"
 #include "storage/lwlock.h"
 #include "storage/shmem.h"
 #include "utils/timestamp.h"
@@ -92,7 +93,9 @@ typedef struct
 {
 	LWLock		entry_search_lock;
 	bool		refresh_in_progress;
-	u8			__pad[7];
+	i32			refresh_owner_pid;
+	u8			__pad[3];
+	u64			refresh_token;
 	u64			refresh_generation;
 	TimestampTz last_refresh_time;
 } PwhSharedMemoryHeader;
@@ -101,7 +104,9 @@ typedef struct
 {
 	LWLock	   *entry_search_lock;
 	bool		refresh_in_progress;
-	u8			__pad[7];
+	i32			refresh_owner_pid;
+	u8			__pad[3];
+	u64			refresh_token;
 	u64			refresh_generation;
 	TimestampTz last_refresh_time;
 } PwhSharedMemoryHeader;
@@ -112,17 +117,9 @@ extern u64 pwh_compute_query_id(const QueryDesc *qd);
 extern const char *pwh_node_tag_to_string(NodeTag tag);
 
 extern pqsigfunc pwh_install_pqsignal(int signo, pqsigfunc func);
+extern bool		 pwh_is_regular_backend(void);
 
-/* Memory barrier compatibility (pg_memory_barrier introduced in PG 9.5). */
-#if PG_VERSION_NUM >= 90500
 #define PWH_MEMORY_BARRIER() pg_memory_barrier()
-#else
-#define PWH_MEMORY_BARRIER()                   \
-	do                                         \
-	{                                          \
-		__asm__ __volatile__("" ::: "memory"); \
-	} while (0)
-#endif
 
 #ifdef XACT_EVENT_PARALLEL_ABORT
 #define PWH_IS_ABORT_EVENT(event) \

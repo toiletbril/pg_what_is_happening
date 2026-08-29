@@ -32,6 +32,8 @@
 
 static const HttpServerVtable *choose_backend(void);
 
+volatile sig_atomic_t PWH_HTTP_STOP_REQUESTED = false;
+
 HttpServer *
 pwh_http_server_create(const char *listen_addr)
 {
@@ -76,6 +78,12 @@ pwh_http_server_stop(HttpServer *server)
 	server->vtable->stopFn(server);
 }
 
+const char *
+pwh_http_server_backend_name(void)
+{
+	return HTTP_BACKEND;
+}
+
 void
 pwh_http_response_set_text(HttpResponse *resp, u32 status_code, char *body)
 {
@@ -85,6 +93,9 @@ pwh_http_response_set_text(HttpResponse *resp, u32 status_code, char *body)
 	{
 		case 200:
 			resp->status_text = "OK";
+			break;
+		case 400:
+			resp->status_text = "Bad Request";
 			break;
 		case 404:
 			resp->status_text = "Not Found";

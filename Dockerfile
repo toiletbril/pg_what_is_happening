@@ -6,8 +6,7 @@ FROM docker.io/library/alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9
 
 SHELL ["sh", "-eu", "-c"]
 
-RUN apk update
-RUN apk add \
+RUN apk add --no-cache \
     build-base \
     musl-dev \
     linux-headers \
@@ -27,20 +26,19 @@ RUN apk add \
     libgcc \
     gdb \
     curl \
-    sudo \
+    su-exec \
     icu-dev \
     diffutils \
     tmux \
     util-linux \
     ncurses
 
-RUN adduser -D -u 1000 "postgres" && \
-    echo "postgres ALL=(ALL) NOPASSWD: ALL" >> "/etc/sudoers"
-
 RUN mkdir -p /postgres /postgres-build /postgres-bin /data /pg_what_is_happening
 
 # Steal host's tmux.conf for the container.
 COPY .tmux.conf /etc/tmux.conf
+COPY scripts/container-entrypoint.sh /usr/local/bin/pwh-container-entrypoint
+RUN chmod 0755 /usr/local/bin/pwh-container-entrypoint
 
-USER postgres
+ENTRYPOINT ["/usr/local/bin/pwh-container-entrypoint"]
 WORKDIR "/pg_what_is_happening"

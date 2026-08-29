@@ -3,7 +3,7 @@
 set -eu
 
 #
-# Containerized makefile. Used to create containers and invoke Nakefile
+# Containerized makefile. Used to create containers and invoke Makefile
 # commands inside.
 #
 # Usage:
@@ -48,18 +48,19 @@ make_sure_postgres_source_is_available() {
 C="${1:-}"
 
 docker_run() {
-host_uid=$(id -u)
-host_gid=$(id -g)
-docker run --pull=never --rm --network=host \
-           --user "$host_uid:$host_gid" \
-           --tmpfs "/postgres-build:uid=$host_uid,gid=$host_gid" \
-           --tmpfs "/postgres-bin:uid=$host_uid,gid=$host_gid" \
-           --tmpfs "/data:uid=$host_uid,gid=$host_gid" \
-           -e HOME=/tmp \
-           -e "HTTP_BACKEND=${HTTP_BACKEND:-mongoose}" \
-           -e "WITH_BGWORKER=${WITH_BGWORKER:-yes}" \
-           -v "$PWD:/pg_what_is_happening" \
-           -v "$POSTGRES_SOURCE:/postgres:ro" --privileged "$@"
+  host_uid=$(id -u)
+  host_gid=$(id -g)
+  docker run --pull=never --rm --network=host \
+             --tmpfs "/postgres-build:rw,exec,uid=$host_uid,gid=$host_gid" \
+             --tmpfs "/postgres-bin:rw,exec,uid=$host_uid,gid=$host_gid" \
+             --tmpfs "/data:uid=$host_uid,gid=$host_gid" \
+             -e HOME=/tmp \
+             -e "PWH_HOST_UID=$host_uid" \
+             -e "PWH_HOST_GID=$host_gid" \
+             -e "HTTP_BACKEND=${HTTP_BACKEND:-mongoose}" \
+             -e "WITH_BGWORKER=${WITH_BGWORKER:-yes}" \
+             -v "$PWD:/pg_what_is_happening" \
+             -v "$POSTGRES_SOURCE:/postgres:ro" "$@"
 }
 
 case $C in
@@ -72,18 +73,15 @@ case $C in
   ;;
 "build")
   make_sure_postgres_source_is_available
-  BUILD_CMD=$(cat "$(dirname "$0")/scripts/build.sh")
-  docker_run "$IMG" sh -c "$BUILD_CMD"
+  docker_run "$IMG" bash scripts/build.sh
   ;;
 "test")
   make_sure_postgres_source_is_available
-  TEST_CMD=$(cat "$(dirname "$0")/scripts/test.sh")
-  docker_run "$IMG" sh -c "$TEST_CMD"
+  docker_run "$IMG" bash scripts/test.sh
   ;;
 "dev")
   make_sure_postgres_source_is_available
-  DEVELOPMENT_CMD=$(cat "$(dirname "$0")/scripts/development.sh")
-  docker_run -it "$IMG" sh -c "$DEVELOPMENT_CMD"
+  docker_run -it "$IMG" bash scripts/development.sh
   ;;
 "reset")
   echo "Cleaning extension build artifacts..."

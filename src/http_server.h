@@ -19,7 +19,11 @@
 #ifndef PWH_HTTP_SERVER_H
 #define PWH_HTTP_SERVER_H
 
+#include <signal.h>
+
 #include "common.h"
+
+extern volatile sig_atomic_t PWH_HTTP_STOP_REQUESTED;
 
 typedef struct
 {
@@ -73,6 +77,7 @@ extern void		   pwh_http_server_set_handler(HttpServer		   *server,
 											   void				   *user_data);
 extern i32		   pwh_http_server_run(HttpServer *server);
 extern void		   pwh_http_server_stop(HttpServer *server);
+extern const char *pwh_http_server_backend_name(void);
 
 extern void pwh_http_response_set_text(HttpResponse *resp, u32 status_code,
 									   char *body);
