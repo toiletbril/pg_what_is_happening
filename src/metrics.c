@@ -34,6 +34,7 @@
 #include "gucs.h"
 #include "shared_memory.h"
 #include "utils/builtins.h"
+#include "utils/memutils.h"
 
 #ifdef WITH_BGWORKER
 
@@ -50,21 +51,23 @@ typedef struct
 {
 	FormatterBuffer *buffer;
 	u64				 query_id;
+	i32				 backend_pid;
 } Formatter;
 
 static void buffer_init(FormatterBuffer *buf);
 static void buffer_ensure_capacity(FormatterBuffer *buf, u64 needed);
 static void buffer_append(FormatterBuffer *buf, const char *fmt, ...);
 static void buffer_append_escaped(FormatterBuffer *buf, const char *str);
-static void formatter_init(Formatter *fmt, FormatterBuffer *buf, u64 query_id);
+static void formatter_init(Formatter *fmt, FormatterBuffer *buf, u64 query_id,
+						   i32 backend_pid);
 static void formatter_append_metric(Formatter *fmt, PwhNodeMetrics *node,
 									MetricType type, const char *value_fmt,
 									...);
 static void formatter_append_all_node_metrics(Formatter		 *fmt,
 											  PwhNodeMetrics *node,
 											  double		  total_query_time);
-static void formatter_append_query_info(FormatterBuffer				*buf,
-										PwhSharedMemoryBackendEntry *entry);
+static void formatter_append_query_info(FormatterBuffer	 *buf,
+										PwhSnapshotEntry *entry);
 
 #endif /* WITH_BGWORKER */
 
@@ -109,8 +112,8 @@ pwh_create_v1_status_tupdesc(void)
 }
 
 void
-pwh_fill_v1_status_tuple(Datum *values, bool *nulls,
-						 PwhSharedMemoryBackendEntry *entry,
+pwh_fill_v1_status_tuple(Datum *values, bool *nulls, i32 backend_pid,
+						 u64 query_id, const char *query_text,
 						 PwhNodeMetrics *node, double total_query_time)
 {
 	double node_time_seconds = node->execution.total_time_us / 1000000.0;
@@ -123,9 +126,9 @@ pwh_fill_v1_status_tuple(Datum *values, bool *nulls,
 
 	MemSet(nulls, 0, PWH_V1_STATUS_TUPLE_COUNT * sizeof(bool));
 
-	values[n++] = Int32GetDatum(entry->backend_pid);
-	values[n++] = Int64GetDatum(entry->query_id);
-	values[n++] = CStringGetTextDatum(pwh_get_backend_entry_query_text(entry));
+	values[n++] = Int32GetDatum(backend_pid);
+	values[n++] = Int64GetDatum(query_id);
+	values[n++] = CStringGetTextDatum(query_text);
 	values[n++] = Int32GetDatum(node->node_id);
 	values[n++] = Int32GetDatum(node->parent_node_id);
 	values[n++] = CStringGetTextDatum(pwh_node_tag_to_string(node->tag));
@@ -150,7 +153,7 @@ pwh_fill_v1_status_tuple(Datum *values, bool *nulls,
 #ifdef WITH_BGWORKER
 
 char *
-pwh_format_openmetrics(void)
+pwh_format_openmetrics(PwhMetricsSnapshot *snapshot)
 {
 	FormatterBuffer buf;
 	buffer_init(&buf);
@@ -174,43 +177,33 @@ pwh_format_openmetrics(void)
 			suffix, help, suffix);
 	}
 
-	for (u64 i = 0; i < (u64) PWH_GUC_MAX_TRACKED_QUERIES; i++)
+	for (u32 i = 0; i < snapshot->count; i++)
 	{
-		PwhSharedMemoryBackendEntry *shmem_be_entry = pwh_get_backend_entry(i);
+		PwhSnapshotEntry *entry = &snapshot->entries[i];
 
-		if (!pwh_is_backend_entry_active(shmem_be_entry))
-			continue;
-
-		ereport(DEBUG2, (errmsg("PWH: Formatting backend entry %lu", i),
-						 errdetail("PID=%d query_id=%lu num_nodes=%d",
-								   shmem_be_entry->backend_pid,
-								   (unsigned long) shmem_be_entry->query_id,
-								   shmem_be_entry->count_of_metrics)));
+		ereport(DEBUG2, (errmsg("PWH: Formatting backend entry %u", i),
+						 errdetail("PID=%d query_id=%llu num_nodes=%d",
+								   entry->backend_pid,
+								   (unsigned long long) entry->query_id,
+								   entry->count_of_metrics)));
 
 		/* _info pseudo-metric. */
-		formatter_append_query_info(&buf, shmem_be_entry);
-
-		PwhNodeMetrics *metrics = pwh_get_backend_entry_metrics(shmem_be_entry);
-
-		double total_query_time = 0.0;
-		for (u32 j = 0; j < shmem_be_entry->count_of_metrics; j++)
-		{
-			total_query_time += metrics[j].execution.total_time_us;
-		}
+		formatter_append_query_info(&buf, entry);
 
 		Formatter fmt;
-		formatter_init(&fmt, &buf, shmem_be_entry->query_id);
+		formatter_init(&fmt, &buf, entry->query_id, entry->backend_pid);
 
-		for (u32 j = 0; j < shmem_be_entry->count_of_metrics; j++)
+		for (u32 j = 0; j < entry->count_of_metrics; j++)
 		{
 			/* Validate node magic before reading. */
-			if (!pwh_validate_node_magic(&metrics[j], j))
+			if (!pwh_validate_node_magic(&entry->metrics[j], j))
 				continue;
 
-			formatter_append_all_node_metrics(&fmt, &metrics[j],
-											  total_query_time);
+			formatter_append_all_node_metrics(&fmt, &entry->metrics[j],
+											  entry->total_query_time);
 		}
 	}
+	buffer_append(&buf, "# EOF\n");
 
 	return buf.data;
 }
@@ -268,8 +261,13 @@ buffer_init(FormatterBuffer *buf)
 static void
 buffer_ensure_capacity(FormatterBuffer *buf, u64 needed)
 {
-	if (unlikely(buf->offset + needed >= buf->size))
+	if (unlikely(needed > UINT64_MAX - buf->offset))
+		ereport(ERROR, (errmsg("PWH: Metrics response is too large")));
+
+	while (buf->offset + needed >= buf->size)
 	{
+		if (buf->size > MaxAllocSize / 2)
+			ereport(ERROR, (errmsg("PWH: Metrics response is too large")));
 		buf->size *= 2;
 		buf->data = (char *) repalloc(buf->data, buf->size);
 	}
@@ -279,26 +277,31 @@ static void
 buffer_append(FormatterBuffer *buf, const char *fmt, ...)
 {
 	va_list args;
+	va_list copy;
 	i32		written;
 
-	buffer_ensure_capacity(buf, 1024);
-
 	va_start(args, fmt);
-	written =
-		vsnprintf(buf->data + buf->offset, buf->size - buf->offset, fmt, args);
-	va_end(args);
-
-	if (written > 0)
+	va_copy(copy, args);
+	written = vsnprintf(NULL, 0, fmt, copy);
+	va_end(copy);
+	if (written < 0)
 	{
-		buf->offset += written;
+		va_end(args);
+		ereport(ERROR, (errmsg("PWH: Failed to format metrics response")));
 	}
+	buffer_ensure_capacity(buf, (u64) written + 1);
+	vsnprintf(buf->data + buf->offset, buf->size - buf->offset, fmt, args);
+	va_end(args);
+	buf->offset += written;
 }
 
 static void
-formatter_init(Formatter *fmt, FormatterBuffer *buf, u64 query_id)
+formatter_init(Formatter *fmt, FormatterBuffer *buf, u64 query_id,
+			   i32 backend_pid)
 {
 	fmt->buffer = buf;
 	fmt->query_id = query_id;
+	fmt->backend_pid = backend_pid;
 }
 
 static void
@@ -316,10 +319,11 @@ formatter_append_metric(Formatter *fmt, PwhNodeMetrics *node, MetricType type,
 
 	buffer_append(fmt->buffer,
 				  "pg_what_is_happening_active_query_node_%s{"
-				  "query_id=\"%lu\",node_id=\"%lu\","
+				  "query_id=\"%llu\",pid=\"%d\",node_id=\"%u\","
 				  "parent_node_id=\"%d\",node_tag=\"%s\"} %s\n",
-				  suffix, fmt->query_id, node->node_id,
-				  (i32) node->parent_node_id, tag_str, value_buf);
+				  suffix, (unsigned long long) fmt->query_id, fmt->backend_pid,
+				  node->node_id, (i32) node->parent_node_id, tag_str,
+				  value_buf);
 }
 
 static void
@@ -340,9 +344,13 @@ buffer_append_escaped(FormatterBuffer *buf, const char *str)
 			case '\n':
 				buffer_append(buf, "\\n");
 				break;
+			case '\r':
+				buffer_append(buf, "\\n");
+				break;
 			default:
 				buffer_ensure_capacity(buf, 1);
 				buf->data[buf->offset++] = *p;
+				buf->data[buf->offset] = '\0';
 				break;
 		}
 		p++;
@@ -350,15 +358,14 @@ buffer_append_escaped(FormatterBuffer *buf, const char *str)
 }
 
 static void
-formatter_append_query_info(FormatterBuffer				*buf,
-							PwhSharedMemoryBackendEntry *entry)
+formatter_append_query_info(FormatterBuffer *buf, PwhSnapshotEntry *entry)
 {
 	buffer_append(buf,
-				  "pg_what_is_happening_query_info{query_id=\"%lu\","
+				  "pg_what_is_happening_query_info{query_id=\"%llu\","
 				  "pid=\"%d\",query_text=\"",
-				  entry->query_id, entry->backend_pid);
-	const char *query_text = pwh_get_backend_entry_query_text(entry);
-	buffer_append_escaped(buf, query_text);
+				  (unsigned long long) entry->query_id, entry->backend_pid);
+	buffer_append_escaped(
+		buf, PWH_GUC_METRICS_EXPOSE_QUERY_TEXT ? entry->query_text : "");
 	buffer_append(buf, "\"} 1\n");
 }
 

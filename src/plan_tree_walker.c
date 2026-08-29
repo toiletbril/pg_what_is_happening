@@ -38,9 +38,10 @@
 
 typedef struct
 {
-	PwhNodeMetrics *metrics;
-	u64				max_nodes;
-	u64			   *node_counter;
+	PwhNodeMetrics			*metrics;
+	PwhNodeInstrumentation **instrumentation;
+	u64						 max_nodes;
+	u64						*node_counter;
 } WalkerContext;
 
 /* Returns assigned node id, or -1 to stop traversal. */
@@ -91,6 +92,18 @@ walk_planstate_recursive(PlanState *planstate, i32 parent_id,
 	{
 		ListCell *lc;
 		foreach (lc, planstate->subPlan)
+		{
+			SubPlanState *sp = (SubPlanState *) lfirst(lc);
+			if (!walk_planstate_recursive(sp->planstate, current_id, visit_fn,
+										  ctx))
+				return false;
+		}
+	}
+
+	if (planstate->initPlan != NULL)
+	{
+		ListCell *lc;
+		foreach (lc, planstate->initPlan)
 		{
 			SubPlanState *sp = (SubPlanState *) lfirst(lc);
 			if (!walk_planstate_recursive(sp->planstate, current_id, visit_fn,
@@ -155,6 +168,18 @@ walk_planstate_recursive(PlanState *planstate, i32 parent_id,
 					return false;
 			break;
 		}
+#if PG_VERSION_NUM >= 90500
+		case T_CustomScanState:
+		{
+			CustomScanState *css = (CustomScanState *) planstate;
+			ListCell		*lc;
+			foreach (lc, css->custom_ps)
+				if (!walk_planstate_recursive((PlanState *) lfirst(lc),
+											  current_id, visit_fn, ctx))
+					return false;
+			break;
+		}
+#endif
 		default:
 			break;
 	}
@@ -167,9 +192,9 @@ walk_planstate_recursive(PlanState *planstate, i32 parent_id,
  * Returns total number of nodes found.
  */
 u64
-pwh_remember_planstate_tree_as_metric_structure(PlanState	   *planstate,
-												PwhNodeMetrics *metrics,
-												u64				max_nodes)
+pwh_remember_planstate_tree_as_metric_structure(
+	PlanState *planstate, PwhNodeMetrics *metrics,
+	PwhNodeInstrumentation **instrumentation, u64 max_nodes)
 {
 	u64 node_counter = 0;
 
@@ -178,6 +203,7 @@ pwh_remember_planstate_tree_as_metric_structure(PlanState	   *planstate,
 
 	WalkerContext ctx = {
 		.metrics = metrics,
+		.instrumentation = instrumentation,
 		.max_nodes = max_nodes,
 		.node_counter = &node_counter,
 	};
@@ -215,6 +241,8 @@ topology_visitor(PlanState *planstate, i32 parent_id, void *context)
 	ctx->metrics[id].buffer_usage.spill_file_writes = 0;
 
 	ctx->metrics[id].magic = PWH_NODE_MAGIC;
+	if (ctx->instrumentation != NULL)
+		ctx->instrumentation[id] = planstate->instrument;
 
 	return id;
 }
@@ -234,11 +262,43 @@ pwh_collect_planstate_metrics(PlanState *planstate, PwhNodeMetrics *metrics,
 
 	WalkerContext ctx = {
 		.metrics = metrics,
+		.instrumentation = NULL,
 		.max_nodes = max_nodes,
 		.node_counter = &node_counter,
 	};
 
 	walk_planstate_recursive(planstate, -1, instrumentation_visitor, &ctx);
+}
+
+void
+pwh_collect_instrumentation_metrics(PwhNodeInstrumentation **instrumentation,
+									PwhNodeMetrics *metrics, u64 count)
+{
+	if (instrumentation == NULL || metrics == NULL)
+		return;
+
+	for (u64 i = 0; i < count; i++)
+	{
+		PwhNodeInstrumentation *instr = instrumentation[i];
+		if (instr == NULL)
+			continue;
+
+		metrics[i].execution.tuples_returned =
+			instr->ntuples + instr->tuplecount;
+		metrics[i].execution.loops_executed =
+			instr->nloops + (instr->running ? 1.0 : 0.0);
+		metrics[i].execution.startup_time_us =
+			(PWH_INSTR_TIME_MAYBE_GET_DOUBLE(instr->startup) +
+			 PWH_INSTR_TIME_MAYBE_GET_DOUBLE(instr->firsttuple)) *
+			1000000.0;
+		metrics[i].execution.total_time_us =
+			(PWH_INSTR_TIME_MAYBE_GET_DOUBLE(PWH_INSTR_TOTAL(instr)) +
+			 INSTR_TIME_GET_DOUBLE(instr->counter)) *
+			1000000.0;
+		metrics[i].execution.rows_filtered_by_joins = instr->nfiltered1;
+		metrics[i].execution.rows_filtered_by_expressions = instr->nfiltered2;
+		PWH_COPY_BUFUSAGE(metrics, instr, i);
+	}
 }
 
 static i32
@@ -250,8 +310,8 @@ instrumentation_visitor(PlanState *planstate, i32 parent_id, void *context)
 	if (*ctx->node_counter >= ctx->max_nodes)
 		return -1;
 
-	i32				 current_id = (i32) (*ctx->node_counter)++;
-	Instrumentation *instr = planstate->instrument;
+	i32						current_id = (i32) (*ctx->node_counter)++;
+	PwhNodeInstrumentation *instr = planstate->instrument;
 
 	/* Validate node magic before writing. */
 	if (!pwh_validate_node_magic(&ctx->metrics[current_id], (u32) current_id))
@@ -262,10 +322,10 @@ instrumentation_visitor(PlanState *planstate, i32 parent_id, void *context)
 		ereport(DEBUG2,
 				(errmsg("PWH: Reading instrumentation for node %d", current_id),
 				 errdetail(
-					 "ntuples=%.0f nloops=%.0f total_time=%.6f cache_hits=%ld",
+					 "ntuples=%.0f nloops=%.0f total_time=%.6f cache_hits=%lld",
 					 instr->ntuples, instr->nloops,
-					 PWH_INSTR_TIME_MAYBE_GET_DOUBLE(instr->total),
-					 instr->bufusage.shared_blks_hit)));
+					 PWH_INSTR_TIME_MAYBE_GET_DOUBLE(PWH_INSTR_TOTAL(instr)),
+					 (long long) PWH_INSTR_SHARED_HITS(instr))));
 
 		ctx->metrics[current_id].execution.tuples_returned =
 			instr->ntuples + instr->tuplecount;
@@ -276,7 +336,7 @@ instrumentation_visitor(PlanState *planstate, i32 parent_id, void *context)
 			 PWH_INSTR_TIME_MAYBE_GET_DOUBLE(instr->firsttuple)) *
 			1000000.0;
 		ctx->metrics[current_id].execution.total_time_us =
-			(PWH_INSTR_TIME_MAYBE_GET_DOUBLE(instr->total) +
+			(PWH_INSTR_TIME_MAYBE_GET_DOUBLE(PWH_INSTR_TOTAL(instr)) +
 			 INSTR_TIME_GET_DOUBLE(instr->counter)) *
 			1000000.0;
 		ctx->metrics[current_id].execution.rows_filtered_by_joins =

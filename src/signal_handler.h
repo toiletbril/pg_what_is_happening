@@ -23,9 +23,13 @@
 
 #include "common.h"
 #include "executor/execdesc.h"
+#include "shared_memory.h"
 
 /* Set the current QueryDesc for signal handler access. */
 extern void pwh_set_current_query_desc(QueryDesc *queryDesc);
+extern void pwh_set_signal_metrics(PwhSharedMemoryBackendEntry *entry,
+								   PwhNodeInstrumentation	  **instrumentation,
+								   u32							count);
 
 /* Get the current QueryDesc. */
 extern QueryDesc *pwh_get_current_query_desc(void);

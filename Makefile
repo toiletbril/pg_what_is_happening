@@ -25,10 +25,10 @@ endif
 
 MODULE_big = pg_what_is_happening
 EXTENSION = pg_what_is_happening
-DATA = pg_what_is_happening--1.0.sql pg_what_is_happening--1.0--1.1.sql pg_what_is_happening--1.1.sql
+DATA = pg_what_is_happening--1.0.sql pg_what_is_happening--1.0--1.1.sql pg_what_is_happening--1.0--1.2.sql pg_what_is_happening--1.1.sql pg_what_is_happening--1.1--1.2.sql pg_what_is_happening--1.2.sql
 REGRESS_OPTS = --inputdir=test --outputdir=test --schedule=test/schedule
 REGRESS = teardown
-EXTRA_CLEAN = src/o/
+EXTRA_CLEAN = src/o/ pg_what_is_happening.dylib
 
 include src/Makefile
 
@@ -45,16 +45,16 @@ fmt:
 CLANG_TIDY ?= clang-tidy
 
 tidy:
-	echo "    " CLANG_TIDY src/*/*.c src/*/*.h src/*.c src/*.h)
+	echo "    " CLANG_TIDY src/*/*.c src/*/*.h src/*.c src/*.h
 	$(CLANG_TIDY) src/*.c src/*.h src/*/*.c src/*/*.h --extra-arg=-std=c17
 
 reset:
-	echo "    " RM src/o/$(MODE) pg_what_is_happening.so
-	rm -rf src/o/$(MODE) pg_what_is_happening.so
+	echo "    " RM src/o pg_what_is_happening.so pg_what_is_happening.dylib
+	rm -rf src/o pg_what_is_happening.so pg_what_is_happening.dylib
 
 dev-reset:
 	$(MAKE) reset
-	$(MAKE) install -j$(shell nproc)
+	$(MAKE) install -j$(shell getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
 	pg_ctl -D /data -l /tmp/postgresql.log restart
 
 .PHONY: fmt tidy reset relaunch dirs

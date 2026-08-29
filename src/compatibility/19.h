@@ -47,21 +47,21 @@
 
 #define PWH_BGWORKER_BYPASS_ALLOWCONN 0
 
-#define PWH_COPY_BUFUSAGE(metrics, instr, idx)           \
-	do                                                   \
-	{                                                    \
-		(metrics)[idx].buffer_usage.cache_hits =         \
-			(instr)->bufusage.shared_blks_hit;           \
-		(metrics)[idx].buffer_usage.cache_misses =       \
-			(instr)->bufusage.shared_blks_read;          \
-		(metrics)[idx].buffer_usage.local_cache_hits =   \
-			(instr)->bufusage.local_blks_hit;            \
-		(metrics)[idx].buffer_usage.local_cache_misses = \
-			(instr)->bufusage.local_blks_read;           \
-		(metrics)[idx].buffer_usage.spill_file_reads =   \
-			(instr)->bufusage.temp_blks_read;            \
-		(metrics)[idx].buffer_usage.spill_file_writes =  \
-			(instr)->bufusage.temp_blks_written;         \
+#define PWH_COPY_BUFUSAGE(metrics, node_instr, idx)         \
+	do                                                      \
+	{                                                       \
+		(metrics)[idx].buffer_usage.cache_hits =            \
+			(node_instr)->instr.bufusage.shared_blks_hit;   \
+		(metrics)[idx].buffer_usage.cache_misses =          \
+			(node_instr)->instr.bufusage.shared_blks_read;  \
+		(metrics)[idx].buffer_usage.local_cache_hits =      \
+			(node_instr)->instr.bufusage.local_blks_hit;    \
+		(metrics)[idx].buffer_usage.local_cache_misses =    \
+			(node_instr)->instr.bufusage.local_blks_read;   \
+		(metrics)[idx].buffer_usage.spill_file_reads =      \
+			(node_instr)->instr.bufusage.temp_blks_read;    \
+		(metrics)[idx].buffer_usage.spill_file_writes =     \
+			(node_instr)->instr.bufusage.temp_blks_written; \
 	} while (0)
 
 static forceinline const char *

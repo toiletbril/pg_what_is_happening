@@ -16,36 +16,56 @@ jobs:
       packages: write
 
   run-tests:
-    name: Run regression tests on PostgreSQL ${{ matrix.pg_version }}
+    name: PostgreSQL ${{ matrix.pg_version }} with ${{ matrix.http_backend }}
     needs: build-image
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        pg_version: [9.4, 12.6, 14.4, 18]
+        pg_version: [9.4, 9.5, 9.6, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+        http_backend: [mongoose, dumb]
         include:
           - pg_version: 9.4
             pg_branch: REL9_4_STABLE
-          - pg_version: 12.6
+          - pg_version: 9.5
+            pg_branch: REL9_5_STABLE
+          - pg_version: 9.6
+            pg_branch: REL9_6_STABLE
+          - pg_version: 10
+            pg_branch: REL_10_STABLE
+          - pg_version: 11
+            pg_branch: REL_11_STABLE
+          - pg_version: 12
             pg_branch: REL_12_STABLE
-          - pg_version: 14.4
-            pg_branch: REL_14_4
+          - pg_version: 13
+            pg_branch: REL_13_STABLE
+          - pg_version: 14
+            pg_branch: REL_14_STABLE
+          - pg_version: 15
+            pg_branch: REL_15_STABLE
+          - pg_version: 16
+            pg_branch: REL_16_STABLE
+          - pg_version: 17
+            pg_branch: REL_17_STABLE
           - pg_version: 18
             pg_branch: REL_18_STABLE
+          - pg_version: 19
+            pg_branch: REL_19_STABLE
     environment:
       name: testing
     env:
       POSTGRES_VERSION: ${{ matrix.pg_branch }}
+      HTTP_BACKEND: ${{ matrix.http_backend }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Clone PostgreSQL
         run: |
           git clone --depth 1 --branch ${{ env.POSTGRES_VERSION }} https://github.com/postgres/postgres.git postgres
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -62,10 +82,10 @@ jobs:
 
       - name: Upload logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: postgres-log-${{ matrix.pg_version }}
-          path: /tmp/postgres.log
+          name: postgres-log-${{ matrix.pg_version }}-${{ matrix.http_backend }}
+          path: test/postgresql.log
           if-no-files-found: ignore
 
       - name: Summarize test results on failure

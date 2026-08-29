@@ -19,6 +19,7 @@
 #include "postgres.h"
 
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <string.h>
@@ -33,6 +34,7 @@
 typedef struct DumbHttpServer
 {
 	i32					 port;
+	char				 host[256];
 	i32					 listen_fd;
 	volatile bool		 is_running;
 	HttpRequestHandlerFn handler_fn;
@@ -67,7 +69,11 @@ dumb_create(const char *listen_addr)
 	HttpServer	   *server;
 	DumbHttpServer *impl;
 	const char	   *colon;
+	const char	   *port_text;
+	char		   *port_end;
+	long			parsed_port;
 	i32				port;
+	u64				host_len;
 
 	server = (HttpServer *) malloc(sizeof(HttpServer));
 	if (server == NULL)
@@ -83,11 +89,34 @@ dumb_create(const char *listen_addr)
 	/* Parse port from address string (format: "host:port" or ":port"). */
 	colon = strrchr(listen_addr, ':');
 	if (colon)
-		port = atoi(colon + 1);
+	{
+		if (strchr(listen_addr, ':') != colon)
+			goto invalid_address;
+		port_text = colon + 1;
+		errno = 0;
+		parsed_port = strtol(port_text, &port_end, 10);
+		if (errno != 0 || port_end == port_text || *port_end != '\0' ||
+			parsed_port < 1 || parsed_port > 65535)
+			goto invalid_address;
+		port = (i32) parsed_port;
+		host_len = colon - listen_addr;
+	}
 	else
+	{
 		port = 9187; /* Default port. */
+		host_len = strlen(listen_addr);
+	}
 
 	impl->port = port;
+	if (host_len >= sizeof(impl->host))
+		goto invalid_address;
+	if (host_len == 0)
+		snprintf(impl->host, sizeof(impl->host), "0.0.0.0");
+	else
+	{
+		memcpy(impl->host, listen_addr, host_len);
+		impl->host[host_len] = '\0';
+	}
 	impl->listen_fd = -1;
 	impl->is_running = false;
 	impl->handler_fn = NULL;
@@ -97,6 +126,11 @@ dumb_create(const char *listen_addr)
 	server->impl = impl;
 
 	return server;
+
+invalid_address:
+	free(impl);
+	free(server);
+	return NULL;
 }
 
 static void
@@ -152,16 +186,29 @@ parse_request(const char *buffer, HttpRequest *req)
 
 	/* Allocate and copy method. */
 	req->method = (char *) malloc(space1 - buffer + 1);
+	if (req->method == NULL)
+		return false;
 	memcpy(req->method, buffer, space1 - buffer);
 	req->method[space1 - buffer] = '\0';
 
 	/* Allocate and copy path. */
 	req->path = (char *) malloc(space2 - space1);
+	if (req->path == NULL)
+	{
+		free(req->method);
+		return false;
+	}
 	memcpy(req->path, space1 + 1, space2 - space1 - 1);
 	req->path[space2 - space1 - 1] = '\0';
 
 	/* Allocate and copy version. */
 	req->version = (char *) malloc(line_end - space2);
+	if (req->version == NULL)
+	{
+		free(req->path);
+		free(req->method);
+		return false;
+	}
 	memcpy(req->version, space2 + 1, line_end - space2 - 1);
 	req->version[line_end - space2 - 1] = '\0';
 
@@ -188,24 +235,55 @@ free_request(HttpRequest *req)
 }
 
 static void
+send_all(i32 fd, const char *data, u64 length)
+{
+	while (length > 0)
+	{
+		ssize_t sent = send(fd, data, length, 0);
+		if (sent < 0 && errno == EINTR)
+			continue;
+		if (sent <= 0)
+			return;
+		data += sent;
+		length -= sent;
+	}
+}
+
+static void
 handle_connection(DumbHttpServer *impl, i32 client_fd)
 {
-	char		 buffer[DUMB_HTTP_BUFFER_SIZE];
-	ssize_t		 bytes_read;
-	HttpRequest	 req;
-	HttpResponse resp;
-	char		 response_buffer[DUMB_HTTP_BUFFER_SIZE];
-	i32			 response_len;
+	char		   buffer[DUMB_HTTP_BUFFER_SIZE];
+	ssize_t		   bytes_read;
+	HttpRequest	   req;
+	HttpResponse   resp;
+	char		   response_buffer[1024];
+	i32			   response_len;
+	struct timeval timeout = {.tv_sec = 2, .tv_usec = 0};
+	u64			   offset = 0;
 
-	/* Read request. */
-	bytes_read = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
-	if (bytes_read <= 0)
+	setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+	setsockopt(client_fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+
+	while (offset < sizeof(buffer) - 1)
+	{
+		bytes_read =
+			recv(client_fd, buffer + offset, sizeof(buffer) - 1 - offset, 0);
+		if (bytes_read < 0 && errno == EINTR)
+			continue;
+		if (bytes_read <= 0)
+			break;
+		offset += bytes_read;
+		buffer[offset] = '\0';
+		if (strstr(buffer, "\r\n\r\n") != NULL ||
+			strstr(buffer, "\n\n") != NULL)
+			break;
+	}
+	if (offset == 0)
 	{
 		close(client_fd);
 		return;
 	}
-
-	buffer[bytes_read] = '\0';
+	buffer[offset] = '\0';
 
 	/* Parse request. */
 	if (!parse_request(buffer, &req))
@@ -228,20 +306,27 @@ handle_connection(DumbHttpServer *impl, i32 client_fd)
 	}
 
 	/* Build response. */
-	response_len = snprintf(response_buffer, sizeof(response_buffer),
-							"HTTP/1.1 %d %s\r\n"
-							"Content-Type: text/plain; version=0.0.4\r\n"
-							"Content-Length: %zu\r\n"
-							"Connection: close\r\n"
-							"\r\n"
-							"%s",
-							resp.status_code, resp.status_text, resp.body_len,
-							resp.body ? resp.body : "");
+	response_len =
+		snprintf(response_buffer, sizeof(response_buffer),
+				 "HTTP/1.1 %d %s\r\n"
+				 "%s"
+				 "Content-Length: %llu\r\n"
+				 "Connection: close\r\n"
+				 "\r\n",
+				 resp.status_code, resp.status_text,
+				 resp.headers ? resp.headers
+							  : "Content-Type: text/plain; charset=utf-8\r\n",
+				 (unsigned long long) resp.body_len);
 
-	/* Send response. */
-	send(client_fd, response_buffer, response_len, 0);
+	if (response_len > 0 && response_len < (i32) sizeof(response_buffer))
+	{
+		send_all(client_fd, response_buffer, response_len);
+		if (resp.body != NULL)
+			send_all(client_fd, resp.body, resp.body_len);
+	}
 
 	/* Cleanup. */
+	pwh_http_response_destroy_body(&resp);
 	free_request(&req);
 	close(client_fd);
 }
@@ -249,10 +334,12 @@ handle_connection(DumbHttpServer *impl, i32 client_fd)
 static i32
 dumb_run(HttpServer *server)
 {
-	DumbHttpServer	  *impl = (DumbHttpServer *) server->impl;
-	struct sockaddr_in addr;
-	i32				   client_fd;
-	i32				   opt = 1;
+	DumbHttpServer	*impl = (DumbHttpServer *) server->impl;
+	struct addrinfo	 hints;
+	struct addrinfo *addresses = NULL;
+	char			 port[16];
+	i32				 client_fd;
+	i32				 opt = 1;
 
 	/* Create socket. */
 	impl->listen_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -262,18 +349,21 @@ dumb_run(HttpServer *server)
 	/* Set socket options. */
 	setsockopt(impl->listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
-	/* Bind. */
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = INADDR_ANY;
-	addr.sin_port = htons(impl->port);
-
-	if (bind(impl->listen_fd, (struct sockaddr *) &addr, sizeof(addr)) < 0)
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	snprintf(port, sizeof(port), "%d", impl->port);
+	if (getaddrinfo(impl->host, port, &hints, &addresses) != 0 ||
+		addresses == NULL ||
+		bind(impl->listen_fd, addresses->ai_addr, addresses->ai_addrlen) < 0)
 	{
+		if (addresses != NULL)
+			freeaddrinfo(addresses);
 		close(impl->listen_fd);
 		impl->listen_fd = -1;
 		return -1;
 	}
+	freeaddrinfo(addresses);
 
 	/* Listen. */
 	if (listen(impl->listen_fd, 5) < 0)

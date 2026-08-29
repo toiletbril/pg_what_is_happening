@@ -35,6 +35,7 @@
 #include "storage/ipc.h"
 #include "storage/lwlock.h"
 #include "storage/shmem.h"
+#include "utils/timestamp.h"
 
 /* XXX get rid of shared memory and use a socket instead. */
 
@@ -52,34 +53,42 @@ PWH_LWLOCK_TRANCHE_ID_DECL;
 static bool check_if_process_exists(u32 pid);
 static bool signal_process(u32 pid, int sig);
 
-static u64
+static Size
 calc_backend_entry_stride(void)
 {
 	Size size = sizeof(PwhSharedMemoryBackendEntry);
 	size = add_size(size, PWH_GUC_MAX_QUERY_TEXT_LEN);
+	size = MAXALIGN(size);
 	size = add_size(
 		size, mul_size(PWH_GUC_MAX_NODES_PER_QUERY, sizeof(PwhNodeMetrics)));
-	return size;
+	return MAXALIGN(size);
 }
 
-static u64
+static Size
 calc_shared_memory_size(void)
 {
 	Size size = 0;
 
-	size = add_size(size, sizeof(PwhSharedMemoryHeader));
+	size = add_size(size, MAXALIGN(sizeof(PwhSharedMemoryHeader)));
 	size = add_size(size, mul_size(PWH_GUC_MAX_TRACKED_QUERIES,
 								   calc_backend_entry_stride()));
 
 	return size;
 }
 
+void
+pwh_calculate_shared_memory_layout(void)
+{
+	PWH_BACKEND_ENTRY_STRIDE = calc_backend_entry_stride();
+	PWH_SHMEM_SIZE = calc_shared_memory_size();
+}
+
 void *
 pwh_get_shared_memory_ptr(void)
 {
 	bool  was_found;
-	void *p = ShmemInitStruct("pg_what_is_happening", calc_shared_memory_size(),
-							  &was_found);
+	void *p =
+		ShmemInitStruct("pg_what_is_happening", PWH_SHMEM_SIZE, &was_found);
 	Assert(was_found);
 	return p;
 }
@@ -90,22 +99,16 @@ pwh_shared_memory_startup_hook(void)
 	if (PREV_SHMEM_STARTUP_HOOK)
 		PREV_SHMEM_STARTUP_HOOK();
 
-	PWH_SHMEM_REQUEST_IN_STARTUP_HOOK();
-
-	PWH_SHMEM_SIZE = calc_shared_memory_size();
-	PWH_BACKEND_ENTRY_STRIDE = calc_backend_entry_stride();
-
 	bool was_found;
-	PWH_SHMEM = ShmemInitStruct("pg_what_is_happening",
-								calc_shared_memory_size(), &was_found);
+	PWH_SHMEM =
+		ShmemInitStruct("pg_what_is_happening", PWH_SHMEM_SIZE, &was_found);
 	Assert(PWH_SHMEM != NULL);
 
 	if (unlikely(!was_found))
 	{
 		ereport(LOG, (errmsg("PWH: Initializing shared memory"),
 					  errdetail("%zu bytes for %d backend entries",
-								calc_shared_memory_size(),
-								PWH_GUC_MAX_TRACKED_QUERIES)));
+								PWH_SHMEM_SIZE, PWH_GUC_MAX_TRACKED_QUERIES)));
 
 		/* No lock -- we're the first to access this memory. */
 
@@ -126,6 +129,9 @@ pwh_shared_memory_startup_hook(void)
 		PWH_LWLOCK_SETUP_TRANCHE(PWH_LWLOCK_TRANCHE_ID, "pg_what_is_happening");
 		PWH_LWLOCK_INITIALIZE(PWH_SHMEM->entry_search_lock,
 							  PWH_LWLOCK_TRANCHE_ID);
+		PWH_SHMEM->refresh_in_progress = false;
+		PWH_SHMEM->refresh_generation = 0;
+		PWH_SHMEM->last_refresh_time = 0;
 	}
 }
 
@@ -134,7 +140,8 @@ pwh_get_or_create_my_backend_entry_impl(bool should_create,
 										bool should_acquire_lock)
 {
 	if (should_acquire_lock)
-		PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_SHARED);
+		PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock,
+						   should_create ? LW_EXCLUSIVE : LW_SHARED);
 
 	u64 free_slot_idx = -1U;
 
@@ -161,8 +168,15 @@ pwh_get_or_create_my_backend_entry_impl(bool should_create,
 		PwhSharedMemoryBackendEntry *be =
 			PWH_GET_BACKEND_ENTRY_UNSAFE(free_slot_idx);
 
-		ereport(DEBUG2, (errmsg("PWH: Allocated backend entry %lu for PID %u",
-								free_slot_idx, MyProcPid)));
+		ereport(DEBUG2,
+				(errmsg("PWH: Allocated backend entry %llu for PID %u",
+						(unsigned long long) free_slot_idx, MyProcPid)));
+		be->owner_oid = GetUserId();
+		be->query_id = 0;
+		be->query_start_time = 0;
+		be->count_of_metrics = 0;
+		be->write_sequence = 0;
+		PWH_MEMORY_BARRIER();
 		be->backend_pid = MyProcPid;
 
 		if (should_acquire_lock)
@@ -206,7 +220,7 @@ pwh_get_backend_entry(u64 index)
 void
 pwh_release_my_backend_entry(void)
 {
-	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_SHARED);
+	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_EXCLUSIVE);
 
 	for (u64 i = 0; i < (u64) PWH_GUC_MAX_TRACKED_QUERIES; i++)
 	{
@@ -239,31 +253,8 @@ PwhNodeMetrics *
 pwh_get_backend_entry_metrics(PwhSharedMemoryBackendEntry *entry)
 {
 	return (PwhNodeMetrics *) ((char *) entry +
-							   sizeof(PwhSharedMemoryBackendEntry) +
-							   PWH_GUC_MAX_QUERY_TEXT_LEN);
-}
-
-/*
- * Send SIGUSR2 to all active backends to refresh metrics.
- * Returns the number of backends signaled.
- */
-u32
-pwh_request_backend_metrics_unlocked(void)
-{
-	u32 n_signaled = 0;
-
-	for (u64 i = 0; i < (u64) PWH_GUC_MAX_TRACKED_QUERIES; i++)
-	{
-		PwhSharedMemoryBackendEntry *be = PWH_GET_BACKEND_ENTRY_UNSAFE(i);
-
-		if (pwh_is_backend_entry_active(be))
-		{
-			if (signal_process(be->backend_pid, SIGUSR2))
-				n_signaled++;
-		}
-	}
-
-	return n_signaled;
+							   MAXALIGN(sizeof(PwhSharedMemoryBackendEntry) +
+										PWH_GUC_MAX_QUERY_TEXT_LEN));
 }
 
 bool
@@ -282,19 +273,20 @@ u32
 pwh_cleanup_orphaned_slots(void)
 {
 	u32 n_cleaned = 0;
+	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_EXCLUSIVE);
 
 	for (u64 i = 0; i < (u64) PWH_GUC_MAX_TRACKED_QUERIES; i++)
 	{
-		PwhSharedMemoryBackendEntry *be = pwh_get_backend_entry(i);
+		PwhSharedMemoryBackendEntry *be = PWH_GET_BACKEND_ENTRY_UNSAFE(i);
 
 		if (pwh_is_backend_entry_active(be))
 		{
 			if (!check_if_process_exists(be->backend_pid))
 			{
-				ereport(DEBUG1,
-						(errmsg("PWH: Cleaning up orphaned slot %lu", i),
-						 errdetail("Backend PID %u no longer exists",
-								   be->backend_pid)));
+				ereport(DEBUG1, (errmsg("PWH: Cleaning up orphaned slot %llu",
+										(unsigned long long) i),
+								 errdetail("Backend PID %u no longer exists",
+										   be->backend_pid)));
 
 				/* No one should be reading that memory anyway. */
 				pwh_release_backend_entry_unlocked(be);
@@ -303,8 +295,170 @@ pwh_cleanup_orphaned_slots(void)
 			}
 		}
 	}
+	PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
 
 	return n_cleaned;
+}
+
+void
+pwh_refresh_metrics(void)
+{
+	TimestampTz	  now = GetCurrentTimestamp();
+	TimestampTz	  freshness_us = (TimestampTz) PWH_GUC_SIGNAL_TIMEOUT_MS * 1000;
+	u32			 *pids;
+	u32			 *slot_indexes;
+	sig_atomic_t *generations;
+	u32			  count = 0;
+	u64			  observed_generation;
+
+	pwh_cleanup_orphaned_slots();
+
+	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_EXCLUSIVE);
+	observed_generation = PWH_SHMEM->refresh_generation;
+	if (PWH_SHMEM->refresh_in_progress &&
+		now - PWH_SHMEM->last_refresh_time <= freshness_us)
+	{
+		PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+		for (i32 waited = 0; waited < PWH_GUC_SIGNAL_TIMEOUT_MS; waited++)
+		{
+			pg_usleep(1000L);
+			PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_SHARED);
+			bool finished =
+				PWH_SHMEM->refresh_generation != observed_generation;
+			PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+			if (finished)
+				break;
+		}
+		return;
+	}
+	if (PWH_SHMEM->last_refresh_time != 0 &&
+		now - PWH_SHMEM->last_refresh_time <= freshness_us)
+	{
+		PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+		return;
+	}
+
+	PWH_SHMEM->refresh_in_progress = true;
+	PWH_SHMEM->last_refresh_time = now;
+	pids = palloc(sizeof(u32) * PWH_GUC_MAX_TRACKED_QUERIES);
+	slot_indexes = palloc(sizeof(u32) * PWH_GUC_MAX_TRACKED_QUERIES);
+	generations = palloc(sizeof(sig_atomic_t) * PWH_GUC_MAX_TRACKED_QUERIES);
+	for (u64 i = 0; i < (u64) PWH_GUC_MAX_TRACKED_QUERIES; i++)
+	{
+		PwhSharedMemoryBackendEntry *be = PWH_GET_BACKEND_ENTRY_UNSAFE(i);
+		if (pwh_is_backend_entry_active(be))
+		{
+			pids[count] = be->backend_pid;
+			slot_indexes[count] = (u32) i;
+			generations[count] = be->poll_generation;
+			count++;
+		}
+	}
+	PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+
+	for (u32 i = 0; i < count; i++)
+		if (!signal_process(pids[i], SIGUSR2))
+			generations[i] = -1;
+
+	for (i32 waited = 0; count > 0 && waited < PWH_GUC_SIGNAL_TIMEOUT_MS;
+		 waited++)
+	{
+		u32 pending = 0;
+		for (u32 i = 0; i < count; i++)
+		{
+			if (generations[i] < 0)
+				continue;
+
+			PwhSharedMemoryBackendEntry *be =
+				PWH_GET_BACKEND_ENTRY_UNSAFE(slot_indexes[i]);
+			if (be->backend_pid != (sig_atomic_t) pids[i] ||
+				be->poll_generation != generations[i] ||
+				!check_if_process_exists(pids[i]))
+				generations[i] = -1;
+			else
+				pending++;
+		}
+		if (pending == 0)
+			break;
+		pg_usleep(1000L);
+	}
+
+	pfree(generations);
+	pfree(slot_indexes);
+	pfree(pids);
+	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_EXCLUSIVE);
+	PWH_SHMEM->last_refresh_time = GetCurrentTimestamp();
+	PWH_SHMEM->refresh_in_progress = false;
+	PWH_SHMEM->refresh_generation++;
+	PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+}
+
+PwhMetricsSnapshot *
+pwh_take_metrics_snapshot(void)
+{
+	PwhMetricsSnapshot *snapshot = palloc0(sizeof(PwhMetricsSnapshot));
+	snapshot->entries =
+		palloc0(sizeof(PwhSnapshotEntry) * PWH_GUC_MAX_TRACKED_QUERIES);
+
+	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_SHARED);
+	for (u64 i = 0; i < (u64) PWH_GUC_MAX_TRACKED_QUERIES; i++)
+	{
+		PwhSharedMemoryBackendEntry *be = PWH_GET_BACKEND_ENTRY_UNSAFE(i);
+		if (!pwh_is_backend_entry_active(be) ||
+			be->count_of_metrics > (u32) PWH_GUC_MAX_NODES_PER_QUERY)
+			continue;
+
+		PwhSnapshotEntry *dst = &snapshot->entries[snapshot->count];
+		for (u32 attempts = 0; attempts < 4; attempts++)
+		{
+			sig_atomic_t before = be->write_sequence;
+			if ((before & 1) != 0)
+				continue;
+			dst->backend_pid = be->backend_pid;
+			dst->owner_oid = be->owner_oid;
+			dst->query_id = be->query_id;
+			dst->query_start_time = be->query_start_time;
+			dst->count_of_metrics = be->count_of_metrics;
+			dst->query_text = palloc(PWH_GUC_MAX_QUERY_TEXT_LEN);
+			dst->metrics =
+				palloc(sizeof(PwhNodeMetrics) * dst->count_of_metrics);
+			memcpy(dst->query_text, pwh_get_backend_entry_query_text(be),
+				   PWH_GUC_MAX_QUERY_TEXT_LEN);
+			memcpy(dst->metrics, pwh_get_backend_entry_metrics(be),
+				   sizeof(PwhNodeMetrics) * dst->count_of_metrics);
+			PWH_MEMORY_BARRIER();
+			if (before == be->write_sequence && (before & 1) == 0 &&
+				dst->backend_pid == be->backend_pid)
+			{
+				for (u32 j = 0; j < dst->count_of_metrics; j++)
+					dst->total_query_time +=
+						dst->metrics[j].execution.total_time_us;
+				snapshot->count++;
+				break;
+			}
+			pfree(dst->metrics);
+			pfree(dst->query_text);
+			dst->metrics = NULL;
+			dst->query_text = NULL;
+		}
+	}
+	PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+	return snapshot;
+}
+
+void
+pwh_free_metrics_snapshot(PwhMetricsSnapshot *snapshot)
+{
+	if (snapshot == NULL)
+		return;
+
+	for (u32 i = 0; i < snapshot->count; i++)
+	{
+		pfree(snapshot->entries[i].metrics);
+		pfree(snapshot->entries[i].query_text);
+	}
+	pfree(snapshot->entries);
+	pfree(snapshot);
 }
 
 static bool

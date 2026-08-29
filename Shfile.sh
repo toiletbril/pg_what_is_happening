@@ -48,8 +48,18 @@ make_sure_postgres_source_is_available() {
 C="${1:-}"
 
 docker_run() {
-docker run --pull=never --rm --network=host -v "$PWD:/pg_what_is_happening" \
-           -v "$POSTGRES_SOURCE:/postgres" --privileged "$@"
+host_uid=$(id -u)
+host_gid=$(id -g)
+docker run --pull=never --rm --network=host \
+           --user "$host_uid:$host_gid" \
+           --tmpfs "/postgres-build:uid=$host_uid,gid=$host_gid" \
+           --tmpfs "/postgres-bin:uid=$host_uid,gid=$host_gid" \
+           --tmpfs "/data:uid=$host_uid,gid=$host_gid" \
+           -e HOME=/tmp \
+           -e "HTTP_BACKEND=${HTTP_BACKEND:-mongoose}" \
+           -e "WITH_BGWORKER=${WITH_BGWORKER:-yes}" \
+           -v "$PWD:/pg_what_is_happening" \
+           -v "$POSTGRES_SOURCE:/postgres:ro" --privileged "$@"
 }
 
 case $C in
@@ -78,9 +88,6 @@ case $C in
 "reset")
   echo "Cleaning extension build artifacts..."
   make reset
-  if test -n "${POSTGRES_SOURCE:-}" && test -d "$POSTGRES_SOURCE"; then
-    make -C "$POSTGRES_SOURCE" -s distclean >/dev/null 2>&1 || true
-  fi
   clean_docker_target
   ;;
 *)

@@ -63,6 +63,25 @@ typedef struct PlanState PlanState;
 #endif
 
 #if PG_VERSION_NUM >= 190000
+typedef NodeInstrumentation PwhNodeInstrumentation;
+#define PWH_INSTR_TOTAL(node_instr) ((node_instr)->instr.total)
+#define PWH_INSTR_SHARED_HITS(node_instr) \
+	((node_instr)->instr.bufusage.shared_blks_hit)
+#define PWH_SIG_IGN PG_SIG_IGN
+#define PWH_SIG_DFL PG_SIG_DFL
+#define PWH_CALL_SIGNAL_HANDLER(handler) \
+	(handler)(postgres_signal_arg, pg_siginfo)
+#else
+typedef Instrumentation PwhNodeInstrumentation;
+#define PWH_INSTR_TOTAL(node_instr) ((node_instr)->total)
+#define PWH_INSTR_SHARED_HITS(node_instr) \
+	((node_instr)->bufusage.shared_blks_hit)
+#define PWH_SIG_IGN SIG_IGN
+#define PWH_SIG_DFL SIG_DFL
+#define PWH_CALL_SIGNAL_HANDLER(handler) (handler)(postgres_signal_arg)
+#endif
+
+#if PG_VERSION_NUM >= 190000
 #define PWH_INSTR_TIME_MAYBE_GET_DOUBLE(n) (INSTR_TIME_GET_DOUBLE(n))
 #else
 #define PWH_INSTR_TIME_MAYBE_GET_DOUBLE(n) (n)
@@ -71,16 +90,22 @@ typedef struct PlanState PlanState;
 #if PG_VERSION_NUM >= 90500
 typedef struct
 {
-	LWLock entry_search_lock;
+	LWLock		entry_search_lock;
+	bool		refresh_in_progress;
+	u8			__pad[7];
+	u64			refresh_generation;
+	TimestampTz last_refresh_time;
 } PwhSharedMemoryHeader;
 #else
 typedef struct
 {
-	LWLock *entry_search_lock;
-	u8		__pad[8];
+	LWLock	   *entry_search_lock;
+	bool		refresh_in_progress;
+	u8			__pad[7];
+	u64			refresh_generation;
+	TimestampTz last_refresh_time;
 } PwhSharedMemoryHeader;
 #endif
-_Static_assert(sizeof(PwhSharedMemoryHeader) == 16);
 
 extern u64 pwh_compute_query_id(const QueryDesc *qd);
 

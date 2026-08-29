@@ -22,6 +22,7 @@
 #include "postgres.h"
 
 #include <signal.h>
+#include <stdint.h>
 
 #include "common.h"
 #include "compatibility.h"
@@ -71,8 +72,10 @@ typedef struct
 typedef struct
 {
 	volatile sig_atomic_t backend_pid;
+	Oid					  owner_oid;
 	u64					  query_id;
-	u32					  poll_generation;
+	volatile sig_atomic_t poll_generation;
+	volatile sig_atomic_t write_sequence;
 	TimestampTz			  query_start_time;
 	u32					  count_of_metrics;
 	/* Query text and metrics follow after. */
@@ -83,9 +86,28 @@ extern PwhSharedMemoryHeader *PWH_SHMEM;
 extern Size PWH_SHMEM_SIZE;
 extern Size PWH_BACKEND_ENTRY_STRIDE;
 
-#define PWH_GET_BACKEND_ENTRY_UNSAFE(idx)                             \
-	((PwhSharedMemoryBackendEntry *) ((char *) (PWH_SHMEM) +          \
-									  sizeof(PwhSharedMemoryHeader) + \
+typedef struct
+{
+	i32				backend_pid;
+	Oid				owner_oid;
+	u64				query_id;
+	TimestampTz		query_start_time;
+	u32				count_of_metrics;
+	char		   *query_text;
+	PwhNodeMetrics *metrics;
+	double			total_query_time;
+} PwhSnapshotEntry;
+
+typedef struct
+{
+	u32				  count;
+	PwhSnapshotEntry *entries;
+} PwhMetricsSnapshot;
+
+#define PWH_GET_BACKEND_ENTRY_UNSAFE(idx)                                  \
+	((PwhSharedMemoryBackendEntry *) ((char *) (PWH_SHMEM) +               \
+									  MAXALIGN(                            \
+										  sizeof(PwhSharedMemoryHeader)) + \
 									  ((idx) * PWH_BACKEND_ENTRY_STRIDE)))
 
 /* Can return NULL. */
@@ -104,7 +126,39 @@ pwh_release_backend_entry_unlocked(PwhSharedMemoryBackendEntry *be)
 {
 	Assert(pwh_is_backend_entry_active(be));
 	be->backend_pid = 0;
-	be->poll_generation++;
+	be->poll_generation =
+		be->poll_generation == SIG_ATOMIC_MAX ? 0 : be->poll_generation + 1;
+	PWH_MEMORY_BARRIER();
+}
+
+forceinline bool
+pwh_begin_metrics_write(PwhSharedMemoryBackendEntry *be,
+						sig_atomic_t				*base_sequence)
+{
+	sig_atomic_t sequence = be->write_sequence;
+	if ((sequence & 1) != 0)
+		return false;
+	if (sequence >= SIG_ATOMIC_MAX - 1)
+		sequence = 0;
+	be->write_sequence = sequence + 1;
+	PWH_MEMORY_BARRIER();
+	*base_sequence = sequence;
+	return true;
+}
+
+forceinline void
+pwh_end_metrics_write(PwhSharedMemoryBackendEntry *be,
+					  sig_atomic_t				   base_sequence)
+{
+	PWH_MEMORY_BARRIER();
+	be->write_sequence = base_sequence + 2;
+}
+
+forceinline void
+pwh_advance_poll_generation(PwhSharedMemoryBackendEntry *be)
+{
+	be->poll_generation =
+		be->poll_generation == SIG_ATOMIC_MAX ? 0 : be->poll_generation + 1;
 	PWH_MEMORY_BARRIER();
 }
 
@@ -135,6 +189,7 @@ extern void pwh_release_my_backend_entry(void);
 void *pwh_get_shared_memory_ptr(void);
 
 extern void pwh_shared_memory_startup_hook(void);
+extern void pwh_calculate_shared_memory_layout(void);
 
 /* Cannot return NULL. */
 extern PwhSharedMemoryBackendEntry *pwh_get_backend_entry(u64 index);
@@ -145,8 +200,10 @@ extern char *pwh_get_backend_entry_query_text(
 /* Cannot return NULL. */
 extern PwhNodeMetrics *pwh_get_backend_entry_metrics(
 	PwhSharedMemoryBackendEntry *entry);
-extern u32	pwh_request_backend_metrics_unlocked(void);
 extern bool pwh_validate_node_magic(PwhNodeMetrics *node, u32 node_id);
 extern u32	pwh_cleanup_orphaned_slots(void);
+extern void pwh_refresh_metrics(void);
+extern PwhMetricsSnapshot *pwh_take_metrics_snapshot(void);
+extern void pwh_free_metrics_snapshot(PwhMetricsSnapshot *snapshot);
 
 #endif /* PWH_SHARED_MEMORY_H */

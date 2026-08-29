@@ -132,10 +132,7 @@ pwh_compute_query_id(const QueryDesc *qd)
 							 strlen(qd->sourceText));
 	}
 
-	hash ^= (u64) GetCurrentTimestamp() >> 16;
-	hash ^= MyProcPid;
-
-	return hash;
+	return hash == 0 ? 1 : hash;
 }
 
 pqsigfunc

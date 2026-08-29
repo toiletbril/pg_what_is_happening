@@ -5,10 +5,11 @@
 #
 
 export PG_SOURCE="/postgres"
+export PG_BUILD_DIR="/postgres-build"
 export PG_PWH_SOURCE='/pg_what_is_happening'
 export PG_DATA_DIR='/data'
 export PG_BIN_DIR='/postgres-bin'
-export PG_LOG_FILE='/tmp/postgresql.log'
+export PG_LOG_FILE='/pg_what_is_happening/test/postgresql.log'
 
 export PGDATA="$PG_DATA_DIR"
 export PATH="$PATH:$PG_BIN_DIR/bin"
@@ -43,20 +44,25 @@ log_err_and_die()
 init_env()
 {
   log "initializing env"
-  sudo chown -R postgres:postgres $PWH_PERMIT_DIRS
+  mkdir -p "$PG_BUILD_DIR" "$PG_BIN_DIR" "$PG_DATA_DIR"
+}
+
+parallel_jobs()
+{
+  getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1
 }
 
 build_postgresql_if_not_built()
 {
-  if ! test -f "$PG_SOURCE/config.status"; then
+  if ! test -f "$PG_BUILD_DIR/config.status"; then
     log "configuring PostgreSQL..."
-    cd "$PG_SOURCE" || return
+    cd "$PG_BUILD_DIR" || return
     PG_CFLAGS="-std=gnu11 -g3 -O0 -Wno-error=incompatible-pointer-types"
-    ./configure --prefix="$PG_BIN_DIR" --enable-debug --enable-cassert CFLAGS="$PG_CFLAGS" >/dev/null
+    "$PG_SOURCE/configure" --prefix="$PG_BIN_DIR" --enable-debug --enable-cassert CFLAGS="$PG_CFLAGS" >/dev/null
     cd - || return
   fi
   log "building PostgreSQL from source..."
-  make -C /postgres -s -j"$(nproc)" install
+  make -C "$PG_BUILD_DIR" -s -j"$(parallel_jobs)" install
 }
 
 init_postgresql_data_dir()

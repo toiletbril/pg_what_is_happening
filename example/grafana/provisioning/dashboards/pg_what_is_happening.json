@@ -175,7 +175,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max by (query_id) (pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\"}) * on(query_id) group_left(query_text, pid) pg_what_is_happening_query_info{query_id=~\"$query_id\"}",
+          "expr": "max by (query_id, pid) (pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\"}) * on(query_id, pid) group_left(query_text) pg_what_is_happening_query_info{query_id=~\"$query_id\"}",
           "legendFormat": "q={{query_id}} PID={{pid}}",
           "refId": "A"
         }
@@ -2238,7 +2238,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_startup_time_us{query_id=~\"$query_id\",parent_node_id=\"-1\"} * on(query_id) group_left(query_text, pid) pg_what_is_happening_query_info",
+          "expr": "pg_what_is_happening_active_query_node_startup_time_us{query_id=~\"$query_id\",parent_node_id=\"-1\"} * on(query_id, pid) group_left(query_text) pg_what_is_happening_query_info",
           "legendFormat": "First tuple: q={{query_id}}",
           "refId": "A"
         },
@@ -2247,7 +2247,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "pg_what_is_happening_active_query_node_total_time_us{query_id=~\"$query_id\",parent_node_id=\"-1\"} * on(query_id) group_left(query_text, pid) pg_what_is_happening_query_info",
+          "expr": "pg_what_is_happening_active_query_node_total_time_us{query_id=~\"$query_id\",parent_node_id=\"-1\"} * on(query_id, pid) group_left(query_text) pg_what_is_happening_query_info",
           "legendFormat": "Last tuple: q={{query_id}}",
           "refId": "B"
         }
@@ -3335,7 +3335,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "topk(10, pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",node_id=~\"$node_id\"} * on(query_id) group_left(query_text, pid) pg_what_is_happening_query_info)",
+          "expr": "topk(10, pg_what_is_happening_active_query_node_time_seconds{query_id=~\"$query_id\",node_id=~\"$node_id\"} * on(query_id, pid) group_left(query_text) pg_what_is_happening_query_info)",
           "format": "table",
           "instant": true,
           "refId": "A"

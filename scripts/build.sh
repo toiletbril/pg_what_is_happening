@@ -11,6 +11,6 @@ cd '/pg_what_is_happening'
 init_env
 
 echo "Building pg_what_is_happening from source..."
-make -j"$(nproc)" all
+make -j"$(parallel_jobs)" all
 
 ls -lah pg_what_is_happening.so

@@ -31,7 +31,7 @@ typedef struct MongooseHttpServer
 {
 	struct mg_mgr		  mgr;
 	struct mg_connection *connection;
-	char				  listen_address[128];
+	char				  listen_address[272];
 	volatile bool		  is_running;
 	HttpRequestHandlerFn  handler_fn;
 	void				 *custom_context;
@@ -100,10 +100,11 @@ mongoose_event_handler(struct mg_connection *c, int ev, void *ev_data)
 		}
 
 		/* Send response. */
-		mg_http_reply(
-			c, (int) resp.status_code,
-			resp.headers ? resp.headers : "Content-Type: text/plain\r\n", "%s",
-			resp.body ? resp.body : "");
+		mg_http_reply(c, (int) resp.status_code,
+					  resp.headers
+						  ? resp.headers
+						  : "Content-Type: text/plain; charset=utf-8\r\n",
+					  "%.*s", (int) resp.body_len, resp.body ? resp.body : "");
 
 		pwh_http_response_destroy_body(&resp);
 	}
@@ -134,8 +135,17 @@ mongoose_create(const char *listen_addr)
 		snprintf(impl->listen_address, sizeof(impl->listen_address), "%s",
 				 listen_addr);
 	else
-		snprintf(impl->listen_address, sizeof(impl->listen_address),
-				 "http://%s", listen_addr);
+	{
+		if (snprintf(impl->listen_address, sizeof(impl->listen_address),
+					 "http://%s",
+					 listen_addr) >= (i32) sizeof(impl->listen_address))
+		{
+			mg_mgr_free(&impl->mgr);
+			free(impl);
+			free(server);
+			return NULL;
+		}
+	}
 
 	impl->connection = NULL;
 	impl->is_running = false;

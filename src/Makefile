@@ -8,6 +8,11 @@ SOURCES = \
 	src/metrics.c
 
 ENVCFLAGS := $(CFLAGS)
+BUILD_KEY := $(MODE)-bg$(WITH_BGWORKER)-$(HTTP_BACKEND)
+
+ifneq ($(filter $(WITH_BGWORKER),yes no),$(WITH_BGWORKER))
+$(error Invalid WITH_BGWORKER=$(WITH_BGWORKER). Available values are "yes", "no")
+endif
 
 OS_INFO := $(shell uname -rvom || echo "<no uname>")
 COMMIT_HASH := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -50,10 +55,13 @@ CFLAGS2 += -DMG_ENABLE_LOG=0 -DMG_ENABLE_PACKED_FS=0 -DMG_ENABLE_LINES=0
 SOURCES += src/http_server_backend/mongoose.c vendor/mongoose.c
 else ifeq ($(HTTP_BACKEND), dumb)
 SOURCES += src/http_server_backend/dumb.c
+else
+$(error Invalid HTTP_BACKEND=$(HTTP_BACKEND). Available backends are "mongoose", "dumb")
 endif
 endif
 
-OBJS := $(SOURCES:%.c=src/o/$(MODE)/%.o)
+OBJS := $(SOURCES:%.c=src/o/$(BUILD_KEY)/%.o)
+DEPS := $(OBJS:.o=.d)
 
 ifeq ($(MODE), rel)
 CFLAGS2 += -O2 -DNDEBUG
@@ -67,11 +75,13 @@ $(error Invalid MODE=$(MODE). Available modes are "dbg", "rel")
 endif
 
 dirs:
-	mkdir -p src/o/$(MODE)/src
-	mkdir -p src/o/$(MODE)/src/http_server_backend
-	mkdir -p src/o/$(MODE)/src/compatibility
-	mkdir -p src/o/$(MODE)/vendor
+	mkdir -p src/o/$(BUILD_KEY)/src
+	mkdir -p src/o/$(BUILD_KEY)/src/http_server_backend
+	mkdir -p src/o/$(BUILD_KEY)/src/compatibility
+	mkdir -p src/o/$(BUILD_KEY)/vendor
 
-src/o/$(MODE)/%.o: %.c | dirs
+src/o/$(BUILD_KEY)/%.o: %.c | dirs
 	printf "\t%-42s $@\n" $<
-	$(CC) $(CPPFLAGS) $(CFLAGS2) -c $< -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS2) -MMD -MP -c $< -o $@
+
+-include $(wildcard $(DEPS))

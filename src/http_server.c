@@ -97,7 +97,7 @@ pwh_http_response_set_text(HttpResponse *resp, u32 status_code, char *body)
 			break;
 	}
 
-	resp->body = pstrdup(body);
+	resp->body = pstrdup(body ? body : "");
 	resp->body_len = body ? strlen(body) : 0;
 	resp->headers = NULL;
 }
@@ -105,7 +105,8 @@ pwh_http_response_set_text(HttpResponse *resp, u32 status_code, char *body)
 void
 pwh_http_response_destroy_body(HttpResponse *resp)
 {
-	pfree(resp->body);
+	if (resp->body != NULL)
+		pfree(resp->body);
 }
 
 static const HttpServerVtable *

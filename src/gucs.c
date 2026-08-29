@@ -5,6 +5,7 @@
 #include "gucs.h"
 
 bool PWH_GUC_IS_ENABLED = true;
+bool PWH_GUC_METRICS_EXPOSE_QUERY_TEXT = false;
 #ifdef WITH_BGWORKER
 char *PWH_GUC_METRICS_LISTEN_ADDRESS = NULL;
 #endif
@@ -26,6 +27,11 @@ pwh_define_gucs(void)
 	DefineCustomBoolVariable(
 		PWH_GUC_IS_ENABLED_NAME, "Enable pg_what_is_happening extension", NULL,
 		&PWH_GUC_IS_ENABLED, true, PGC_SIGHUP, 0, NULL, NULL, NULL);
+
+	DefineCustomBoolVariable(PWH_GUC_METRICS_EXPOSE_QUERY_TEXT_NAME,
+							 "Expose query text through the metrics endpoint",
+							 NULL, &PWH_GUC_METRICS_EXPOSE_QUERY_TEXT, false,
+							 PGC_SIGHUP, 0, NULL, NULL, NULL);
 
 #ifdef WITH_BGWORKER
 	DefineCustomStringVariable(

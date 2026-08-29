@@ -10,24 +10,28 @@ SELECT
   COUNT(DISTINCT backend_pid) >= 2 AS has_multiple_pids,
   COUNT(DISTINCT query_id) >= 2 AS has_multiple_query_ids
 FROM what_is_happening.v1_status
-WHERE query_text LIKE '%JOIN%' AND (query_text LIKE '%orders%' OR query_text LIKE '%products%');
+WHERE backend_pid <> pg_backend_pid()
+  AND query_text LIKE '%JOIN%' AND (query_text LIKE '%orders%' OR query_text LIKE '%products%');
 
 SELECT
   COUNT(*) = COUNT(DISTINCT backend_pid || '-' || query_id || '-' || node_id) AS no_duplicate_nodes
 FROM what_is_happening.v1_status
-WHERE query_text LIKE '%JOIN%' AND (query_text LIKE '%orders%' OR query_text LIKE '%products%');
+WHERE backend_pid <> pg_backend_pid()
+  AND query_text LIKE '%JOIN%' AND (query_text LIKE '%orders%' OR query_text LIKE '%products%');
 
 WITH orders_query AS (
-  SELECT DISTINCT backend_pid FROM what_is_happening.v1_status WHERE query_text LIKE '%orders%' AND query_text LIKE '%JOIN%'
+  SELECT DISTINCT backend_pid FROM what_is_happening.v1_status WHERE backend_pid <> pg_backend_pid() AND query_text LIKE '%orders%' AND query_text LIKE '%JOIN%'
 ), products_query AS (
-  SELECT DISTINCT backend_pid FROM what_is_happening.v1_status WHERE query_text LIKE '%products%' AND query_text LIKE '%JOIN%'
+  SELECT DISTINCT backend_pid FROM what_is_happening.v1_status WHERE backend_pid <> pg_backend_pid() AND query_text LIKE '%products%' AND query_text LIKE '%JOIN%'
 )
 SELECT
   COUNT(*) FILTER (WHERE backend_pid IN (SELECT backend_pid FROM orders_query) AND query_text LIKE '%products%') = 0 AS orders_backend_has_no_products_metrics,
   COUNT(*) FILTER (WHERE backend_pid IN (SELECT backend_pid FROM products_query) AND query_text LIKE '%orders%') = 0 AS products_backend_has_no_orders_metrics
 FROM what_is_happening.v1_status
-WHERE query_text LIKE '%JOIN%';
+WHERE backend_pid <> pg_backend_pid() AND query_text LIKE '%JOIN%';
 
 SELECT pg_advisory_unlock(12349);
 SELECT pg_advisory_unlock(12350);
 SELECT pg_sleep(0.5);
+
+-- End.

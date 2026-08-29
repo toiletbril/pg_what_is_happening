@@ -37,8 +37,12 @@ static void metrics_handler(const HttpRequest *req, HttpResponse *resp,
 							void *user_data);
 
 static void handle_sigterm(SIGNAL_ARGS);
+static void handle_sighup(SIGNAL_ARGS);
 
-static HttpServer *HTTP_SERVER_INSTANCE = NULL;
+static HttpServer			*HTTP_SERVER_INSTANCE = NULL;
+static volatile sig_atomic_t GOT_SIGHUP = false;
+static char					*CACHED_METRICS = NULL;
+static TimestampTz			 CACHED_METRICS_TIME = 0;
 
 #define BG_WORKER_PROCESS_NAME "pg_what_is_happening openmetrics exporter"
 #define BG_WORKER_ENTRY_FUNCTION "pwh_bgworker_main"
@@ -67,6 +71,7 @@ pwh_bgworker_main(Datum main_arg)
 	unused(main_arg);
 
 	pqsignal(SIGTERM, handle_sigterm);
+	pqsignal(SIGHUP, handle_sighup);
 	BackgroundWorkerUnblockSignals();
 
 	PWH_SHMEM = pwh_get_shared_memory_ptr();
@@ -95,7 +100,9 @@ pwh_bgworker_main(Datum main_arg)
 	}
 
 	pwh_http_server_set_handler(HTTP_SERVER_INSTANCE, metrics_handler, NULL);
-	pwh_http_server_run(HTTP_SERVER_INSTANCE); /* Blocking. */
+	if (pwh_http_server_run(HTTP_SERVER_INSTANCE) != 0)
+		ereport(FATAL, (errmsg("PWH: Metrics endpoint failed"),
+						errdetail("Could not listen on %s", listen_addr)));
 	pwh_http_server_destroy(HTTP_SERVER_INSTANCE);
 
 	ereport(LOG, (errmsg("PWH: Metrics endpoint shutting down")));
@@ -108,6 +115,12 @@ static void
 metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 {
 	unused(user_data);
+	if (GOT_SIGHUP)
+	{
+		GOT_SIGHUP = false;
+		ProcessConfigFile(PGC_SIGHUP);
+		CACHED_METRICS_TIME = 0;
+	}
 
 	if (!streq(req->method, "GET") || !streq(req->path, "/metrics"))
 	{
@@ -115,26 +128,28 @@ metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 		return;
 	}
 
-	/* Lock the shared memory until we are done reading. */
-	PWH_LWLOCK_ACQUIRE(PWH_SHMEM->entry_search_lock, LW_SHARED);
-
-	u32 n_cleaned = pwh_cleanup_orphaned_slots();
-	if (n_cleaned > 0)
+	TimestampTz now = GetCurrentTimestamp();
+	char	   *metrics;
+	if (CACHED_METRICS != NULL && CACHED_METRICS_TIME != 0 &&
+		now - CACHED_METRICS_TIME <=
+			(TimestampTz) PWH_GUC_SIGNAL_TIMEOUT_MS * 1000)
 	{
-		ereport(DEBUG1,
-				(errmsg("PWH: Cleaned up %u orphaned slots", n_cleaned)));
+		metrics = pstrdup(CACHED_METRICS);
 	}
-
-	u32 n_signaled = pwh_request_backend_metrics_unlocked();
-
-	ereport(DEBUG2,
-			(errmsg("PWH: Sent SIGUSR2 to %u active backends", n_signaled)));
-
-	usleep((useconds_t) (PWH_GUC_SIGNAL_TIMEOUT_MS * 1000));
-
-	char *metrics = pwh_format_openmetrics();
-
-	PWH_LWLOCK_RELEASE(PWH_SHMEM->entry_search_lock);
+	else
+	{
+		pwh_refresh_metrics();
+		PwhMetricsSnapshot *snapshot = pwh_take_metrics_snapshot();
+		metrics = pwh_format_openmetrics(snapshot);
+		pwh_free_metrics_snapshot(snapshot);
+		if (metrics != NULL)
+		{
+			if (CACHED_METRICS != NULL)
+				pfree(CACHED_METRICS);
+			CACHED_METRICS = pstrdup(metrics);
+			CACHED_METRICS_TIME = GetCurrentTimestamp();
+		}
+	}
 
 	if (metrics == NULL)
 	{
@@ -144,6 +159,8 @@ metrics_handler(const HttpRequest *req, HttpResponse *resp, void *user_data)
 	}
 
 	pwh_http_response_set_text(resp, 200, metrics);
+	resp->headers =
+		"Content-Type: application/openmetrics-text; version=1.0.0; charset=utf-8\r\n";
 
 	pfree(metrics);
 }
@@ -157,4 +174,12 @@ handle_sigterm(SIGNAL_ARGS)
 	}
 
 	proc_exit(0);
+}
+
+static void
+handle_sighup(SIGNAL_ARGS)
+{
+	int save_errno = errno;
+	GOT_SIGHUP = true;
+	errno = save_errno;
 }

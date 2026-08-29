@@ -22,6 +22,10 @@ extern char *PWH_GUC_METRICS_LISTEN_ADDRESS;
 #define PWH_GUC_IS_ENABLED_NAME (PWH_GUC_SCHEMA "is_enabled")
 extern bool PWH_GUC_IS_ENABLED;
 
+#define PWH_GUC_METRICS_EXPOSE_QUERY_TEXT_NAME \
+	(PWH_GUC_SCHEMA "metrics_expose_query_text")
+extern bool PWH_GUC_METRICS_EXPOSE_QUERY_TEXT;
+
 #define PWH_GUC_MAX_TRACKED_QUERIES_NAME (PWH_GUC_SCHEMA "max_tracked_queries")
 extern i32 PWH_GUC_MAX_TRACKED_QUERIES;
 

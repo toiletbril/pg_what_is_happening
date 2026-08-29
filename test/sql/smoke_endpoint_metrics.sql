@@ -9,11 +9,11 @@ SELECT pg_sleep(0.2);
 
 -- Query the /metrics endpoint while the query is running.
 -- We should see OpenMetrics output with node-level metrics.
-\! curl -s http://localhost:9187/metrics > /data/pwh_metrics_output.txt
+\! curl -s http://localhost:9187/metrics > /tmp/pwh_metrics_output.txt
 
 -- Verify OpenMetrics format - check for HELP and TYPE declarations.
-\set help_count `grep -c "^# HELP pg_what_is_happening_active_query_node" /data/pwh_metrics_output.txt`
-\set type_count `grep -c "^# TYPE pg_what_is_happening_active_query_node" /data/pwh_metrics_output.txt`
+\set help_count `grep -c "^# HELP pg_what_is_happening_active_query_node" /tmp/pwh_metrics_output.txt`
+\set type_count `grep -c "^# TYPE pg_what_is_happening_active_query_node" /tmp/pwh_metrics_output.txt`
 
 SELECT
   :help_count > 0 AS has_help_declarations,
@@ -21,7 +21,7 @@ SELECT
   :type_count = :help_count AS as_many_help_as_types;
 
 -- Verify actual metric lines are present with labels and values.
-\set metric_count `grep -c "^pg_what_is_happening_active_query_node_.*{query_id=" /data/pwh_metrics_output.txt`
+\set metric_count `grep -c "^pg_what_is_happening_active_query_node_.*{query_id=" /tmp/pwh_metrics_output.txt`
 SELECT
   :metric_count > 96 AS has_sufficient_metrics;
 
@@ -34,4 +34,4 @@ SELECT pg_advisory_unlock(12347);
 SELECT pg_sleep(0.5);
 
 -- Cleanup temp files.
-\! rm -f /data/pwh_*.txt
+\! rm -f /tmp/pwh_*.txt
